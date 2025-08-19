@@ -1,0 +1,149 @@
+.perfil-container {
+  display: flex;
+  gap: 20px;
+  padding: 20px;
+  flex-wrap: wrap; /* 🔹 Permite que las tarjetas bajen en pantallas pequeñas */
+}
+
+.perfil-card {
+  flex: 2;
+  background: #fff;
+  border-radius: 10px;
+  padding: 20px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+  min-width: 280px; /* 🔹 Asegura que no se rompa en pantallas pequeñas */
+}
+
+.perfil-title {
+  font-weight: bold;
+  border-bottom: 2px solid #003366;
+  padding-bottom: 10px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  font-size: 1.1rem;
+  color: #003366;
+}
+
+.perfil-form .form-row {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 15px;
+  flex-wrap: wrap;
+}
+
+.form-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group label {
+  font-weight: 600;
+  margin-bottom: 5px;
+  color: #333;
+}
+
+.form-control {
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background: #f9f9f9;
+  transition: border 0.3s, background 0.3s;
+}
+
+.form-control:focus {
+  outline: none;
+  border: 1px solid #003366;
+  background: #fff;
+}
+
+.form-control.activo {
+  color: green;
+  font-weight: bold;
+}
+
+.form-control.inactivo {
+  color: red;
+  font-weight: bold;
+}
+
+/* 🔹 Botón Editar/Guardar */
+.btn-edit {
+  margin-top: 15px;
+  padding: 10px 15px;
+  border-radius: 6px;
+  border: none;
+  font-weight: bold;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.3s ease;
+}
+
+.btn-edit.editar {
+  background: #007bff;
+  color: white;
+}
+
+.btn-edit.editar:hover {
+  background: #0056b3;
+}
+
+.btn-edit.guardar {
+  background: #28a745;
+  color: white;
+}
+
+.btn-edit.guardar:hover {
+  background: #1e7e34;
+}
+
+/* 🔹 Tarjeta resumen derecha */
+.perfil-summary {
+  flex: 1;
+  background: #fff;
+  border-radius: 10px;
+  padding: 20px;
+  text-align: center;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+  min-width: 200px;
+}
+
+.perfil-summary .avatar {
+  margin-bottom: 10px;
+  color: #555;
+}
+
+.perfil-summary h5 {
+  margin-top: 10px;
+  font-weight: bold;
+  color: #003366;
+}
+
+.estado {
+  font-weight: bold;
+  display: inline-block;
+  margin-top: 10px;
+}
+
+.estado.activo {
+  color: green;
+}
+
+.estado.inactivo {
+  color: red;
+}
+
+/* 🔹 Responsivo */
+@media (max-width: 768px) {
+  .perfil-container {
+    flex-direction: column;
+  }
+
+  .perfil-card,
+  .perfil-summary {
+    width: 100%;
+  }
+}
