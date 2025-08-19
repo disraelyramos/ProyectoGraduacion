@@ -1,0 +1,193 @@
+:root { 
+  --color-fondo: #f5f7fa;
+  --morado-principal: #e14eca;
+  --morado-hover: #b330b7;
+  --morado-submenu: #cbb9ff;
+  --morado-submenu-activo: #d8b4fe;
+  --color-sidebar-fondo: linear-gradient(135deg, #00587a 0%, #008891 100%);
+  --sombra-principal: 0 0 8px var(--morado-principal);
+}
+
+/* 📌 Contenedor general */
+.dashboard-container {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: var(--color-fondo);
+  margin: 0;
+}
+
+/* 📌 Sidebar */
+.sidebar {
+  width: 260px;
+  min-width: 260px;
+  background: var(--color-sidebar-fondo);
+  color: white;
+  border-radius: 15px;
+  padding: 20px;
+  box-shadow: 4px 0 8px rgba(0, 0, 0, 0.25);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  height: calc(100vh - 20px);
+  overflow-y: auto;
+}
+
+.sidebar-header {
+  padding: 1rem;
+  font-weight: bold;
+  text-align: center;
+  font-size: 1.3rem;
+  letter-spacing: 1px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.sidebar ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  flex-grow: 1;
+}
+
+/* 📌 Módulo del menú */
+.menu-module {
+  padding: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background 0.2s ease;
+}
+
+.menu-module:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.menu-module.active {
+  background-color: var(--morado-principal);
+  font-weight: 700;
+  box-shadow: var(--sombra-principal);
+}
+
+/* 📌 Submenú */
+.submenu {
+  margin-top: 5px;
+  padding-left: 25px;
+  border-left: 1.5px solid rgba(255, 255, 255, 0.3);
+}
+
+.submenu li {
+  margin-bottom: 1rem;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  color: var(--morado-submenu);
+  user-select: none;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.submenu li:hover {
+  background-color: rgba(255, 255, 255, 0.15);
+  color: white;
+}
+
+.submenu li.active {
+  background-color: var(--morado-submenu-activo);
+  font-weight: 700;
+  color: #1b1b1b;
+  box-shadow: 0 0 5px var(--morado-submenu-activo);
+}
+
+/* 📌 Área principal */
+.main-content {
+  flex-grow: 1;
+  margin-left: 280px;        /* espacio para la sidebar */
+  padding: 30px;
+  overflow-y: auto;
+  margin-top: 70px;          /* espacio para navbar */
+  background: linear-gradient(to bottom, #f9f9f9, #ececec);
+  min-height: 100vh;
+  box-sizing: border-box;
+}
+
+/* 📌 Navbar */
+.navbar {
+  background: linear-gradient(90deg, #00587a, #008891);
+  color: white;
+  padding: 1rem 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: fixed;
+  top: 0;
+  left: 280px;
+  right: 0;
+  z-index: 1000;
+  border-radius: 0 0 10px 10px;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 📌 Submódulos */
+.submodulo-wrapper {
+  width: 100%;
+  margin: 0;
+  padding: 2rem 1.5rem;
+  text-align: left !important;
+  display: block;
+  box-sizing: border-box;
+}
+
+.submodulo-item {
+  margin-bottom: 1rem;
+  padding: 8px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 400;
+  font-size: 0.95rem;
+  color: var(--morado-submenu);
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.submodulo-item:hover {
+  background-color: rgba(255, 255, 255, 0.15);
+  color: white;
+}
+
+.submodulo-item.active {
+  background-color: var(--morado-submenu-activo);
+  font-weight: 700;
+  color: #1b1b1b;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.7);
+}
+
+/* 📌 Botón logout */
+.btn-logout {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #ff4d4d;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background 0.3s ease;
+}
+
+.btn-logout:hover {
+  background: #cc0000;
+}
