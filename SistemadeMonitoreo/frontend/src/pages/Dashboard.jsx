@@ -5,20 +5,22 @@ import {
   FaChevronDown,
   FaRegSquare, // ícono de fallback
 } from "react-icons/fa";
-import * as FaIcons from "react-icons/fa"; //  import dinámico de todos los íconos
+import * as FaIcons from "react-icons/fa"; // import dinámico de todos los íconos
 import { useNavigate } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
 import { toast } from "react-toastify";
 import axios from "axios";
 import "../styles/dashboard.css";
 
-//  Importar la vista MiPerfil
+// Importar vistas
 import MiPerfil from "./Perfil/MiPerfil";
 import AgregarContenedor from "./contenedor/AgregarContenedor";
-
-
-
-//  Función para obtener ícono dinámicamente desde la BD
+import Inicio from "./Perfil/Inicio";
+import NuevoRegistro from "./controlDSH/NuevoRegistro";
+import HistorialRecoleccion from "./historialRecoleccion/HistorialRecoleccion";
+import UmbralDeLlenado from "./umbrales/UmbralDeLlenado";
+import Backup from "./backups/Backup";
+// Función para obtener ícono dinámicamente desde la BD
 const getIcon = (iconName) => {
   if (!iconName) return <FaRegSquare />;
 
@@ -33,7 +35,7 @@ const getIcon = (iconName) => {
   return IconComponent ? <IconComponent /> : <FaRegSquare />;
 };
 
-// 🔹 Traductor de nombres (snake_case → Capitalizado)
+// Traductor de nombres (snake_case → Capitalizado)
 const formatoTitulo = (texto) => {
   if (!texto) return "";
   return texto
@@ -43,17 +45,29 @@ const formatoTitulo = (texto) => {
     );
 };
 
-// 🔹 Mapeo de submódulos a componentes reales
-//  Aquí irás registrando uno a uno tus vistas (por ahora solo MiPerfil)
+// Mapeo de submódulos a componentes reales
 const submoduloComponents = {
   "/usuarios/editar": MiPerfil,
-  "/contenedor/agregar":AgregarContenedor,
+  "/contenedor/agregar": AgregarContenedor,
+  "/dashboard": Inicio, 
+  "/control-dsh/nuevo-registro":NuevoRegistro,
+  "/control-dsh/historial":HistorialRecoleccion,
+  "/configuracion/umbral-llenado":UmbralDeLlenado,
+  "/configuracion/copia-seguridad" :Backup,
 };
 
 const Dashboard = () => {
   const [menuItems, setMenuItems] = useState([]);
   const [expandedModule, setExpandedModule] = useState(null);
-  const [selectedSubmodule, setSelectedSubmodule] = useState(null);
+
+  //  Por defecto cargamos Inicio
+  const [selectedSubmodule, setSelectedSubmodule] = useState({
+    id: 0,
+    nombre: "Inicio",
+    ruta: "/dashboard",
+    icono: "home",
+  });
+
   const [userData, setUserData] = useState({ usuario: "", rol: "" });
   const navigate = useNavigate();
 
@@ -76,6 +90,12 @@ const Dashboard = () => {
           { headers: { Authorization: `Bearer ${token}` } }
         );
         setMenuItems(res.data);
+
+        //  Buscar Inicio en el menú de BD
+        const inicioModulo = res.data.find((m) => m.ruta === "/dashboard");
+        if (inicioModulo) {
+          setSelectedSubmodule(inicioModulo); // lo selecciona automáticamente
+        }
       } catch (err) {
         console.error("Error cargando menú:", err);
         toast.error("No se pudo cargar el menú");
@@ -84,7 +104,7 @@ const Dashboard = () => {
     loadMenu();
   }, []);
 
-  // 🔹 Verificación y expiración automática del token
+  //  Verificación y expiración automática del token
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (!token) return;
@@ -107,13 +127,13 @@ const Dashboard = () => {
     }
   }, []);
 
-  // 🔹 Función para abrir/cerrar módulos
+  //  Función para abrir/cerrar módulos
   const toggleModule = (id, hasSubmodules) => {
     if (!hasSubmodules) return;
     setExpandedModule(expandedModule === id ? null : id);
   };
 
-  // 🔹 Función para cerrar sesión
+  //  Función para cerrar sesión
   const handleLogout = (auto = false) => {
     localStorage.removeItem("token");
     if (auto) {
@@ -124,7 +144,7 @@ const Dashboard = () => {
     navigate("/");
   };
 
-  // 🔹 Determinar componente a mostrar según la `ruta` del submódulo
+  //  Determinar componente a mostrar según la `ruta` del submódulo
   const SubmoduloComponent =
     selectedSubmodule && submoduloComponents[selectedSubmodule.ruta];
 
@@ -143,7 +163,14 @@ const Dashboard = () => {
                 <div
                   className={`menu-module ${expandedModule === modulo.id ? "active" : ""
                     }`}
-                  onClick={() => toggleModule(modulo.id, hasSubmodules)}
+                  onClick={() => {
+                    //  Si es Inicio (sin submódulos), cargar directamente su vista
+                    if (!hasSubmodules && modulo.ruta === "/dashboard") {
+                      setSelectedSubmodule(modulo);
+                    } else {
+                      toggleModule(modulo.id, hasSubmodules);
+                    }
+                  }}
                 >
                   <span style={{ marginRight: "6px" }}>
                     {getIcon(modulo.icono)}
@@ -194,17 +221,12 @@ const Dashboard = () => {
           </div>
         </nav>
 
-        {/*  Render dinámico de submódulos */}
+        {/* Render dinámico de submódulos */}
         <div className="submodulo-wrapper">
           {SubmoduloComponent ? (
             <SubmoduloComponent />
-          ) : selectedSubmodule ? (
-            <>
-              <h2>{formatoTitulo(selectedSubmodule.nombre)}</h2>
-              <p>Esta vista aún no tiene contenido asignado.</p>
-            </>
           ) : (
-            <h3>Seleccione una opción del menú</h3>
+            <h2>este modulo aun no tiene vista asignada...</h2>
           )}
         </div>
       </main>

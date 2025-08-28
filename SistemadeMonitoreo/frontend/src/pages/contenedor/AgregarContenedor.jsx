@@ -1,109 +1,177 @@
-import React, { useState } from "react";
-import { FaPlus, FaSearch, FaEdit } from "react-icons/fa";
-import "bootstrap/dist/css/bootstrap.min.css";
+import React, { useState, useEffect } from "react";
+import { FaPlus, FaEdit } from "react-icons/fa";
+import RegistrarNuevoContenedor from "../../components/RegistrarNuevoContenedor";
+import axios from "axios";
+import { showErrorAlert } from "../../utils/alerts";
 
 const AgregarContenedor = () => {
-  // 📌 Datos de ejemplo (reemplazar con API)
-  const [contenedores, setContenedores] = useState([
-    {
-      id: 1,
-      ubicacion: "Zona Sur - Sector B",
-      numero: "CN-002",
-      tipo: "Bioinfeccioso",
-      fecha: "2024-01-15",
-      cantidad: 30,
-      estado: "Activo",
-    },
-  ]);
-
+  const [contenedores, setContenedores] = useState([]);
   const [busqueda, setBusqueda] = useState("");
+  const [showModal, setShowModal] = useState(false);
+  const [modoEdicion, setModoEdicion] = useState(false);
+  const [contenedorEditar, setContenedorEditar] = useState(null);
 
-  // 📌 Filtrar por código o ubicación
-  const filtrados = contenedores.filter(
-    (c) =>
-      c.numero.toLowerCase().includes(busqueda.toLowerCase()) ||
-      c.ubicacion.toLowerCase().includes(busqueda.toLowerCase())
+  // 🔹 Paginación
+  const [paginaActual, setPaginaActual] = useState(1);
+  const [itemsPorPagina] = useState(8); // puedes hacerlo configurable
+
+  // 🔹 Reutilizamos un único método para cargar/buscar
+  const fetchContenedores = async (termino = "") => {
+    try {
+      const token = localStorage.getItem("token");
+      const headers = { Authorization: `Bearer ${token}` };
+
+      const url = termino.trim()
+        ? `/api/contenedores/buscar?termino=${encodeURIComponent(termino)}`
+        : `/api/contenedores`;
+
+      const res = await axios.get(url, { headers });
+      setContenedores(res.data);
+      setPaginaActual(1); // reinicia a primera página en cada búsqueda
+    } catch (error) {
+      console.error("Error cargando contenedores:", error);
+      showErrorAlert("No se pudieron cargar los contenedores.");
+    }
+  };
+
+  // 🔹 Cargar al inicio
+  useEffect(() => {
+    fetchContenedores();
+  }, []);
+
+  // 🔹 Buscar cada vez que cambia el input
+  useEffect(() => {
+    fetchContenedores(busqueda);
+  }, [busqueda]);
+
+  // 🔹 Calcular datos de paginación
+  const indexOfLastItem = paginaActual * itemsPorPagina;
+  const indexOfFirstItem = indexOfLastItem - itemsPorPagina;
+  const contenedoresActuales = contenedores.slice(
+    indexOfFirstItem,
+    indexOfLastItem
   );
+
+  const totalPaginas = Math.ceil(contenedores.length / itemsPorPagina);
 
   return (
     <div className="container mt-4">
-      {/* Encabezado */}
       <h4>
-        <i className="bi bi-calendar3 me-2"></i> Nuevo Registro de Recolección
+        <i className="bi bi-calendar3 me-2"></i> Gestión de Contenedores
       </h4>
       <hr />
 
       {/* Barra de acciones */}
       <div className="d-flex justify-content-between align-items-center mb-3">
-        {/* Botón Nuevo */}
-        <button className="btn btn-primary">
+        <button
+          className="btn btn-primary"
+          onClick={() => {
+            setModoEdicion(false);
+            setContenedorEditar(null);
+            setShowModal(true);
+          }}
+        >
           <FaPlus className="me-2" /> Nuevo
         </button>
 
-        {/* Campo de búsqueda más pequeño */}
         <div className="d-flex" style={{ maxWidth: "300px" }}>
           <input
             type="text"
-            className="form-control form-control-sm me-2"
-            placeholder="Buscar..."
+            className="form-control form-control-sm"
+            placeholder="Buscar por código, ubicación o residuo..."
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
           />
-          <button className="btn btn-primary btn-sm">
-            <FaSearch /> Buscar
-          </button>
         </div>
       </div>
 
       {/* Tabla */}
-      <table className="table table-striped table-bordered align-middle">
+      <table className="table table-bordered align-middle">
         <thead className="table-dark">
           <tr>
+            <th>Código</th>
             <th>Ubicación</th>
-            <th>Número de Contenedor</th>
             <th>Tipo de Residuo</th>
             <th>Fecha de Registro</th>
-            <th>Cantidad (lb.)</th>
             <th>Estado</th>
             <th>Opciones</th>
           </tr>
         </thead>
         <tbody>
-          {filtrados.map((c) => (
-            <tr key={c.id}>
-              <td>{c.ubicacion}</td>
-              <td>
-                <span className="badge bg-info text-dark">{c.numero}</span>
-              </td>
-              <td>{c.tipo}</td>
-              <td>{c.fecha}</td>
-              <td>{c.cantidad}</td>
-              <td>
-                <span
-                  className={`badge ${
-                    c.estado === "Activo" ? "bg-success" : "bg-secondary"
-                  }`}
-                >
-                  {c.estado}
-                </span>
-              </td>
-              <td>
-                <button className="btn btn-warning btn-sm me-2">
-                  <FaEdit />
-                </button>
-              </td>
-            </tr>
-          ))}
-
-          {filtrados.length === 0 && (
+          {contenedoresActuales.length > 0 ? (
+            contenedoresActuales.map((c) => (
+              <tr key={c.id_contenedor} className="shadow-sm">
+                <td>
+                  <span className="badge bg-secondary">{c.codigo}</span>
+                </td>
+                <td>{c.ubicacion}</td>
+                <td>{c.tipo_residuo}</td>
+                <td>{c.fecha_registro}</td>
+                <td>
+                  <span
+                    className={`badge ${
+                      c.estado === "Activo" ? "bg-success" : "bg-secondary"
+                    }`}
+                  >
+                    {c.estado}
+                  </span>
+                </td>
+                <td>
+                  <button
+                    className="btn btn-warning btn-sm me-2"
+                    onClick={() => {
+                      setModoEdicion(true);
+                      setContenedorEditar(c);
+                      setShowModal(true);
+                    }}
+                  >
+                    <FaEdit />
+                  </button>
+                </td>
+              </tr>
+            ))
+          ) : (
             <tr>
-              <td colSpan="7" className="text-center">
+              <td colSpan="6" className="text-center">
                 No se encontraron resultados
               </td>
             </tr>
           )}
         </tbody>
       </table>
+
+      {/* Paginación */}
+      {totalPaginas > 1 && (
+        <nav className="d-flex justify-content-end">
+          <ul className="pagination pagination-sm">
+            {Array.from({ length: totalPaginas }, (_, i) => (
+              <li
+                key={i + 1}
+                className={`page-item ${paginaActual === i + 1 ? "active" : ""}`}
+              >
+                <button
+                  className="page-link"
+                  onClick={() => setPaginaActual(i + 1)}
+                >
+                  {i + 1}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      )}
+
+      {/* Modal */}
+      <RegistrarNuevoContenedor
+        show={showModal}
+        handleClose={() => {
+          setShowModal(false);
+          fetchContenedores(); // refrescar después de cerrar modal
+        }}
+        handleSave={() => fetchContenedores()}
+        modoEdicion={modoEdicion}
+        contenedorEditar={contenedorEditar}
+      />
     </div>
   );
 };
