@@ -11,12 +11,12 @@ const Login = () => {
   const [tiempoRestante, setTiempoRestante] = useState(0); // ⏱ contador
   const navigate = useNavigate();
 
-  // 🔹 Manejo del contador
+  // 🔹 Manejo del contador regresivo
   useEffect(() => {
     let intervalo;
     if (tiempoRestante > 0) {
       intervalo = setInterval(() => {
-        setTiempoRestante((prev) => prev - 1);
+        setTiempoRestante((prev) => (prev > 0 ? prev - 1 : 0));
       }, 1000);
     }
     return () => clearInterval(intervalo);
@@ -37,19 +37,20 @@ const Login = () => {
       });
 
       localStorage.setItem("token", res.data.token);
-      toast.success("Inicio de sesión exitoso 🚀");
+      toast.success("Inicio de sesión exitoso ");
       navigate("/dashboard");
 
     } catch (err) {
-      console.error("Error en login:", err);
-
       if (err.response && err.response.data) {
         const mensaje = err.response.data.message || "Error en la autenticación";
         toast.error(mensaje);
 
-        // 🔹 Si el backend devuelve que está bloqueado, activamos el contador
-        if (mensaje.includes("bloqueado")) {
-          setTiempoRestante(120); // 2 minutos = 120s
+        // Si el backend devuelve que está bloqueado, calculamos segundos exactos
+        if (err.response.data.bloqueado_hasta) {
+          const finBloqueo = new Date(err.response.data.bloqueado_hasta).getTime();
+          const ahora = Date.now();
+          const diffSegundos = Math.max(Math.floor((finBloqueo - ahora) / 1000), 0);
+          setTiempoRestante(diffSegundos);
         }
       } else {
         toast.error("Error en la conexión con el servidor");
@@ -80,6 +81,7 @@ const Login = () => {
               value={usuario}
               onChange={(e) => setUsuario(e.target.value)}
               required
+              disabled={tiempoRestante > 0} // Bloquear usuario durante el bloqueo
             />
             <label htmlFor="usuario">
               <FaUser /> Usuario
@@ -96,18 +98,18 @@ const Login = () => {
               value={contrasena}
               onChange={(e) => setContrasena(e.target.value)}
               required
-              disabled={tiempoRestante > 0} // ❌ Bloquea el input si está en castigo
+              disabled={tiempoRestante > 0} // Bloquear contraseña durante el bloqueo
             />
             <label htmlFor="contrasena">
               <FaLock /> Contraseña
             </label>
           </div>
 
-          {/* Tiempo de bloqueo en rojo */}
+          {/* Tiempo de bloqueo visible en rojo */}
           {tiempoRestante > 0 && (
-            <p style={{ color: "red", fontWeight: "bold", textAlign: "center" }}>
-              Intente de nuevo en {tiempoRestante} segundos ⏳
-            </p>
+            <div className="alert alert-danger text-center mt-2">
+              Intente de nuevo en <strong>{tiempoRestante}</strong> segundos 
+            </div>
           )}
 
           {/* Botón */}
