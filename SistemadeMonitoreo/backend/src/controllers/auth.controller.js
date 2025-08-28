@@ -8,15 +8,15 @@ exports.login = async (req, res) => {
   let { usuario, contrasena } = req.body;
 
   try {
-    //  Sanitizar inputs
+    // Sanitizar inputs
     usuario = xss(usuario);
 
-    //  Validar campos
+    //  Validar campos obligatorios
     if (!usuario || !contrasena) {
       return res.status(400).json({ message: 'Usuario y contraseña requeridos' });
     }
 
-    //  Buscar usuario con rol
+    // Buscar usuario con rol
     const query = `
       SELECT u.id_usuario, u.nombre, u.usuario, u.password_hash, u.estado_id,
              u.intentos_fallidos, u.bloqueado_hasta, u.ultimo_login,
@@ -33,42 +33,48 @@ exports.login = async (req, res) => {
 
     const user = result.rows[0];
 
-    //  Verificar si está bloqueado
+    // Verificar si está bloqueado actualmente
     if (user.bloqueado_hasta && new Date(user.bloqueado_hasta) > new Date()) {
+      const nuevoBloqueo = new Date(Date.now() + 1 * 60 * 1000);
+
+      await pool.query(
+        `UPDATE usuarios SET bloqueado_hasta = $1 WHERE id_usuario = $2`,
+        [nuevoBloqueo, user.id_usuario]
+      );
+
       return res.status(403).json({
-        message: `Usuario bloqueado hasta ${user.bloqueado_hasta}`,
-        bloqueado_hasta: user.bloqueado_hasta
+        message: `Usuario bloqueado hasta ${nuevoBloqueo.toISOString()}`,
+        bloqueado_hasta: nuevoBloqueo.toISOString()
       });
     }
 
-    //  Verificar estado
+    // Verificar estado activo
     if (user.estado_id !== 1) { // 1 = Activo
       return res.status(403).json({ message: 'Usuario inactivo o bloqueado' });
     }
 
-    //  Verificar contraseña
+    // Verificar contraseña
     const passwordValida = await bcrypt.compare(contrasena, user.password_hash);
 
     if (!passwordValida) {
-      //  Incrementar intentos fallidos
       let nuevosIntentos = user.intentos_fallidos + 1;
 
       if (nuevosIntentos >= 3) {
-        //  Bloquear usuario por 2 minutos
+        const bloqueoHasta = new Date(Date.now() + 1 * 60 * 1000);
+
         await pool.query(
           `UPDATE usuarios
-           SET bloqueado_hasta = NOW() + INTERVAL '2 minutes',
+           SET bloqueado_hasta = $1,
                intentos_fallidos = 0
-           WHERE id_usuario = $1`,
-          [user.id_usuario]
+           WHERE id_usuario = $2`,
+          [bloqueoHasta, user.id_usuario]
         );
 
         return res.status(403).json({
-          message: 'Usuario bloqueado por 2 minutos',
-          bloqueado_hasta: new Date(Date.now() + 2 * 60 * 1000)
+          message: 'Usuario bloqueado por 1 minuto',
+          bloqueado_hasta: bloqueoHasta.toISOString()
         });
       } else {
-        //  Solo aumentar contador de intentos
         await pool.query(
           `UPDATE usuarios SET intentos_fallidos = $1 WHERE id_usuario = $2`,
           [nuevosIntentos, user.id_usuario]
@@ -78,7 +84,7 @@ exports.login = async (req, res) => {
       }
     }
 
-    //  Contraseña correcta → resetear intentos fallidos
+    //Contraseña correcta → resetear intentos y bloqueo
     await pool.query(
       `UPDATE usuarios
        SET intentos_fallidos = 0,
@@ -88,7 +94,7 @@ exports.login = async (req, res) => {
       [user.id_usuario]
     );
 
-    // 🔹 Generar JWT incluyendo usuario y rol
+    // Generar JWT incluyendo usuario y rol
     const token = jwt.sign(
       {
         id_usuario: user.id_usuario,
@@ -98,10 +104,10 @@ exports.login = async (req, res) => {
         rol: user.rol
       },
       process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN } // ✅ definido en .env
+      { expiresIn: process.env.JWT_EXPIRES_IN }
     );
 
-    // 🔹 Registrar sesión en BD con expiración desde .env
+    //  Registrar sesión en BD con expiración desde .env
     const expMin = parseInt(process.env.SESSION_INACTIVITY_MIN || "2");
     const fechaExp = new Date(Date.now() + expMin * 60 * 1000);
 
@@ -111,7 +117,7 @@ exports.login = async (req, res) => {
       [user.id_usuario, token, fechaExp]
     );
 
-    // 🔹 Respuesta al frontend
+    // Respuesta al frontend
     return res.json({
       message: 'Inicio de sesión exitoso',
       token,
