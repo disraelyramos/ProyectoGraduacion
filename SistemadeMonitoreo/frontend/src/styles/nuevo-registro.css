@@ -1,0 +1,49 @@
+/* Card personalizado */
+.nuevo-registro-card {
+  width: 600px;
+  min-height: 450px;
+  border-radius: 12px;
+}
+
+/*Progress bar personalizada */
+.custom-progress {
+  height: 26px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* Ajustes al título */
+.nuevo-registro-card .card-title {
+  font-size: 1.3rem;
+}
+
+/* Cabecera negra clara */
+.modal-costo-header {
+  background-color: #343a40; /* gris oscuro */
+  color: #fff;
+}
+
+/* Estilo del campo en error */
+.is-invalid {
+  border-color: #dc3545 !important;
+}
+
+/* Feedback debajo del input */
+.invalid-feedback {
+  display: block; /* aseguramos que siempre se vea */
+  font-size: 0.9rem;
+}
+
+/* Bloques de residuo clickeables */
+.residuo-card {
+  padding: 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease-in-out;
+}
+
+.residuo-card:hover {
+  box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.2);
+  transform: translateY(-2px);
+  background-color: #f9f9f9;
+}

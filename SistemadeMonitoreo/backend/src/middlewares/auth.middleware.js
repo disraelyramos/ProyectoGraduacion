@@ -35,8 +35,10 @@ module.exports = async (req, res, next) => {
       return res.status(401).json({ message: 'Sesión expirada' });
     }
 
-    //  Renovar expiración por inactividad
-    const nuevaExp = new Date(Date.now() + 2 * 60 * 1000); // +2 minutos
+    //  Renovar expiración por inactividad desde .env
+    const expMin = parseInt(process.env.SESSION_INACTIVITY_MIN || "2");
+    const nuevaExp = new Date(Date.now() + expMin * 60 * 1000);
+
     await pool.query(
       'UPDATE sesiones SET fecha_expiracion = $1 WHERE id = $2',
       [nuevaExp, sesion.id]

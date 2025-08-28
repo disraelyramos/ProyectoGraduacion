@@ -19,7 +19,7 @@ exports.login = async (req, res) => {
     //  Buscar usuario con rol
     const query = `
       SELECT u.id_usuario, u.nombre, u.usuario, u.password_hash, u.estado_id,
-             u.intentos_fallidos, u.bloqueado_hasta, u.ultimo_login,   -- 👈 agregados
+             u.intentos_fallidos, u.bloqueado_hasta, u.ultimo_login,
              r.id AS rol_id, r.nombre AS rol
       FROM usuarios u
       JOIN roles r ON u.rol_id = r.id
@@ -83,7 +83,7 @@ exports.login = async (req, res) => {
       `UPDATE usuarios
        SET intentos_fallidos = 0,
            bloqueado_hasta = NULL,
-           ultimo_login = NOW() -- 👈 registrar último login
+           ultimo_login = NOW()
        WHERE id_usuario = $1`,
       [user.id_usuario]
     );
@@ -92,17 +92,19 @@ exports.login = async (req, res) => {
     const token = jwt.sign(
       {
         id_usuario: user.id_usuario,
-        usuario: user.usuario,   // 👈 agregado
-        nombre: user.nombre,     // 👈 agregado
+        usuario: user.usuario,
+        nombre: user.nombre,
         rol_id: user.rol_id,
         rol: user.rol
       },
       process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '1m' } // expira en 1 minuto
+      { expiresIn: process.env.JWT_EXPIRES_IN } // ✅ definido en .env
     );
 
-    // 🔹 Registrar sesión en BD
-    const fechaExp = new Date(Date.now() + 1 * 60 * 1000); // +1 min
+    // 🔹 Registrar sesión en BD con expiración desde .env
+    const expMin = parseInt(process.env.SESSION_INACTIVITY_MIN || "2");
+    const fechaExp = new Date(Date.now() + expMin * 60 * 1000);
+
     await pool.query(
       `INSERT INTO sesiones (id_usuario, token, fecha_expiracion, activo) 
        VALUES ($1, $2, $3, TRUE)`,
@@ -119,7 +121,7 @@ exports.login = async (req, res) => {
         usuario: user.usuario,
         rol_id: user.rol_id,
         rol: user.rol,
-        ultimo_login: new Date() // 👈 lo enviamos también
+        ultimo_login: new Date()
       }
     });
 

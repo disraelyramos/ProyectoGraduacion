@@ -1,0 +1,75 @@
+/* Contenedor general */
+.backup-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Fila con 2 columnas */
+.backup-container .row {
+  display: flex;
+  justify-content: center;
+  align-items: stretch; /* 🔹 hace que todas las cards tengan la misma altura */
+  gap: 20px;
+}
+
+/* Columnas iguales (50% cada una) */
+.backup-container .col-md-6 {
+  flex: 1; /* todas ocupan el mismo espacio */
+  max-width: 50%;
+  display: flex;
+}
+
+/* Estilo uniforme de cada tarjeta */
+.section-card {
+  flex: 1;
+  min-height: 260px; /* 🔹 altura mínima para que se alineen */
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 15px;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Títulos de sección */
+.section-title {
+  font-weight: bold;
+  font-size: 1.1rem;
+  color: #333;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.section-number {
+  background: #007bff;
+  color: white;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 0.9rem;
+}
+
+/* Inputs */
+.form-control {
+  border-radius: 6px;
+  box-shadow: none;
+  transition: border 0.2s ease-in-out;
+}
+
+.form-control:focus {
+  border-color: #007bff;
+  box-shadow: 0 0 4px rgba(0, 123, 255, 0.3);
+}
+
+/* Botón Guardar/Editar */
+button {
+  border-radius: 6px !important;
+  font-weight: 500;
+  padding: 10px 20px;
+}

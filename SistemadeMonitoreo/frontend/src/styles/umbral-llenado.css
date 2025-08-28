@@ -1,0 +1,31 @@
+.is-invalid {
+  border-color: #dc3545 !important;
+}
+
+.invalid-feedback {
+  font-size: 0.85rem;
+  color: #dc3545;
+}
+.btn-configurar-alertas {
+  font-size: 1.3rem;
+  font-weight: bold;
+  color: #333;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-transform: uppercase;
+  position: relative;
+}
+
+.btn-configurar-alertas::after {
+  content: "";
+  position: absolute;
+  top: -5px;
+  left: -10px;
+  right: -10px;
+  bottom: -5px;
+  background: linear-gradient(135deg, rgba(0, 123, 255, 0.2), rgba(0, 200, 150, 0.2));
+  border-radius: 10px;
+  filter: blur(8px);
+  z-index: -1;
+}

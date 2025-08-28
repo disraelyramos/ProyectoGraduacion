@@ -21,8 +21,8 @@ const ProtectedRoute = ({ children }) => {
       if (decoded.exp < now) {
         localStorage.removeItem("token");
 
-        // 🔹 Mostrar alerta de sesión expirada
-        toast.error("Tu sesión ha caducado, vuelve a iniciar sesión 🔒");
+        //  Mostrar alerta de sesión expirada
+        toast.error("Tu sesión ha caducado, vuelve a iniciar sesión ");
 
         setIsValid(false);
       } else {
@@ -32,14 +32,13 @@ const ProtectedRoute = ({ children }) => {
       localStorage.removeItem("token");
 
       // 🔹 Mostrar alerta de token inválido
-      toast.error("Token inválido. Inicia sesión nuevamente 🔒");
-
+      toast.error("Token inválido. Inicia sesión nuevamente ");
       setIsValid(false);
     }
   }, []);
 
   if (isValid === null) {
-    // 👇 pantalla intermedia (spinner invisible para evitar parpadeos)
+    //  pantalla intermedia (spinner invisible para evitar parpadeos)
     return <div style={{ display: "none" }}></div>;
   }
 

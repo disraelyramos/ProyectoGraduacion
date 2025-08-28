@@ -1,32 +1,44 @@
-// src/pages/Perfil/MiPerfil.jsx
 import React, { useState, useEffect } from "react";
 import { FaUser, FaEdit, FaSave } from "react-icons/fa";
 import axios from "axios";
-import { toast } from "react-toastify";
+import { validateForm } from "../../utils/validations";
+import {
+  showDynamicConfirm,
+  showErrorAlert,
+  showSuccessAlert,
+} from "../../utils/alerts";
 import "../../styles/perfil.css";
 
 const MiPerfil = () => {
   const [editable, setEditable] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [errors, setErrors] = useState({});
   const [userData, setUserData] = useState({
     nombre: "",
     correo: "",
     usuario: "",
     contrasena: "********", // siempre bloqueada
-    nuevaContrasena: "",    // campo solo frontend
+    nuevaContrasena: "", // campo solo frontend
     rol: "",
     estado: "",
   });
 
-  //  Cargar perfil desde backend
+  // 📌 Validaciones de perfil
+  const reglasPerfil = {
+    nombre: ["required"],
+    correo: ["required"],
+    usuario: ["required"],
+    nuevaContrasena: ["required"], // cuando edita, la nueva contraseña no puede ir vacía
+  };
+
+  // 📌 Cargar perfil desde backend
   useEffect(() => {
     const fetchPerfil = async () => {
       try {
         const token = localStorage.getItem("token");
         const res = await axios.get("/api/perfil", {
-          headers: { Authorization: `Bearer ${token}` }
+          headers: { Authorization: `Bearer ${token}` },
         });
-
 
         setUserData((prev) => ({
           ...prev,
@@ -34,8 +46,8 @@ const MiPerfil = () => {
           contrasena: "********", // nunca mostramos real
         }));
       } catch (err) {
-        console.error(" Error al cargar perfil:", err);
-        toast.error("No se pudo cargar el perfil");
+        console.error("❌ Error al cargar perfil:", err);
+        showErrorAlert("No se pudo cargar el perfil");
       } finally {
         setLoading(false);
       }
@@ -43,31 +55,64 @@ const MiPerfil = () => {
     fetchPerfil();
   }, []);
 
-  //  Guardar cambios
-  const handleEdit = async () => {
+  // 📌 Guardar cambios
+  // Guardar cambios
+  const handleEdit = () => {
     if (editable) {
-      try {
-        const token = localStorage.getItem("token");
-        await axios.put(
-          "/api/perfil",
-          {
-            nombre: userData.nombre,
-            correo: userData.correo,
-            usuario: userData.usuario,
-            nueva_contraseña: userData.nuevaContrasena || undefined,
-          },
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
+      // 🔹 Validar antes de confirmar
+      const validationErrors = validateForm(userData, reglasPerfil);
 
-        toast.success("Perfil actualizado ");
-        setUserData((prev) => ({ ...prev, nuevaContrasena: "" }));
-      } catch (err) {
-        console.error(" Error actualizando perfil:", err);
-        toast.error("No se pudo actualizar el perfil");
+      // 👇 Ajustamos solo el mensaje de nuevaContrasena
+      if (validationErrors.nuevaContrasena) {
+        validationErrors.nuevaContrasena =
+          "El campo Nueva Contraseña es obligatorio";
       }
+
+      if (Object.keys(validationErrors).length > 0) {
+        setErrors(validationErrors);
+        // ❌ quitamos showErrorAlert aquí
+        return;
+      }
+
+      // 🔹 Confirmación dinámica
+      showDynamicConfirm(
+        "editar",
+        async () => {
+          try {
+            const token = localStorage.getItem("token");
+            await axios.put(
+              "/api/perfil",
+              {
+                nombre: userData.nombre,
+                correo: userData.correo,
+                usuario: userData.usuario,
+                nueva_contraseña: userData.nuevaContrasena || undefined,
+              },
+              { headers: { Authorization: `Bearer ${token}` } }
+            );
+
+            // ✅ Usar alerta de éxito, no toast
+            showSuccessAlert("Perfil actualizado correctamente");
+
+            setUserData((prev) => ({ ...prev, nuevaContrasena: "" }));
+            setEditable(false);
+            setErrors({});
+          } catch (err) {
+            console.error("❌ Error actualizando perfil:", err);
+            showErrorAlert("No se pudo actualizar el perfil");
+          }
+        },
+        () => {
+          // 👈 Si da NO, volvemos a bloquear
+          setEditable(false);
+          setUserData((prev) => ({ ...prev, nuevaContrasena: "" }));
+        }
+      );
+    } else {
+      setEditable(true);
     }
-    setEditable(!editable);
   };
+
 
   if (loading) return <p>Cargando perfil...</p>;
 
@@ -94,6 +139,9 @@ const MiPerfil = () => {
                   setUserData({ ...userData, nombre: e.target.value })
                 }
               />
+              {errors.nombre && (
+                <small className="text-danger">{errors.nombre}</small>
+              )}
             </div>
             <div className="form-group">
               <label>Correo</label>
@@ -106,6 +154,9 @@ const MiPerfil = () => {
                   setUserData({ ...userData, correo: e.target.value })
                 }
               />
+              {errors.correo && (
+                <small className="text-danger">{errors.correo}</small>
+              )}
             </div>
           </div>
 
@@ -122,6 +173,9 @@ const MiPerfil = () => {
                   setUserData({ ...userData, usuario: e.target.value })
                 }
               />
+              {errors.usuario && (
+                <small className="text-danger">{errors.usuario}</small>
+              )}
             </div>
             <div className="form-group">
               <label>Contraseña</label>
@@ -151,6 +205,11 @@ const MiPerfil = () => {
                   className="form-control"
                 />
               </div>
+              {errors.nuevaContrasena && (
+                <small className="text-danger">
+                  {errors.nuevaContrasena}
+                </small>
+              )}
             </div>
           )}
 
