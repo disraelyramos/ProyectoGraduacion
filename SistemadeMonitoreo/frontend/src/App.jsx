@@ -4,11 +4,13 @@ import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import "./styles/responsive.css";
 
-
 // Páginas
 import Login from "./pages/Login";
 import RecuperacionContrasena from "./pages/RecuperacionContrasena";
+import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/Dashboard";
+import ContrasenaObligatoria from "./pages/ContrasenaObligatoria.jsx"; // 
+import ReconfirmarContrasena from "./pages/ReconfirmarContrasena.jsx"; // 
 
 // Ruta protegida
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -17,16 +19,27 @@ function App() {
   return (
     <Router>
       <Routes>
-        {/* Ruta principal → Login */}
         <Route path="/" element={<Login />} />
 
-        {/* Ruta de recuperación de contraseña */}
         <Route
           path="/recuperar-contrasena"
           element={<RecuperacionContrasena />}
         />
 
-        {/* Ruta del dashboard (protegida) */}
+        <Route path="/reset-password/:token" element={<ResetPassword />} />
+
+        {/* Cambio obligatorio de contraseña */}
+        <Route
+          path="/contrasena-obligatoria"
+          element={<ContrasenaObligatoria />}
+        />
+
+        {/* Reconfirmación por vencimiento */}
+        <Route
+          path="/reconfirmar-contrasena"
+          element={<ReconfirmarContrasena />}
+        />
+
         <Route
           path="/dashboard"
           element={
@@ -37,10 +50,9 @@ function App() {
         />
       </Routes>
 
-      {/* 👇 Contenedor global de Toastify */}
       <ToastContainer
         position="top-right"
-        autoClose={3000}   // 3 segundos
+        autoClose={3000}
         hideProgressBar={false}
         newestOnTop={false}
         closeOnClick

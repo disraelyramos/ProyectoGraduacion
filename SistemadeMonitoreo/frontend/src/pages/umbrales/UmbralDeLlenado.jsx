@@ -7,7 +7,7 @@ import {
   FaWeightHanging,
 } from "react-icons/fa";
 import { showConfirmAlert, showSuccessAlert } from "../../utils/alerts";
-import AlertasProgramadas from "./AlertasProgramadas"; // ✅ misma carpeta
+import AlertasProgramadas from "./AlertasProgramadas"; //  misma carpeta
 import "../../styles/umbral-llenado.css";
 
 
@@ -21,7 +21,7 @@ const UmbralDeLlenado = () => {
 
   const [errors, setErrors] = useState({});
   const [isEditing, setIsEditing] = useState(true);
-  const [mostrarAlertas, setMostrarAlertas] = useState(false); // ✅ controlar vista
+  const [mostrarAlertas, setMostrarAlertas] = useState(false); //  controlar vista
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -200,7 +200,7 @@ const UmbralDeLlenado = () => {
           <Button
             variant="outline-dark"
             className="btn-configurar-alertas"
-            onClick={() => setMostrarAlertas(true)} // ✅ al dar click muestra la vista
+            onClick={() => setMostrarAlertas(true)} // al dar click muestra la vista
           >
             Configurar alertas
           </Button>

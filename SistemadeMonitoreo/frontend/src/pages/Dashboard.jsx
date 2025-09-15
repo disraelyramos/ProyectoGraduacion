@@ -20,6 +20,7 @@ import NuevoRegistro from "./controlDSH/NuevoRegistro";
 import HistorialRecoleccion from "./historialRecoleccion/HistorialRecoleccion";
 import UmbralDeLlenado from "./umbrales/UmbralDeLlenado";
 import Backup from "./backups/Backup";
+
 // Función para obtener ícono dinámicamente desde la BD
 const getIcon = (iconName) => {
   if (!iconName) return <FaRegSquare />;
@@ -49,11 +50,11 @@ const formatoTitulo = (texto) => {
 const submoduloComponents = {
   "/usuarios/editar": MiPerfil,
   "/contenedor/agregar": AgregarContenedor,
-  "/dashboard": Inicio, 
-  "/control-dsh/nuevo-registro":NuevoRegistro,
-  "/control-dsh/historial":HistorialRecoleccion,
-  "/configuracion/umbral-llenado":UmbralDeLlenado,
-  "/configuracion/copia-seguridad" :Backup,
+  "/dashboard": Inicio,
+  "/control-dsh/nuevo-registro": NuevoRegistro,
+  "/control-dsh/historial": HistorialRecoleccion,
+  "/configuracion/umbral-llenado": UmbralDeLlenado,
+  "/configuracion/copia-seguridad": Backup,
 };
 
 const Dashboard = () => {
@@ -134,7 +135,23 @@ const Dashboard = () => {
   };
 
   //  Función para cerrar sesión
-  const handleLogout = (auto = false) => {
+  const handleLogout = async (auto = false) => {
+    const token = localStorage.getItem("token");
+
+    if (token) {
+      try {
+        await axios.post(
+          "/api/auth/logout",
+          {},
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+
+      } catch (err) {
+        console.error("Error al cerrar sesión en backend:", err);
+        // incluso si falla el backend, forzamos logout en frontend
+      }
+    }
+
     localStorage.removeItem("token");
     if (auto) {
       toast.warning("Tu sesión ha caducado, vuelve a iniciar sesión ");

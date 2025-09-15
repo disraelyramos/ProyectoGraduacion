@@ -1,4 +1,4 @@
-/* Reset y centrado global */
+/* Reset global */
 * {
   margin: 0;
   padding: 0;
@@ -9,10 +9,10 @@ html, body, #root {
   height: 100%;
   width: 100%;
   display: flex;
-  justify-content: center; /* Centrado horizontal */
-  align-items: center;     /* Centrado vertical */
+  justify-content: center;
+  align-items: center;
   font-family: 'Poppins', sans-serif;
-  background: #f5f7fa; /* 🔹 Fondo claro en todo el ancho */
+  background: #f5f7fa;
 }
 
 /* Contenedor principal */
@@ -23,14 +23,14 @@ html, body, #root {
   border-radius: 15px;
   box-shadow: 0 25px 45px rgba(0, 0, 0, 0.2);
   overflow: hidden;
-  background: white;
+  background: #fff;
 }
 
 /* Sección izquierda */
 .brand-section {
   flex: 1;
   background: linear-gradient(to right, #00587a, #008891);
-  color: white;
+  color: #fff;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -47,11 +47,12 @@ html, body, #root {
 /* Sección derecha (formulario) */
 .login-form-section {
   flex: 1;
-  background: white;
+  background: #fff;
   padding: 50px;
   display: flex;
   flex-direction: column;
   justify-content: center;
+  text-align: center;
 }
 
 .login-title {
@@ -59,7 +60,6 @@ html, body, #root {
   font-weight: 700;
   margin-bottom: 25px;
   color: #222;
-  text-align: center;
 }
 
 /* Inputs flotantes */
@@ -74,6 +74,7 @@ html, body, #root {
   border: 2px solid #e0e0e0;
   border-radius: 12px;
   font-size: 1rem;
+  transition: border-color 0.3s, box-shadow 0.3s;
 }
 
 .form-floating input:focus {
@@ -87,9 +88,9 @@ html, body, #root {
   top: -10px;
   left: 14px;
   font-size: 0.9rem;
-  background: white;
   padding: 0 5px;
   color: #666;
+  background: #fff; /* fondo para evitar superposición */
 }
 
 /* Botón */
@@ -97,7 +98,7 @@ html, body, #root {
   width: 100%;
   padding: 14px;
   background: linear-gradient(45deg, #00587a, #008891);
-  color: white;
+  color: #fff;
   font-weight: 600;
   font-size: 1rem;
   border: none;
@@ -112,7 +113,7 @@ html, body, #root {
   transform: translateY(-2px);
 }
 
-/* Link de contraseña */
+/* Link */
 .forgot-password {
   margin-top: 15px;
   display: block;

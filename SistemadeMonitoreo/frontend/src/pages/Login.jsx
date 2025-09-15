@@ -11,7 +11,7 @@ const Login = () => {
   const [tiempoRestante, setTiempoRestante] = useState(0); // ⏱ contador
   const navigate = useNavigate();
 
-  // 🔹 Manejo del contador regresivo
+  // Manejo del contador regresivo
   useEffect(() => {
     let intervalo;
     if (tiempoRestante > 0) {
@@ -21,6 +21,13 @@ const Login = () => {
     }
     return () => clearInterval(intervalo);
   }, [tiempoRestante]);
+
+  // Función para formatear segundos a MM:SS
+  const formatearTiempo = (segundos) => {
+    const minutos = Math.floor(segundos / 60);
+    const seg = segundos % 60;
+    return `${minutos}:${seg < 10 ? "0" + seg : seg}`;
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -36,16 +43,44 @@ const Login = () => {
         contrasena,
       });
 
-      localStorage.setItem("token", res.data.token);
-      toast.success("Inicio de sesión exitoso ");
-      navigate("/dashboard");
+      // 🔹 Redirigir directamente según el tipo de cambio requerido
+      if (res.data.requiereCambio) {
+        // Guardar token temporal para autorizar el cambio
+        if (res.data.token) {
+          localStorage.setItem("token", res.data.token);
+        }
+        // Decidir la vista correcta y pasar usuario en state
+        if (res.data.tipo === "reconfirmacion") {
+          navigate("/reconfirmar-contrasena", { state: { usuario } });
+        } else {
+          navigate("/contrasena-obligatoria", { state: { usuario } });
+        }
+        return;
+      }
 
+      // 🔹 Si todo está bien, continuar login normal
+      localStorage.setItem("token", res.data.token);
+      toast.success("Inicio de sesión exitoso");
+      navigate("/dashboard");
     } catch (err) {
+      // ✅ Fallback por si el backend responde 4xx con requiereCambio
+      if (err?.response?.data?.requiereCambio) {
+        if (err.response.data.token) {
+          localStorage.setItem("token", err.response.data.token);
+        }
+        if (err.response.data.tipo === "reconfirmacion") {
+          navigate("/reconfirmar-contrasena", { state: { usuario } });
+        } else {
+          navigate("/contrasena-obligatoria", { state: { usuario } });
+        }
+        return;
+      }
+
       if (err.response && err.response.data) {
         const mensaje = err.response.data.message || "Error en la autenticación";
         toast.error(mensaje);
 
-        // Si el backend devuelve que está bloqueado, calculamos segundos exactos
+        // 🔹 Si el backend devuelve que está bloqueado, calculamos segundos exactos
         if (err.response.data.bloqueado_hasta) {
           const finBloqueo = new Date(err.response.data.bloqueado_hasta).getTime();
           const ahora = Date.now();
@@ -62,9 +97,7 @@ const Login = () => {
     <div className="login-container">
       {/* Sección izquierda */}
       <div className="brand-section">
-        <h2 className="brand-title">
-          Sistema de Monitoreo Bioinfeccioso
-        </h2>
+        <h2 className="brand-title">Sistema de Monitoreo Bioinfeccioso</h2>
       </div>
 
       {/* Sección derecha */}
@@ -81,7 +114,8 @@ const Login = () => {
               value={usuario}
               onChange={(e) => setUsuario(e.target.value)}
               required
-              disabled={tiempoRestante > 0} // Bloquear usuario durante el bloqueo
+              disabled={tiempoRestante > 0}
+              autoComplete="username" // ✅ autocomplete
             />
             <label htmlFor="usuario">
               <FaUser /> Usuario
@@ -98,7 +132,8 @@ const Login = () => {
               value={contrasena}
               onChange={(e) => setContrasena(e.target.value)}
               required
-              disabled={tiempoRestante > 0} // Bloquear contraseña durante el bloqueo
+              disabled={tiempoRestante > 0}
+              autoComplete="current-password" // ✅ autocomplete
             />
             <label htmlFor="contrasena">
               <FaLock /> Contraseña
@@ -108,7 +143,7 @@ const Login = () => {
           {/* Tiempo de bloqueo visible en rojo */}
           {tiempoRestante > 0 && (
             <div className="alert alert-danger text-center mt-2">
-              Intente de nuevo en <strong>{tiempoRestante}</strong> segundos 
+              Intente de nuevo en <strong>{formatearTiempo(tiempoRestante)}</strong>
             </div>
           )}
 

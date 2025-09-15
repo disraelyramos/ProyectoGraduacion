@@ -1,4 +1,14 @@
+# ─────────────────────────────
+# Environment (NO subir secretos)
+# ─────────────────────────────
+.env
+.env.*
+!.env.example
+!.env.sample
+
+# ─────────────────────────────
 # Logs
+# ─────────────────────────────
 logs
 *.log
 npm-debug.log*
@@ -7,12 +17,17 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# ─────────────────────────────
+# Dependencias y builds
+# ─────────────────────────────
 node_modules
 dist
 dist-ssr
 *.local
 
-# Editor directories and files
+# ─────────────────────────────
+# Editor/OS
+# ─────────────────────────────
 .vscode/*
 !.vscode/extensions.json
 .idea

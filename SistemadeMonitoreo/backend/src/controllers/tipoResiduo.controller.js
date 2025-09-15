@@ -8,7 +8,7 @@ exports.getTiposResiduo = async (req, res) => {
     );
     res.json(result.rows);
   } catch (err) {
-    console.error("❌ Error obteniendo tipos de residuo:", err.message);
+    console.error("Error obteniendo tipos de residuo:", err.message);
     res.status(500).json({ message: "Error interno del servidor" });
   }
 };
@@ -30,7 +30,7 @@ exports.createTipoResiduo = async (req, res) => {
 
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error("❌ Error creando tipo de residuo:", err.message);
+    console.error("Error creando tipo de residuo:", err.message);
     res.status(500).json({ message: "Error interno del servidor" });
   }
 };
