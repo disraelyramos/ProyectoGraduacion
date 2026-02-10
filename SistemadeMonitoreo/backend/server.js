@@ -32,6 +32,17 @@ app.use('/api/estados-contenedor', estadoContenedorRoutes);
 app.use('/api/contenedores', contenedorRoutes); // 
 app.use("/api/recuperacion", recuperacionRoutes);
 
+app.use(
+  "/api/control-dsh/registro-pesaje",
+  require("./src/routes/controlDSH/RegistroPesaje.routes")
+);
+
+app.use(
+  "/api/control-dsh/catalogos",
+  require("./src/routes/controlDSH/DisEmpresa.routes")
+);
+
+
 
 //  Ruta protegida de prueba
 const authMiddleware = require('./src/middlewares/auth.middleware');

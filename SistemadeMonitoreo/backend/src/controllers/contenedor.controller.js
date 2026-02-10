@@ -70,32 +70,42 @@ exports.createContenedor = async (req, res) => {
 
 // Listar contenedores
 // Listar contenedores
+// Listar contenedores (para UI + Foto 1 niveles)
 exports.getContenedores = async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT 
         c.id_contenedor,
         c.codigo,
-        u.id_ubicacion,                  -- 👈 ID ubicación
+
+        -- claves que tu frontend ya usa en Foto 1
+        c.id_tipo_residuo,
+        c.estado_id,
+        c.capacidad_max_litros,
+        c.estado_actual_litros,
+        c.capacidad_max_lb,
+        c.estado_actual_lb,
+
+        -- datos descriptivos (siguen sirviendo para tablas/admin)
+        u.id_ubicacion,
         u.nombre AS ubicacion,
-        tr.id AS id_tipo_residuo,        -- 👈 ID tipo de residuo
         tr.nombre AS tipo_residuo,
         TO_CHAR(c.fecha_registro, 'YYYY-MM-DD') AS fecha_registro,
-        e.id AS id_estado_contenedor,    -- 👈 ID estado
-        e.nombre AS estado
+        ec.nombre AS estado
       FROM contenedores c
       JOIN ubicaciones u ON c.id_ubicacion = u.id_ubicacion
       JOIN tipos_residuo tr ON c.id_tipo_residuo = tr.id
-      JOIN estados_contenedor e ON c.estado_id = e.id
+      JOIN estados_contenedor ec ON c.estado_id = ec.id
       ORDER BY c.id_contenedor DESC
     `);
 
     return res.json(result.rows);
   } catch (err) {
-    console.error(" Error obteniendo contenedores:", err.message);
+    console.error("Error obteniendo contenedores:", err.message);
     return res.status(500).json({ message: "Error interno del servidor" });
   }
 };
+
 
 // Buscar contenedores (por código o tipo de residuo)
 exports.buscarContenedores = async (req, res) => {

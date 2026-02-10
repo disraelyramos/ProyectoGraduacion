@@ -3,7 +3,7 @@ const bcrypt = require('bcrypt');
 async function generarHash() {
   try {
     // 👉 Cambia esta contraseña por la que quieras encriptar
-    const passwordPlano = 'chicle123';
+    const passwordPlano = 'Iber2025.';
     
     // Número de rondas de sal (más alto = más seguro, pero más lento)
     const saltRounds = 10;

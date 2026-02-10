@@ -1,100 +1,179 @@
-import React, { useState } from "react";
-import { Modal, Button, Form } from "react-bootstrap";
+import React, { useEffect, useState } from "react";
+import { Modal, Button, Form, Alert } from "react-bootstrap";
 import { showConfirmAlert, showSuccessAlert } from "../../utils/alerts";
+import apiClient from "../../utils/apiClient";
 import "../../styles/nuevo-registro.css";
 
 const ModalCosto = ({ show, handleClose, handleOpenTotales }) => {
+  const [loading, setLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [costo, setCosto] = useState("");
+
+  const [costoVigente, setCostoVigente] = useState("");
+  const [costoInput, setCostoInput] = useState("");
+
+  const [sinCostoVigente, setSinCostoVigente] = useState(false);
   const [error, setError] = useState("");
 
-  const handleEditSave = () => {
-    if (!isEditing) {
-      // Cambiar a modo edición
-      setIsEditing(true);
+  useEffect(() => {
+    const fetchCostoGlobal = async () => {
+      if (!show) return;
+
+      setLoading(true);
       setError("");
-    } else {
-      // Validar antes de guardar
-      if (costo.trim() === "" || isNaN(costo)) {
-        setError("Debe ser un valor numérico");
-        return;
-      }
+      setSinCostoVigente(false);
+      setIsEditing(false);
+      setCostoVigente("");
+      setCostoInput("");
 
-      setError("");
+      try {
+        const res = await apiClient.get("/control-dsh/registro-pesaje/costo-global");
+        const c = res.data?.costo_por_libra;
 
-      //  Confirmación antes de guardar
-      showConfirmAlert(
-        "¿Desea guardar el costo por libra?",
-        "Este valor será almacenado en el sistema.",
-        () => {
-          console.log("Costo guardado:", costo);
-
-          //  Bloquear campo y limpiar después de guardar
-          setIsEditing(false);
-          setCosto("");
-
-          // Mostrar alerta de éxito y redirigir al modal de totales
-          showSuccessAlert("Guardado correctamente").then(() => {
-            if (typeof handleOpenTotales === "function") {
-              handleOpenTotales(); // abrir modal totales al dar OK
-            }
-          });
-        },
-        () => {
-          //  Si cancela, cerramos el modal
-          console.log("Usuario canceló la acción. Modal cerrado.");
-          handleClose();
+        setCostoVigente(c != null ? String(c) : "");
+        setCostoInput(c != null ? String(c) : "");
+      } catch (err) {
+        if (err?.response?.status === 404) {
+          // No hay costo: obligar a registrar
+          setSinCostoVigente(true);
+          setIsEditing(true);
+          setCostoInput("");
+        } else {
+          setError(err?.response?.data?.message || "Error obteniendo costo global");
         }
-      );
-    }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCostoGlobal();
+  }, [show]);
+
+  const validarCosto = (v) => {
+    const s = String(v ?? "").trim();
+    if (!s) return "Debe ingresar un costo";
+    if (!/^\d+(\.\d{1,4})?$/.test(s)) return "Formato inválido (ej: 12, 12.5, 12.2500)";
+    const n = Number(s);
+    if (!Number.isFinite(n) || n < 0) return "Costo inválido";
+    return "";
   };
 
-  // Acción para el botón Omitir
-  const handleOmitir = () => {
+  const guardarCostoGlobal = async (costoNum) => {
+    await apiClient.post("/control-dsh/registro-pesaje/costo-global", {
+      costo_por_libra: costoNum,
+    });
+  };
+
+  const handleEditSave = () => {
+    if (loading) return;
+
+    if (!isEditing) {
+      setIsEditing(true);
+      setError("");
+      return;
+    }
+
+    const e = validarCosto(costoInput);
+    if (e) {
+      setError(e);
+      return;
+    }
+
     showConfirmAlert(
-      "¿Desea continuar con el costo actual?",
-      "Si confirma, se abrirá el modal de totales.",
-      () => {
-        console.log("Usuario decidió continuar con costo actual.");
-        if (typeof handleOpenTotales === "function") {
-          handleOpenTotales(); // abrir modal totales
+      "¿Desea guardar el costo por libra?",
+      "Se aplicará como costo global (Bioinfeccioso y Punzocortante).",
+      async () => {
+        try {
+          setLoading(true);
+          const costoNum = Number(costoInput);
+          await guardarCostoGlobal(costoNum);
+
+          setCostoVigente(String(costoNum));
+          setSinCostoVigente(false);
+          setIsEditing(false);
+
+          await showSuccessAlert("Costo guardado correctamente");
+
+          // ✅ Continuar a totales: ya quedó guardado en BD
+          handleOpenTotales({
+            editar_costo: false,
+            costo_por_libra_vigente: costoNum,
+          });
+        } catch (err) {
+          setError(err?.response?.data?.message || "Error guardando costo global");
+        } finally {
+          setLoading(false);
         }
       },
+      () => handleClose()
+    );
+  };
+
+  const handleOmitir = () => {
+    if (loading) return;
+
+    if (sinCostoVigente) {
+      setError("No hay costo vigente. Debe ingresar uno para continuar.");
+      return;
+    }
+
+    showConfirmAlert(
+      "¿Desea continuar con el costo actual?",
+      "Se usará el último costo global vigente.",
       () => {
-        console.log("Usuario eligió no continuar. Modal cerrado.");
-        handleClose();
-      }
+        handleOpenTotales({
+          editar_costo: false,
+          costo_por_libra_vigente: Number(costoVigente || 0),
+        });
+      },
+      () => handleClose()
     );
   };
 
   return (
     <Modal show={show} onHide={handleClose} centered>
       <Modal.Header className="modal-costo-header">
-        <Modal.Title>Costo por libra</Modal.Title>
+        <Modal.Title>Costo por libra (Global)</Modal.Title>
       </Modal.Header>
+
       <Modal.Body>
+        {sinCostoVigente && (
+          <Alert variant="warning">
+            No hay costo global vigente. <strong>Debe registrar un costo para continuar.</strong>
+          </Alert>
+        )}
+
+        {error && (
+          <Alert variant="danger">{error}</Alert>
+        )}
+
         <Form>
           <Form.Group controlId="formCosto">
-            <Form.Label>Ingrese el costo</Form.Label>
+            <Form.Label>{sinCostoVigente ? "Ingrese costo inicial" : "Costo vigente"}</Form.Label>
             <Form.Control
               type="number"
-              value={costo}
-              disabled={!isEditing}
-              onChange={(e) => setCosto(e.target.value)}
+              value={costoInput}
+              disabled={!isEditing || loading}
+              onChange={(e) => setCostoInput(e.target.value)}
               className={error ? "is-invalid" : ""}
             />
-            {error && <div className="invalid-feedback">{error}</div>}
           </Form.Group>
         </Form>
       </Modal.Body>
+
       <Modal.Footer>
         <Button
           variant={isEditing ? "success" : "primary"}
           onClick={handleEditSave}
+          disabled={loading}
         >
           {isEditing ? "Guardar" : "Editar"}
         </Button>
-        <Button variant="secondary" onClick={handleOmitir}>
+
+        <Button
+          variant="secondary"
+          onClick={handleOmitir}
+          disabled={loading || sinCostoVigente}
+        >
           Omitir
         </Button>
       </Modal.Footer>
