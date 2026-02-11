@@ -3,17 +3,6 @@ const pool = require("../../config/db");
 const xss = require("xss");
 const jwt = require("jsonwebtoken");
 
-/**
- * Reglas del flujo (limpio, sin código cargado):
- * - Foto 1: iniciar proceso por tipo (1 contenedor por tipo). Bloquea si ya hay EN_PROCESO.
- * - Foto 2: costo GLOBAL (mismo para tipo 1 y 2) usando costos_contenedor:
- *    - GET /costo-global: trae el último costo vigente (de tipo 1/2)
- *    - POST /costo-global: guarda nuevo costo y lo deja vigente en AMBOS contenedores (tipo 1/2)
- * - Foto 3: guardarCalculo: SOLO usa costo vigente (no crea costo aquí).
- * - Foto 4: guardarRecoleccion: valida recibo único + cantidad <= última lectura sensor (LB), finaliza proceso.
- * - Cancelar: marca CANCELADO
- */
-
 // ===============================
 // Constantes
 // ===============================
@@ -380,7 +369,7 @@ exports.guardarCalculo = async (req, res) => {
     const costo_por_libra_aplicado = Number(costoVigente.costo_por_libra) || 0;
     const costo_vigente_id = Number(costoVigente.id);
 
-    // 3) ✅ lectura sensor OK (OBLIGATORIA)
+    // 3) lectura sensor OK (OBLIGATORIA)
     const ultimaLectura = await getUltimaLecturaSensorOK(client, contenedor_id);
     if (!ultimaLectura) {
       return res.status(400).json({
@@ -419,7 +408,7 @@ exports.guardarCalculo = async (req, res) => {
       total_costo_q,
       fuente_costo: "vigente",
 
-      // ✅ referencia obligatoria del sensor
+      //  referencia obligatoria del sensor
       lectura_id,
       lectura_sensor_lb: lectura_valor,
       lectura_sensor_fecha_hora: lectura_fecha_hora,
@@ -442,7 +431,7 @@ exports.guardarCalculo = async (req, res) => {
       costo_por_libra_aplicado,
       total_costo_q,
 
-      // ✅ transparencia / auditoría
+      // transparencia / auditoría
       lectura_referencia: {
         lectura_id,
         valor: lectura_valor,
@@ -474,7 +463,7 @@ exports.guardarRecoleccion = async (req, res) => {
   const numero_recibo = req.body?.numero_recibo ? xss(String(req.body.numero_recibo).trim()) : "";
   const cantidad_libras_pendientes = toNumber(req.body?.cantidad_libras_pendientes);
 
-  // ✅ para “no dejar columnas en blanco”: guardamos string (aunque sea "")
+  
   const observaciones_raw = req.body?.observaciones ? xss(String(req.body.observaciones).trim()) : "";
   const observaciones = observaciones_raw; // siempre string (no null)
 
@@ -512,7 +501,7 @@ exports.guardarRecoleccion = async (req, res) => {
   const total_costo_q = toNumber(proceso?.total_costo_q);
   const costo_vigente_id = toInt(proceso?.costo_vigente_id);
 
-  // ✅ lectura_id OBLIGATORIA (ya la exigís en guardarCalculo)
+  // lectura_id OBLIGATORIA (ya la exigís en guardarCalculo)
   const lectura_id = toInt(proceso?.lectura_id);
 
   const fuente_costo = String(proceso?.fuente_costo || "vigente");

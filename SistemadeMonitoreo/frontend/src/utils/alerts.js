@@ -84,7 +84,7 @@ export const showDynamicConfirm = (accion, onConfirm, onCancel) => {
 };
 
 /**
- *Alerta de éxito
+ * ✅ Alerta de éxito (modal)
  * Retorna la promesa de SweetAlert para poder usar .then()
  */
 export const showSuccessAlert = (message) => {
@@ -97,13 +97,58 @@ export const showSuccessAlert = (message) => {
 };
 
 /**
- * Alerta de error
+ * ✅ Alerta de error (modal fuerte)
+ * Para errores importantes (backend/operación crítica)
  */
 export const showErrorAlert = (message) => {
-  Swal.fire({
+  return Swal.fire({
     title: "Error",
     text: message,
     icon: "error",
     confirmButtonColor: "#d33",
+  });
+};
+
+/**
+ * ✅ Toast superior (NO bloquea pantalla)
+ * Para avisos/errores pequeños y rápidos.
+ * icon: "success" | "info" | "warning" | "error"
+ */
+export const showToast = (message, icon = "info") => {
+  return Swal.fire({
+    toast: true,
+    position: "top-end",
+    icon,
+    title: message,
+    showConfirmButton: false,
+    timer: 3500,
+    timerProgressBar: true,
+  });
+};
+
+/**
+ * ✅ Modal especializado para error de backend
+ * Útil para centralizar el mensaje cuando venga 500/403/etc.
+ */
+export const showBackendErrorModal = (
+  message = "Ocurrió un error inesperado. Intente nuevamente."
+) => {
+  return Swal.fire({
+    title: "Error",
+    text: message,
+    icon: "error",
+    confirmButtonColor: "#d33",
+  });
+};
+
+/**
+ * (Opcional) Info modal
+ */
+export const showInfoAlert = (message, title = "Información") => {
+  return Swal.fire({
+    title,
+    text: message,
+    icon: "info",
+    confirmButtonColor: "#3085d6",
   });
 };

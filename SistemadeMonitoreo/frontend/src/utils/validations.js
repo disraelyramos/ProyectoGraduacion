@@ -2,31 +2,35 @@
  * 🔹 Validador genérico reutilizable
  * @param {Object} data - Datos del formulario (key: value)
  * @param {Object} rules - Reglas de validación (key: [reglas])
+ * @param {Object} labels - (Opcional) Etiquetas bonitas por campo (key: label)
  * @returns {Object} errors - Errores encontrados
  */
-export const validateForm = (data, rules) => {
+export const validateForm = (data, rules, labels = {}) => {
   let errors = {};
 
   for (const field in rules) {
     const value = data[field] ? data[field].toString().trim() : "";
     const fieldRules = rules[field];
 
+    // ✅ Si no hay label, usa el nombre del field (compatibilidad total)
+    const label = labels[field] || field;
+
     for (const rule of fieldRules) {
       // Requerido
       if (rule === "required" && !value) {
-        errors[field] = `El campo ${field} es obligatorio`;
+        errors[field] = `El campo ${label} es obligatorio`;
         break;
       }
 
       // Longitud mínima
-      if (rule.minLength && value.length < rule.minLength) {
-        errors[field] = `El campo ${field} debe tener al menos ${rule.minLength} caracteres`;
+      if (rule?.minLength && value.length < rule.minLength) {
+        errors[field] = `El campo ${label} debe tener al menos ${rule.minLength} caracteres`;
         break;
       }
 
       // Longitud máxima
-      if (rule.maxLength && value.length > rule.maxLength) {
-        errors[field] = `El campo ${field} no puede exceder ${rule.maxLength} caracteres`;
+      if (rule?.maxLength && value.length > rule.maxLength) {
+        errors[field] = `El campo ${label} no puede exceder ${rule.maxLength} caracteres`;
         break;
       }
 
@@ -34,7 +38,7 @@ export const validateForm = (data, rules) => {
       if (rule === "email") {
         const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!regex.test(value)) {
-          errors[field] = `El campo ${field} debe ser un correo válido`;
+          errors[field] = `El campo ${label} debe ser un correo válido`;
           break;
         }
       }
@@ -43,7 +47,7 @@ export const validateForm = (data, rules) => {
       if (rule === "date") {
         const fecha = new Date(value);
         if (isNaN(fecha.getTime())) {
-          errors[field] = `El campo ${field} no contiene una fecha válida`;
+          errors[field] = `El campo ${label} no contiene una fecha válida`;
           break;
         }
       }
@@ -53,7 +57,7 @@ export const validateForm = (data, rules) => {
         const fecha = new Date(value);
         const hoy = new Date();
         if (fecha > hoy) {
-          errors[field] = `El campo ${field} no puede ser una fecha futura`;
+          errors[field] = `El campo ${label} no puede ser una fecha futura`;
           break;
         }
       }
@@ -62,7 +66,7 @@ export const validateForm = (data, rules) => {
       if (rule === "onlyLetters") {
         const regex = /^[A-Za-zÁÉÍÓÚáéíóúñÑ\s]+$/;
         if (!regex.test(value)) {
-          errors[field] = `El campo ${field} solo puede contener letras`;
+          errors[field] = `El campo ${label} solo puede contener letras`;
           break;
         }
       }
@@ -70,7 +74,7 @@ export const validateForm = (data, rules) => {
       // No solo números
       if (rule === "noOnlyNumbers") {
         if (/^\d+$/.test(value)) {
-          errors[field] = `El campo ${field} no puede ser solo números`;
+          errors[field] = `El campo ${label} no puede ser solo números`;
           break;
         }
       }

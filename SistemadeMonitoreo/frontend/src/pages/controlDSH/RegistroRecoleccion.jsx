@@ -10,7 +10,7 @@ import "../../styles/nuevo-registro.css";
 const RegistroRecoleccion = ({
   codigoContenedor = "",
   responsableNombre = "",
-  procesoToken = "", // ✅ NUEVO: reemplaza historialCalculoId
+  procesoToken = "", 
   porcentajePendiente = 0,
   onPreviewPendiente,
   onCancel,
@@ -36,7 +36,7 @@ const RegistroRecoleccion = ({
     responsable: responsableNombre || "",
     fechaRecoleccion: fechaDisplay, // solo visual
 
-    // ✅ IDs (strings en UI, se convierten a number al enviar)
+    // IDs (strings en UI, se convierten a number al enviar)
     distrito_id: "",
     empresa_id: "",
 
@@ -54,7 +54,7 @@ const RegistroRecoleccion = ({
     }));
   }, [codigoContenedor, responsableNombre]);
 
-  // ✅ cargar catálogos (distritos / empresas)
+  // cargar catálogos (distritos / empresas)
   useEffect(() => {
     let mounted = true;
 
@@ -137,7 +137,7 @@ const RegistroRecoleccion = ({
     }
 
     const payload = {
-      proceso_token: String(procesoToken).trim(), // ✅ NUEVO
+      proceso_token: String(procesoToken).trim(), 
       empresa_id: Number(formData.empresa_id),
       distrito_id: Number(formData.distrito_id),
       numero_recibo: String(formData.numeroRecibo).trim(),

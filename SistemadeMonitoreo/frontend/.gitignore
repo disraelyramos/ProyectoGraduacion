@@ -37,3 +37,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+
+.env
+backend/.env
+SistemadeMonitoreo/backend/.env

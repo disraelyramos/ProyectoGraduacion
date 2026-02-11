@@ -48,10 +48,10 @@ const NuevoRegistro = () => {
 
   const [decisionCosto, setDecisionCosto] = useState(null);
 
-  // ✅ en vez de historial_calculo_id, ahora usamos proceso_token + base_total_lb desde Foto 3
+  // en vez de historial_calculo_id, ahora usamos proceso_token + base_total_lb desde Foto 3
   const [calculoData, setCalculoData] = useState(null);
 
-  // ✅ % pendiente: cálculo local (display), el backend recalcula al guardar
+  // % pendiente: cálculo local (display), el backend recalcula al guardar
   const [porcentajePendiente, setPorcentajePendiente] = useState(0);
 
   const responsableNombre = useMemo(() => getResponsableDesdeToken(), []);
@@ -134,7 +134,7 @@ const NuevoRegistro = () => {
     setShowTotales(true);
   }, []);
 
-  // ✅ aquí recibimos res.data del /calculo (proceso_token + preview)
+  // aquí recibimos res.data del /calculo (proceso_token + preview)
   const handleShowRecoleccion = useCallback((payloadCalculo) => {
     setCalculoData(payloadCalculo);
     setShowTotales(false);
@@ -142,7 +142,7 @@ const NuevoRegistro = () => {
     setShowRecoleccion(true);
   }, []);
 
-  // ✅ cálculo local en 1 línea útil: (pendiente / total) * 100
+  // cálculo local en 1 línea útil: (pendiente / total) * 100
   const handlePreviewPendiente = useCallback(
     (cantidadLibrasStr) => {
       const total = Number(calculoData?.contenedor?.total_en_libras ?? calculoData?.total_en_libras ?? 0) || 0;
@@ -152,7 +152,7 @@ const NuevoRegistro = () => {
     [calculoData]
   );
 
-  // ✅ Cancelar = solo reset UI (tu regla nueva)
+  // Cancelar = solo reset UI (tu regla nueva)
   const handleCancel = useCallback(() => {
     toast.info("Proceso cancelado.");
     resetFlujo();
@@ -228,7 +228,7 @@ const NuevoRegistro = () => {
           <RegistroRecoleccion
             codigoContenedor={contenedorSel?.codigo || ""}
             responsableNombre={responsableNombre}
-            procesoToken={calculoData?.proceso_token || ""}                 // ✅ CAMBIO
+            procesoToken={calculoData?.proceso_token || ""}                
             porcentajePendiente={porcentajePendiente}
             onPreviewPendiente={handlePreviewPendiente}
             onCancel={handleCancel}
