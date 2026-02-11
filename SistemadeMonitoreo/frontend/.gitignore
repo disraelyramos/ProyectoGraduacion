@@ -39,6 +39,3 @@ dist-ssr
 *.sw?
 
 
-.env
-backend/.env
-SistemadeMonitoreo/backend/.env

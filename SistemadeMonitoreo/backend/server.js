@@ -20,6 +20,8 @@ const tipoResiduoRoutes = require('./src/routes/tipoResiduo.routes');
 const estadoContenedorRoutes = require('./src/routes/estadoContenedor.routes');
 const contenedorRoutes = require('./src/routes/contenedor.routes'); // 
 const recuperacionRoutes = require('./src/routes/recuperacion.routes');
+const historialRecoleccionRoutes = require("./src/routes/HistorialRecoleccion/HistorialdeRecoleccion.routes");
+
 
 //  Usar rutas
 app.use('/api/auth', authRoutes);
@@ -41,6 +43,8 @@ app.use(
   "/api/control-dsh/catalogos",
   require("./src/routes/controlDSH/DisEmpresa.routes")
 );
+
+app.use("/api/historial-recoleccion", historialRecoleccionRoutes);
 
 
 
