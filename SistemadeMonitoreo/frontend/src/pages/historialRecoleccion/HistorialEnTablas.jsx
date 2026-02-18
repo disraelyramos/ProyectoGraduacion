@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
-import { Table, Card } from "react-bootstrap";
-import { FaPrint } from "react-icons/fa";
+import { Table, Card, Button } from "react-bootstrap";
+import { FaFilePdf, FaFileExcel } from "react-icons/fa";
 import "../../styles/historial-recoleccion.css";
 import AppPagination from "../../components/common/AppPagination";
 
@@ -9,7 +9,18 @@ const fmt = (v, suffix = "") => {
   return `${v}${suffix}`;
 };
 
-const HistorialEnTablas = ({ loading, detalle, pesaje, page, total, limit, onPageChange }) => {
+const HistorialEnTablas = ({
+  loading,
+  detalle,
+  pesaje,
+  page,
+  total,
+  limit,
+  onPageChange,
+  canExport,
+  onExportPdf,
+  onExportExcel,
+}) => {
   const showingFrom = total === 0 ? 0 : (page - 1) * limit + 1;
   const showingTo = total === 0 ? 0 : Math.min(page * limit, total);
 
@@ -22,15 +33,42 @@ const HistorialEnTablas = ({ loading, detalle, pesaje, page, total, limit, onPag
   const emptyDetalle = !loading && (detalle || []).length === 0;
 
   return (
-   <div className="w-100 d-flex flex-column gap-4 historial-fullwidth">
+    <div className="w-100 d-flex flex-column gap-4 historial-fullwidth">
       {/* Tabla 1 */}
       <Card className="shadow-sm border-0 w-100 mb-4">
         <Card.Body>
-          <h5 className="fw-semibold mb-3">Datos de Registro de Recolección</h5>
+          <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+            <h5 className="fw-semibold mb-0">Datos de Registro de Recolección</h5>
+
+            <div className="d-flex gap-2">
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={onExportPdf}
+                disabled={!canExport}
+                title={!canExport ? "Presione 'Ver' y asegúrese de tener resultados" : "Ver PDF"}
+              >
+                <FaFilePdf className="me-1" />
+                PDF
+              </Button>
+
+              <Button
+                variant="success"
+                size="sm"
+                onClick={onExportExcel}
+                disabled={!canExport}
+                title={!canExport ? "Presione 'Ver' y asegúrese de tener resultados" : "Descargar Excel"}
+              >
+                <FaFileExcel className="me-1" />
+                Excel
+              </Button>
+            </div>
+          </div>
+
           <hr />
 
           <div className="table-scroll table-scroll-dark">
-           <Table striped bordered hover responsive className="mb-0 custom-table">
+            <Table striped bordered hover responsive className="mb-0 custom-table">
               <thead className="sticky-head sticky-head-dark">
                 <tr>
                   <th>Código</th>
@@ -43,7 +81,6 @@ const HistorialEnTablas = ({ loading, detalle, pesaje, page, total, limit, onPag
                   <th>% DSH Pendientes</th>
                   <th>Cantidad en Libras Pendientes</th>
                   <th>Observación</th>
-                  <th>Acción</th>
                 </tr>
               </thead>
 
@@ -60,19 +97,12 @@ const HistorialEnTablas = ({ loading, detalle, pesaje, page, total, limit, onPag
                     <td>{fmt(r.porcentaje_pendiente, "%")}</td>
                     <td>{fmt(r.cantidad_libras_pendientes)}</td>
                     <td>{fmt(r.observaciones)}</td>
-                    <td className="text-center">
-                      <FaPrint
-                        className="text-info print-icon"
-                        title="Imprimir (pendiente)"
-                        style={{ cursor: "not-allowed", opacity: 0.6 }}
-                      />
-                    </td>
                   </tr>
                 ))}
 
                 {emptyDetalle && (
                   <tr>
-                    <td colSpan={11} className="text-center py-4">
+                    <td colSpan={10} className="text-center py-4">
                       Sin resultados para mostrar.
                     </td>
                   </tr>
@@ -80,7 +110,7 @@ const HistorialEnTablas = ({ loading, detalle, pesaje, page, total, limit, onPag
 
                 {loading && (
                   <tr>
-                    <td colSpan={11} className="text-center py-4">
+                    <td colSpan={10} className="text-center py-4">
                       Cargando...
                     </td>
                   </tr>
@@ -93,7 +123,6 @@ const HistorialEnTablas = ({ loading, detalle, pesaje, page, total, limit, onPag
 
       {/* Tabla 2 */}
       <Card className="shadow-sm border-0 w-100 mb-4">
-
         <Card.Body>
           <h5 className="fw-semibold mb-3">Control de Pesaje</h5>
           <hr />
@@ -107,7 +136,6 @@ const HistorialEnTablas = ({ loading, detalle, pesaje, page, total, limit, onPag
                   <th>% Llenado Actual</th>
                   <th>Costo por Libra</th>
                   <th>Costo Total</th>
-                  <th>Acción</th>
                 </tr>
               </thead>
 
@@ -121,20 +149,13 @@ const HistorialEnTablas = ({ loading, detalle, pesaje, page, total, limit, onPag
                       <td>{fmt(p?.porcentaje_llenado, "%")}</td>
                       <td>{fmt(p?.costo_por_libra_aplicado)}</td>
                       <td>{fmt(p?.total_costo_q)}</td>
-                      <td className="text-center">
-                        <FaPrint
-                          className="text-success print-icon"
-                          title="Imprimir (pendiente)"
-                          style={{ cursor: "not-allowed", opacity: 0.6 }}
-                        />
-                      </td>
                     </tr>
                   );
                 })}
 
                 {emptyDetalle && (
                   <tr>
-                    <td colSpan={6} className="text-center py-4">
+                    <td colSpan={5} className="text-center py-4">
                       Sin resultados para mostrar.
                     </td>
                   </tr>
@@ -142,7 +163,7 @@ const HistorialEnTablas = ({ loading, detalle, pesaje, page, total, limit, onPag
 
                 {loading && (
                   <tr>
-                    <td colSpan={6} className="text-center py-4">
+                    <td colSpan={5} className="text-center py-4">
                       Cargando...
                     </td>
                   </tr>
@@ -151,7 +172,7 @@ const HistorialEnTablas = ({ loading, detalle, pesaje, page, total, limit, onPag
             </Table>
           </div>
 
-          {/* PAGINACIÓN ABAJO DE LA ÚLTIMA TABLA */}
+          {/* PAGINACIÓN */}
           <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-3">
             <div className="fw-semibold">
               Mostrando {showingFrom}-{showingTo} de {total}

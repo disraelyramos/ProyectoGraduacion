@@ -5,14 +5,8 @@ import "../../styles/historial-recoleccion.css";
 import HistorialEnTablas from "./HistorialEnTablas";
 import apiClient from "../../utils/apiClient";
 
-// ===============================
-// Constantes (normativa)
-// ===============================
 const LIMIT = 10;
 
-// ===============================
-// Helpers (limpios, reutilizables)
-// ===============================
 const clampPage = (p, totalPages) => Math.min(Math.max(1, p), totalPages);
 
 const buildValidationErrors = ({ buscarPor, valorBusqueda, fechaInicio, fechaFin }) => {
@@ -41,21 +35,39 @@ const getErrorMessage = (err) =>
 
 const tryOpenNativeDatePicker = (inputEl) => {
   if (!inputEl) return;
-
-
-  if (typeof inputEl.showPicker === "function") {
-    inputEl.showPicker();
-    return;
-  }
-
-  // Fallback
+  if (typeof inputEl.showPicker === "function") return inputEl.showPicker();
   inputEl.focus();
   inputEl.click();
 };
 
-// ===============================
-// Componente DateField (pro)
-// ===============================
+const openBlobInNewTab = (blob, preOpenedWindow) => {
+  const url = URL.createObjectURL(blob);
+
+  try {
+    if (preOpenedWindow && !preOpenedWindow.closed) {
+      preOpenedWindow.location.href = url;
+      preOpenedWindow.focus();
+    } else {
+      window.open(url, "_blank");
+    }
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  }
+};
+
+const downloadBlob = (blob, filename) => {
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
+};
+
 const DateField = ({ name, value, error, inputRef, onChange }) => {
   const handleIconClick = () => tryOpenNativeDatePicker(inputRef?.current);
 
@@ -89,16 +101,13 @@ const DateField = ({ name, value, error, inputRef, onChange }) => {
   );
 };
 
-// ===============================
-// Página principal
-// ===============================
 const HistorialRecoleccion = () => {
   const [formData, setFormData] = useState({
-    buscarPor: "", 
+    buscarPor: "",
     valorBusqueda: "",
     fechaInicio: "",
     fechaFin: "",
-    order: "desc", 
+    order: "desc",
   });
 
   const [errors, setErrors] = useState({});
@@ -111,11 +120,9 @@ const HistorialRecoleccion = () => {
   const [total, setTotal] = useState(0);
 
   const [serverMessage, setServerMessage] = useState("");
-
-  // Tablas SOLO después de “Ver”
   const [hasSearched, setHasSearched] = useState(false);
+  const [exportId, setExportId] = useState("");
 
-  // Refs para datepicker con ícono
   const fechaInicioRef = useRef(null);
   const fechaFinRef = useRef(null);
 
@@ -126,6 +133,7 @@ const HistorialRecoleccion = () => {
     setPesaje([]);
     setTotal(0);
     setPage(1);
+    setExportId("");
   }, []);
 
   const clearErrorsFor = useCallback((name) => {
@@ -139,7 +147,6 @@ const HistorialRecoleccion = () => {
       setFormData((prev) => ({ ...prev, [name]: value }));
       clearErrorsFor(name);
 
-      // Si cambia un filtro, ocultar tablas hasta que presione “Ver”
       setHasSearched(false);
       setServerMessage("");
       resetResults();
@@ -166,15 +173,18 @@ const HistorialRecoleccion = () => {
         });
 
         const data = res.data || {};
+        const totalValue = Number(data?.total || 0);
 
         setServerMessage(data?.message || "");
-        setTotal(Number(data?.total || 0));
+        setTotal(totalValue);
 
         const nextPage = Number(data?.page || targetPage);
         setPage(nextPage);
 
         setDetalle(data?.data?.detalle || []);
         setPesaje(data?.data?.pesaje || []);
+
+        setExportId(totalValue > 0 && data?.export_id ? String(data.export_id) : "");
       } catch (err) {
         resetResults();
         setServerMessage(getErrorMessage(err));
@@ -200,10 +210,8 @@ const HistorialRecoleccion = () => {
       }
 
       setHasSearched(true);
-
-      const targetPage = 1;
-      setPage(targetPage);
-      await fetchHistorial(targetPage);
+      setPage(1);
+      await fetchHistorial(1);
     },
     [fetchHistorial, formData, resetResults]
   );
@@ -221,6 +229,51 @@ const HistorialRecoleccion = () => {
     [fetchHistorial, loading, page, totalPages]
   );
 
+  const canExport = hasSearched && !loading && total > 0 && Boolean(exportId);
+
+  // ✅ PDF: SIEMPRE nueva pestaña + token (axios) + sin noopener/noreferrer
+  const handleExportPdf = useCallback(async () => {
+    if (!canExport) return;
+
+    const newTab = window.open("about:blank", "_blank");
+
+    try {
+      const res = await apiClient.get("/historial-recoleccion/export/pdf", {
+        params: { exportId },
+        responseType: "blob",
+      });
+
+      const blob = res.data instanceof Blob ? res.data : new Blob([res.data], { type: "application/pdf" });
+      openBlobInNewTab(blob, newTab);
+    } catch (err) {
+      if (newTab && !newTab.closed) newTab.close();
+      setServerMessage(getErrorMessage(err));
+    }
+  }, [canExport, exportId]);
+
+  // ✅ Excel: descarga con token (axios)
+  const handleExportExcel = useCallback(async () => {
+    if (!canExport) return;
+
+    try {
+      const res = await apiClient.get("/historial-recoleccion/export/excel", {
+        params: { exportId },
+        responseType: "blob",
+      });
+
+      const blob =
+        res.data instanceof Blob
+          ? res.data
+          : new Blob([res.data], {
+              type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            });
+
+      downloadBlob(blob, "historial_recoleccion.xlsx");
+    } catch (err) {
+      setServerMessage(getErrorMessage(err));
+    }
+  }, [canExport, exportId]);
+
   return (
     <div className="historial-recoleccion-container p-4 d-flex flex-column align-items-center">
       <Card className="shadow-sm border-0 w-100 mb-4">
@@ -232,7 +285,6 @@ const HistorialRecoleccion = () => {
           <hr className="mb-4" />
 
           <Form onSubmit={handleSubmit}>
-            {/* Buscar por */}
             <Row className="mb-3 text-center">
               <Col md={12}>
                 <Form.Label className="fw-semibold">Buscar por</Form.Label>
@@ -256,7 +308,6 @@ const HistorialRecoleccion = () => {
               )}
             </Row>
 
-            {/* Valor búsqueda */}
             <Row className="mb-3 text-center">
               <Col md={12}>
                 <Form.Label className="fw-semibold">Búsqueda</Form.Label>
@@ -278,7 +329,6 @@ const HistorialRecoleccion = () => {
               )}
             </Row>
 
-            {/* Rango de fechas (con icono) */}
             <Row className="mb-3 text-center">
               <Col md={12}>
                 <Form.Label className="fw-semibold">Rango de Fechas</Form.Label>
@@ -305,19 +355,13 @@ const HistorialRecoleccion = () => {
               </Col>
             </Row>
 
-            {/* Orden */}
             <Row className="mb-3 text-center">
               <Col md={12}>
                 <Form.Label className="fw-semibold">Orden</Form.Label>
               </Col>
 
               <Col md={12} className="d-flex justify-content-center">
-                <Form.Select
-                  name="order"
-                  value={formData.order}
-                  onChange={handleChange}
-                  className="w-50"
-                >
+                <Form.Select name="order" value={formData.order} onChange={handleChange} className="w-50">
                   <option value="desc">Fecha (Más reciente)</option>
                   <option value="asc">Fecha (Más antigua)</option>
                 </Form.Select>
@@ -336,7 +380,6 @@ const HistorialRecoleccion = () => {
         </Card.Body>
       </Card>
 
-      {/*Tablas SOLO si ya se presionó "Ver" */}
       {hasSearched && (
         <div className="w-100 d-flex flex-column align-items-center gap-4">
           <HistorialEnTablas
@@ -347,6 +390,9 @@ const HistorialRecoleccion = () => {
             total={total}
             limit={LIMIT}
             onPageChange={handlePageChange}
+            canExport={canExport}
+            onExportPdf={handleExportPdf}
+            onExportExcel={handleExportExcel}
           />
         </div>
       )}

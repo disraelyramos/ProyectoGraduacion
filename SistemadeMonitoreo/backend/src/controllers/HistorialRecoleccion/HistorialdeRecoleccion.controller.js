@@ -1,9 +1,33 @@
-// backend/src/controllers/HistorialRecoleccion/HistorialdeRecoleccion.controller.js
 const pool = require("../../config/db");
-const xss = require("xss");
+const crypto = require("crypto");
+// backend/src/controllers/HistorialRecoleccion/HistorialdeRecoleccion.controller.js
+
+const { consultarHistorial } = require("../../services/HistorialRecoleccion/HistorialRecoleccion.service");
+const {
+  crearSnapshot,
+  obtenerSnapshotValido,
+} = require("../../services/HistorialRecoleccion/ExportSnapshot.service");
+
+const {
+  registrarAuditoriaExportacion,
+} = require("../../services/HistorialRecoleccion/AuditoriaExportaciones.service");
+
+const {
+  buildHistorialRecoleccionPdfBuffer,
+} = require("../../exports/pdf/historialRecoleccion.pdf");
+
+const {
+  buildHistorialRecoleccionExcelBuffer,
+} = require("../../exports/excel/historialRecoleccion.excel");
 
 // ===============================
-// Helpers (mismo estilo que tu controller)
+// Constantes del módulo
+// ===============================
+const MODULO = "HISTORIAL_RECOLECCION";
+const REPORTE = "consulta_resultados";
+
+// ===============================
+// Helpers
 // ===============================
 function requireAuth(req, res) {
   if (!req.user || !req.user.id_usuario) {
@@ -24,7 +48,6 @@ function normOrder(v) {
 }
 
 function isValidISODate(d) {
-  // Espera YYYY-MM-DD
   if (!d) return false;
   const s = String(d).trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
@@ -32,16 +55,24 @@ function isValidISODate(d) {
   return !Number.isNaN(dt.getTime());
 }
 
-// ===============================
-// GET: Historial de recolección (solo lectura)
+function normSearchValue(v) {
+  const s = String(v || "").trim();
+  return s.length > 200 ? s.slice(0, 200) : s;
+}
 
+function getIp(req) {
+  return (req.headers["x-forwarded-for"]?.split(",")[0] || req.ip || "").trim();
+}
+
+// ===============================
+// GET: Historial de recolección
+// Route: GET /api/historial-recoleccion
+// ===============================
 exports.obtenerHistorial = async (req, res) => {
   if (!requireAuth(req, res)) return;
 
   const buscarPor = String(req.query?.buscarPor || "").trim().toLowerCase();
-  const valorBusquedaRaw = req.query?.valorBusqueda ? String(req.query.valorBusqueda) : "";
-  const valorBusqueda = xss(valorBusquedaRaw.trim());
-
+  const valorBusqueda = normSearchValue(req.query?.valorBusqueda);
   const fechaInicio = String(req.query?.fechaInicio || "").trim();
   const fechaFin = String(req.query?.fechaFin || "").trim();
 
@@ -49,7 +80,6 @@ exports.obtenerHistorial = async (req, res) => {
   const limit = toInt(req.query?.limit) || 10;
   const order = normOrder(req.query?.order);
 
-  //  Validaciones (según lo pulido)
   if (!buscarPor || !valorBusqueda || !fechaInicio || !fechaFin) {
     return res.status(400).json({
       message: "Debe completar todos los campos de búsqueda.",
@@ -81,7 +111,6 @@ exports.obtenerHistorial = async (req, res) => {
     });
   }
 
-  // Para no permitir búsquedas demasiado cortas (evita ruido)
   if (valorBusqueda.length < 2) {
     return res.status(400).json({
       message: "La búsqueda debe tener al menos 2 caracteres.",
@@ -89,47 +118,18 @@ exports.obtenerHistorial = async (req, res) => {
     });
   }
 
-  // Paginación segura
   const safeLimit = Math.min(Math.max(limit, 1), 100);
   const safePage = Math.max(page, 1);
   const offset = (safePage - 1) * safeLimit;
 
-  const client = await pool.connect();
   try {
-    // ===============================
-    // 1) Construir filtro (parametrizado)
-    // ===============================
-   
-    let whereExtra = "";
-    const paramsBase = [fechaInicio, fechaFin];
+    const filtros = { buscarPor, valorBusqueda, fechaInicio, fechaFin, order };
 
-    let where = `
-      WHERE r.fecha_recoleccion::date BETWEEN $1::date AND $2::date
-    `;
-
-    if (buscarPor === "codigo") {
-      paramsBase.push(valorBusqueda);
-      whereExtra = ` AND c.codigo ILIKE '%' || $3 || '%' `;
-    } else {
-      // buscarPor === "tipo"
-      paramsBase.push(valorBusqueda);
-      whereExtra = ` AND tr.nombre ILIKE '%' || $3 || '%' `;
-    }
-
-    // ===============================
-    // 2) Total (para paginación)
-    // ===============================
-    const countSql = `
-      SELECT COUNT(*)::int AS total
-        FROM recolecciones r
-        JOIN contenedores c ON c.id_contenedor = r.contenedor_id
-        LEFT JOIN tipos_residuo tr ON tr.id = c.id_tipo_residuo
-      ${where}
-      ${whereExtra}
-    `;
-
-    const countRes = await client.query(countSql, paramsBase);
-    const total = countRes.rows?.[0]?.total || 0;
+    const { total, detalle, pesaje } = await consultarHistorial(filtros, {
+      paginado: true,
+      limit: safeLimit,
+      offset,
+    });
 
     if (total === 0) {
       return res.json({
@@ -137,117 +137,226 @@ exports.obtenerHistorial = async (req, res) => {
         total: 0,
         page: safePage,
         limit: safeLimit,
-        data: {
-          detalle: [],
-          pesaje: [],
-        },
+        data: { detalle: [], pesaje: [] },
       });
     }
 
-    // ===============================
-    // 3) Datos detalle (Tabla 1) paginados
-    // ===============================
-
-    const dataSql = `
-      SELECT
-        r.id AS recoleccion_id,
-        c.codigo AS codigo_contenedor,
-        r.fecha_recoleccion,
-        d.nombre AS distrito,
-        tr.nombre AS tipo_residuo,
-        r.numero_recibo,
-        r.responsable,
-        er.nombre AS empresa_recolectora,
-        r.porcentaje_pendiente,
-        r.cantidad_libras_pendientes,
-        r.observaciones
-      FROM recolecciones r
-      JOIN contenedores c ON c.id_contenedor = r.contenedor_id
-      LEFT JOIN tipos_residuo tr ON tr.id = c.id_tipo_residuo
-      LEFT JOIN distritos d ON d.id = r.distrito_id
-      LEFT JOIN empresas_recolectoras er ON er.id = r.empresa_id
-      ${where}
-      ${whereExtra}
-      ORDER BY r.fecha_recoleccion ${order}, r.id ${order}
-      LIMIT $4 OFFSET $5
-    `;
-
-    const dataParams = [...paramsBase, safeLimit, offset];
-    const detRes = await client.query(dataSql, dataParams);
-    const detalleRows = detRes.rows || [];
-
-    // ids en orden (para sincronía con tabla 2)
-    const ids = detalleRows.map((r) => Number(r.recoleccion_id)).filter(Boolean);
-
-    // ===============================
-    // 4) Datos pesaje (Tabla 2) por recoleccion_id IN (...)
-    // ===============================
-    let pesajeMap = new Map();
-    if (ids.length > 0) {
-      const pesajeSql = `
-        SELECT
-          h.recoleccion_id,
-          h.total_en_libras,
-          h.porcentaje_recolectado,
-          h.porcentaje_llenado,
-          h.costo_por_libra_aplicado,
-          h.total_costo_q
-        FROM historial_calculo_costos h
-        WHERE h.recoleccion_id = ANY($1::int[])
-      `;
-
-      const pesajeRes = await client.query(pesajeSql, [ids]);
-      for (const row of pesajeRes.rows || []) {
-        pesajeMap.set(Number(row.recoleccion_id), row);
-      }
-    }
-
-    // ===============================
-    // 5) Armar salida sincronizada (mismo orden)
-    // ===============================
-    const detalle = detalleRows.map((r) => ({
-      recoleccion_id: Number(r.recoleccion_id),
-      codigo: r.codigo_contenedor,
-      fecha: r.fecha_recoleccion,
-      distrito: r.distrito,
-      tipo_residuo: r.tipo_residuo,
-      numero_recibo: r.numero_recibo,
-      responsable: r.responsable,
-      empresa_recolectora: r.empresa_recolectora,
-      porcentaje_pendiente: r.porcentaje_pendiente,
-      cantidad_libras_pendientes: r.cantidad_libras_pendientes,
-      observaciones: r.observaciones,
-    }));
-
-    const pesaje = detalleRows.map((r) => {
-      const k = Number(r.recoleccion_id);
-      const p = pesajeMap.get(k);
-
-      return {
-        recoleccion_id: k,
-        total_en_libras: p ? p.total_en_libras : null,
-        porcentaje_recolectado: p ? p.porcentaje_recolectado : null,
-        porcentaje_llenado: p ? p.porcentaje_llenado : null,
-        costo_por_libra_aplicado: p ? p.costo_por_libra_aplicado : null,
-        total_costo_q: p ? p.total_costo_q : null,
-      };
+    const export_id = await crearSnapshot({
+      usuarioId: req.user.id_usuario,
+      modulo: MODULO,
+      filtros: {
+        buscarPor,
+        valorBusqueda,
+        fechaInicio,
+        fechaFin,
+        order: order === "ASC" ? "asc" : "desc",
+      },
     });
 
     return res.json({
       message: "Historial obtenido correctamente.",
+      export_id,
       total,
       page: safePage,
       limit: safeLimit,
       order: order === "ASC" ? "asc" : "desc",
-      data: {
-        detalle,
-        pesaje,
-      },
+      data: { detalle, pesaje },
     });
   } catch (err) {
     console.error("Error obtenerHistorial:", err);
     return res.status(500).json({ message: "Error interno del servidor" });
-  } finally {
-    client.release();
+  }
+};
+
+// ===============================
+// Export PDF (inline)
+// Route: GET /api/historial-recoleccion/export/pdf?exportId=...
+// ===============================
+exports.exportarPdf = async (req, res) => {
+  if (!requireAuth(req, res)) return;
+
+  const exportId = String(req.query?.exportId || "").trim();
+  if (!exportId) {
+    return res.status(400).json({ message: "exportId es requerido.", type: "validation" });
+  }
+
+  let filtros = null;
+
+  try {
+    const snap = await obtenerSnapshotValido({
+      exportId,
+      usuarioId: req.user.id_usuario,
+      modulo: MODULO,
+    });
+
+    if (!snap) {
+      return res.status(400).json({
+        message: "Exportación expirada o inválida. Presione 'Ver' nuevamente.",
+        type: "validation",
+      });
+    }
+
+    filtros = snap.filtros_json || {};
+    const order = normOrder(filtros?.order);
+
+    const { total, detalle, pesaje } = await consultarHistorial(
+      {
+        buscarPor: String(filtros.buscarPor || "").toLowerCase(),
+        valorBusqueda: normSearchValue(filtros.valorBusqueda),
+        fechaInicio: String(filtros.fechaInicio || ""),
+        fechaFin: String(filtros.fechaFin || ""),
+        order,
+      },
+      { paginado: false }
+    );
+
+    const pdfBuffer = await buildHistorialRecoleccionPdfBuffer({
+      filtros,
+      detalle,
+      pesaje,
+      generadoPor: req.user,
+      total,
+    });
+
+    await registrarAuditoriaExportacion({
+      usuario_id: req.user.id_usuario,
+      usuario: req.user.usuario,
+      rol: req.user.rol,
+      modulo: MODULO,
+      reporte: REPORTE,
+      formato: "PDF",
+      export_id: exportId,
+      filtros_json: filtros,
+      total_registros: total,
+      resumen_json: { filas_detalle: detalle.length, filas_pesaje: pesaje.length },
+      estado: "GENERADO",
+      error_mensaje: null,
+      ip_origen: getIp(req),
+      user_agent: req.headers["user-agent"] || null,
+    });
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="historial_recoleccion.pdf"`);
+    return res.status(200).send(pdfBuffer);
+  } catch (err) {
+    console.error("Error exportarPdf:", err);
+
+    try {
+      await registrarAuditoriaExportacion({
+        usuario_id: req.user?.id_usuario || 0,
+        usuario: req.user?.usuario || "N/A",
+        rol: req.user?.rol || "N/A",
+        modulo: MODULO,
+        reporte: REPORTE,
+        formato: "PDF",
+        export_id: exportId || "N/A",
+        filtros_json: filtros || { exportId },
+        total_registros: 0,
+        resumen_json: null,
+        estado: "FALLIDO",
+        error_mensaje: "Error al generar PDF",
+        ip_origen: getIp(req),
+        user_agent: req.headers["user-agent"] || null,
+      });
+    } catch (_) {}
+
+    return res.status(500).json({ message: "Error interno del servidor" });
+  }
+};
+
+// ===============================
+// Export Excel (attachment)
+// Route: GET /api/historial-recoleccion/export/excel?exportId=...
+// ===============================
+exports.exportarExcel = async (req, res) => {
+  if (!requireAuth(req, res)) return;
+
+  const exportId = String(req.query?.exportId || "").trim();
+  if (!exportId) {
+    return res.status(400).json({ message: "exportId es requerido.", type: "validation" });
+  }
+
+  let filtros = null;
+
+  try {
+    const snap = await obtenerSnapshotValido({
+      exportId,
+      usuarioId: req.user.id_usuario,
+      modulo: MODULO,
+    });
+
+    if (!snap) {
+      return res.status(400).json({
+        message: "Exportación expirada o inválida. Presione 'Ver' nuevamente.",
+        type: "validation",
+      });
+    }
+
+    filtros = snap.filtros_json || {};
+    const order = normOrder(filtros?.order);
+
+    const { total, detalle, pesaje } = await consultarHistorial(
+      {
+        buscarPor: String(filtros.buscarPor || "").toLowerCase(),
+        valorBusqueda: normSearchValue(filtros.valorBusqueda),
+        fechaInicio: String(filtros.fechaInicio || ""),
+        fechaFin: String(filtros.fechaFin || ""),
+        order,
+      },
+      { paginado: false }
+    );
+
+    const excelBuffer = await buildHistorialRecoleccionExcelBuffer({
+      filtros,
+      detalle,
+      pesaje,
+      generadoPor: req.user,
+      total,
+    });
+
+    await registrarAuditoriaExportacion({
+      usuario_id: req.user.id_usuario,
+      usuario: req.user.usuario,
+      rol: req.user.rol,
+      modulo: MODULO,
+      reporte: REPORTE,
+      formato: "EXCEL",
+      export_id: exportId,
+      filtros_json: filtros,
+      total_registros: total,
+      resumen_json: { filas_detalle: detalle.length, filas_pesaje: pesaje.length },
+      estado: "GENERADO",
+      error_mensaje: null,
+      ip_origen: getIp(req),
+      user_agent: req.headers["user-agent"] || null,
+    });
+
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="historial_recoleccion.xlsx"`);
+
+    return res.status(200).send(Buffer.from(excelBuffer));
+  } catch (err) {
+    console.error("Error exportarExcel:", err);
+
+    try {
+      await registrarAuditoriaExportacion({
+        usuario_id: req.user?.id_usuario || 0,
+        usuario: req.user?.usuario || "N/A",
+        rol: req.user?.rol || "N/A",
+        modulo: MODULO,
+        reporte: REPORTE,
+        formato: "EXCEL",
+        export_id: exportId || "N/A",
+        filtros_json: filtros || { exportId },
+        total_registros: 0,
+        resumen_json: null,
+        estado: "FALLIDO",
+        error_mensaje: "Error al generar Excel",
+        ip_origen: getIp(req),
+        user_agent: req.headers["user-agent"] || null,
+      });
+    } catch (_) {}
+
+    return res.status(500).json({ message: "Error interno del servidor" });
   }
 };
