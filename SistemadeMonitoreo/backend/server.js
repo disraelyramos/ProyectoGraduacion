@@ -21,8 +21,9 @@ const estadoContenedorRoutes = require('./src/routes/estadoContenedor.routes');
 const contenedorRoutes = require('./src/routes/contenedor.routes'); // 
 const recuperacionRoutes = require('./src/routes/recuperacion.routes');
 const historialRecoleccionRoutes = require("./src/routes/HistorialRecoleccion/HistorialdeRecoleccion.routes");
-
-
+const historialCostoRoutes = require("./src/routes/historialcosto/HistorialCosto.routes");
+const codigoContenedorRoutes = require("./src/routes/Codigocontenedor/CodigoContenedor.routes");
+const graficasRecoleccionRoutes = require("./src/routes/graficasderecoleccion/GraficasRecoleccion.routes");
 //  Usar rutas
 app.use('/api/auth', authRoutes);
 app.use('/api/menu', menuRoutes);
@@ -45,6 +46,9 @@ app.use(
 );
 
 app.use("/api/historial-recoleccion", historialRecoleccionRoutes);
+app.use("/api/historial-costo", historialCostoRoutes);
+app.use("/api/codigo-contenedor", codigoContenedorRoutes);
+app.use("/api/graficas-recoleccion", graficasRecoleccionRoutes);
 
 
 

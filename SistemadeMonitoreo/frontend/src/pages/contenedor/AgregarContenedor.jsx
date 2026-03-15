@@ -11,11 +11,9 @@ const AgregarContenedor = () => {
   const [modoEdicion, setModoEdicion] = useState(false);
   const [contenedorEditar, setContenedorEditar] = useState(null);
 
-  // 🔹 Paginación
   const [paginaActual, setPaginaActual] = useState(1);
-  const [itemsPorPagina] = useState(8); // puedes hacerlo configurable
+  const [itemsPorPagina] = useState(8);
 
-  // 🔹 Reutilizamos un único método para cargar/buscar
   const fetchContenedores = async (termino = "") => {
     try {
       const token = localStorage.getItem("token");
@@ -27,24 +25,21 @@ const AgregarContenedor = () => {
 
       const res = await axios.get(url, { headers });
       setContenedores(res.data);
-      setPaginaActual(1); // reinicia a primera página en cada búsqueda
+      setPaginaActual(1);
     } catch (error) {
       console.error("Error cargando contenedores:", error);
       showErrorAlert("No se pudieron cargar los contenedores.");
     }
   };
 
-  // 🔹 Cargar al inicio
   useEffect(() => {
     fetchContenedores();
   }, []);
 
-  // 🔹 Buscar cada vez que cambia el input
   useEffect(() => {
     fetchContenedores(busqueda);
   }, [busqueda]);
 
-  // 🔹 Calcular datos de paginación
   const indexOfLastItem = paginaActual * itemsPorPagina;
   const indexOfFirstItem = indexOfLastItem - itemsPorPagina;
   const contenedoresActuales = contenedores.slice(
@@ -61,7 +56,6 @@ const AgregarContenedor = () => {
       </h4>
       <hr />
 
-      {/* Barra de acciones */}
       <div className="d-flex justify-content-between align-items-center mb-3">
         <button
           className="btn btn-primary"
@@ -85,13 +79,14 @@ const AgregarContenedor = () => {
         </div>
       </div>
 
-      {/* Tabla */}
       <table className="table table-bordered align-middle">
         <thead className="table-dark">
           <tr>
             <th>Código</th>
             <th>Ubicación</th>
             <th>Tipo de Residuo</th>
+            <th>Cap. Máx. Litros</th>
+            <th>Cap. Máx. Libras</th>
             <th>Fecha de Registro</th>
             <th>Estado</th>
             <th>Opciones</th>
@@ -106,6 +101,8 @@ const AgregarContenedor = () => {
                 </td>
                 <td>{c.ubicacion}</td>
                 <td>{c.tipo_residuo}</td>
+                <td>{c.capacidad_max_litros ?? 0}</td>
+                <td>{c.capacidad_max_lb ?? 0}</td>
                 <td>{c.fecha_registro}</td>
                 <td>
                   <span
@@ -121,7 +118,15 @@ const AgregarContenedor = () => {
                     className="btn btn-warning btn-sm me-2"
                     onClick={() => {
                       setModoEdicion(true);
-                      setContenedorEditar(c);
+                      setContenedorEditar({
+                        ...c,
+                        id_estado_contenedor:
+                          c.id_estado_contenedor || c.estado_id || "",
+                        id_tipo_residuo: c.id_tipo_residuo || "",
+                        id_ubicacion: c.id_ubicacion || "",
+                        capacidad_max_litros: c.capacidad_max_litros || "",
+                        capacidad_max_lb: c.capacidad_max_lb || "",
+                      });
                       setShowModal(true);
                     }}
                   >
@@ -132,7 +137,7 @@ const AgregarContenedor = () => {
             ))
           ) : (
             <tr>
-              <td colSpan="6" className="text-center">
+              <td colSpan="8" className="text-center">
                 No se encontraron resultados
               </td>
             </tr>
@@ -140,7 +145,6 @@ const AgregarContenedor = () => {
         </tbody>
       </table>
 
-      {/* Paginación */}
       {totalPaginas > 1 && (
         <nav className="d-flex justify-content-end">
           <ul className="pagination pagination-sm">
@@ -161,14 +165,13 @@ const AgregarContenedor = () => {
         </nav>
       )}
 
-      {/* Modal */}
       <RegistrarNuevoContenedor
         show={showModal}
         handleClose={() => {
           setShowModal(false);
-          fetchContenedores(); // refrescar después de cerrar modal
+          fetchContenedores();
         }}
-        handleSave={() => fetchContenedores()}
+        handleSave={() => fetchContenedores(busqueda)}
         modoEdicion={modoEdicion}
         contenedorEditar={contenedorEditar}
       />

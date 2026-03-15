@@ -20,6 +20,8 @@ import NuevoRegistro from "./controlDSH/NuevoRegistro";
 import HistorialRecoleccion from "./historialRecoleccion/HistorialRecoleccion";
 import UmbralDeLlenado from "./umbrales/UmbralDeLlenado";
 import Backup from "./backups/Backup";
+import HistorialCosto from "./historialcosto/HistorialCosto";
+import HistorialGrafica from "./controlDSH/HistorialGrafica";
 
 // Función para obtener ícono dinámicamente desde la BD
 const getIcon = (iconName) => {
@@ -55,6 +57,10 @@ const submoduloComponents = {
   "/control-dsh/historial": HistorialRecoleccion,
   "/configuracion/umbral-llenado": UmbralDeLlenado,
   "/configuracion/copia-seguridad": Backup,
+  "/costo/historial": HistorialCosto,
+  "/control-dsh/historial-graficas": HistorialGrafica,
+
+
 };
 
 const Dashboard = () => {

@@ -20,6 +20,8 @@ const RegistrarNuevoContenedor = ({
     const [ubicacion, setUbicacion] = useState("");
     const [tipoResiduo, setTipoResiduo] = useState("");
     const [estado, setEstado] = useState("");
+    const [capacidadMaxLitros, setCapacidadMaxLitros] = useState("");
+    const [capacidadMaxLb, setCapacidadMaxLb] = useState("");
     const [errors, setErrors] = useState({});
 
     // Selects dinámicos
@@ -32,6 +34,8 @@ const RegistrarNuevoContenedor = ({
         ubicacion: ["required"],
         tipoResiduo: ["required"],
         estado: ["required"],
+        capacidadMaxLitros: ["required"],
+        capacidadMaxLb: ["required"],
     };
 
     // ------------------ Funciones auxiliares ------------------
@@ -40,6 +44,8 @@ const RegistrarNuevoContenedor = ({
         setUbicacion("");
         setTipoResiduo("");
         setEstado("");
+        setCapacidadMaxLitros("");
+        setCapacidadMaxLb("");
         setErrors({});
     };
 
@@ -67,21 +73,41 @@ const RegistrarNuevoContenedor = ({
         const token = localStorage.getItem("token");
         const headers = { Authorization: `Bearer ${token}` };
 
+        const payload = {
+            ubicacion,
+            tipoResiduo,
+            estado,
+            capacidadMaxLitros,
+            capacidadMaxLb,
+        };
+
         if (modoEdicion && contenedorEditar?.id_contenedor) {
-            // Editar
             return axios.put(
                 `/api/contenedores/${contenedorEditar.id_contenedor}`,
-                { ubicacion, tipoResiduo, estado },
-                { headers }
-            );
-        } else {
-            // Nuevo
-            return axios.post(
-                "/api/contenedores",
-                { ubicacion, tipoResiduo, estado },
+                payload,
                 { headers }
             );
         }
+
+        return axios.post("/api/contenedores", payload, { headers });
+    };
+
+    const validarCapacidades = () => {
+        const litros = Number(capacidadMaxLitros);
+        const libras = Number(capacidadMaxLb);
+        const nuevosErrores = {};
+
+        if (!Number.isFinite(litros) || litros <= 0) {
+            nuevosErrores.capacidadMaxLitros =
+                "La capacidad máxima en litros debe ser mayor a 0";
+        }
+
+        if (!Number.isFinite(libras) || libras <= 0) {
+            nuevosErrores.capacidadMaxLb =
+                "La capacidad máxima en libras debe ser mayor a 0";
+        }
+
+        return nuevosErrores;
     };
 
     // ------------------ Effects ------------------
@@ -93,8 +119,18 @@ const RegistrarNuevoContenedor = ({
         if (modoEdicion && contenedorEditar) {
             setCodigo(contenedorEditar.codigo || "");
             setUbicacion(contenedorEditar.id_ubicacion || "");
-            setTipoResiduo(contenedorEditar.id_tipo_residuo || "");
-            setEstado(contenedorEditar.id_estado_contenedor || "");
+            setTipoResiduo(
+                contenedorEditar.id_tipo_residuo ||
+                contenedorEditar.tipo_residuo_id ||
+                ""
+            );
+            setEstado(
+                contenedorEditar.id_estado_contenedor ||
+                contenedorEditar.estado_id ||
+                ""
+            );
+            setCapacidadMaxLitros(contenedorEditar.capacidad_max_litros || "");
+            setCapacidadMaxLb(contenedorEditar.capacidad_max_lb || "");
         } else {
             limpiarFormulario();
         }
@@ -102,15 +138,24 @@ const RegistrarNuevoContenedor = ({
 
     // ------------------ Guardar ------------------
     const onSave = () => {
-        const newData = { codigo, ubicacion, tipoResiduo, estado };
-        const validationErrors = validateForm(newData, reglasContenedor);
+        const newData = {
+            codigo,
+            ubicacion,
+            tipoResiduo,
+            estado,
+            capacidadMaxLitros,
+            capacidadMaxLb,
+        };
 
-        if (Object.keys(validationErrors).length > 0) {
-            setErrors(validationErrors);
+        const validationErrors = validateForm(newData, reglasContenedor);
+        const erroresCapacidad = validarCapacidades();
+        const erroresFinales = { ...validationErrors, ...erroresCapacidad };
+
+        if (Object.keys(erroresFinales).length > 0) {
+            setErrors(erroresFinales);
             return;
         }
 
-        //Confirmación dinámica según la acción
         showDynamicConfirm(
             modoEdicion ? "editar" : "crear",
             async () => {
@@ -138,12 +183,10 @@ const RegistrarNuevoContenedor = ({
                 }
             },
             () => {
-                //  Acción cuando el usuario presiona "No"
                 handleClose();
                 limpiarFormulario();
             }
         );
-
     };
 
     // ------------------ Render ------------------
@@ -198,6 +241,24 @@ const RegistrarNuevoContenedor = ({
                                     </Form.Text>
                                 )}
                             </Form.Group>
+
+                            <Form.Group className="mb-3">
+                                <Form.Label>Capacidad Máxima en Litros</Form.Label>
+                                <Form.Control
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={capacidadMaxLitros}
+                                    onChange={(e) => setCapacidadMaxLitros(e.target.value)}
+                                    placeholder="Ej. 60"
+                                    isInvalid={!!errors.capacidadMaxLitros}
+                                />
+                                {errors.capacidadMaxLitros && (
+                                    <Form.Text className="text-danger small">
+                                        {errors.capacidadMaxLitros}
+                                    </Form.Text>
+                                )}
+                            </Form.Group>
                         </Col>
 
                         {/* Columna derecha */}
@@ -243,6 +304,24 @@ const RegistrarNuevoContenedor = ({
                                 {errors.estado && (
                                     <Form.Text className="text-danger small">
                                         {errors.estado}
+                                    </Form.Text>
+                                )}
+                            </Form.Group>
+
+                            <Form.Group className="mb-3">
+                                <Form.Label>Capacidad Máxima en Libras</Form.Label>
+                                <Form.Control
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={capacidadMaxLb}
+                                    onChange={(e) => setCapacidadMaxLb(e.target.value)}
+                                    placeholder="Ej. 80"
+                                    isInvalid={!!errors.capacidadMaxLb}
+                                />
+                                {errors.capacidadMaxLb && (
+                                    <Form.Text className="text-danger small">
+                                        {errors.capacidadMaxLb}
                                     </Form.Text>
                                 )}
                             </Form.Group>
