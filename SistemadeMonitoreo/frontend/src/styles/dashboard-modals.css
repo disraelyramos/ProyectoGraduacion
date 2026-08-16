@@ -1,0 +1,529 @@
+/* ==================================================
+   CONTENIDO - ESTADO DE CONTENEDORES
+================================================== */
+
+.container-modal-content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+
+/* ==================================================
+   GRID DE CONTENEDORES
+================================================== */
+
+.container-modal-grid {
+  width: 100%;
+
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+
+  gap: 20px;
+  align-items: stretch;
+}
+
+
+/* ==================================================
+   TARJETA INDIVIDUAL
+================================================== */
+
+.container-modal-card {
+  min-width: 0;
+
+  padding: 18px;
+
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+
+  background: var(--color-white);
+}
+
+
+.container-modal-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 12px;
+
+  margin-bottom: 18px;
+}
+
+
+.container-modal-card__title {
+  margin: 0;
+
+  color: var(--color-text-primary);
+
+  font-size: 16px;
+  font-weight: 700;
+}
+
+
+/* ==================================================
+   DETALLES DEL CONTENEDOR
+================================================== */
+
+.container-modal-details {
+  margin: 0;
+}
+
+
+.container-modal-detail {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 16px;
+
+  padding: 12px 0;
+
+  border-bottom: 1px solid var(--color-border);
+}
+
+
+.container-modal-detail:last-child {
+  border-bottom: 0;
+}
+
+
+.container-modal-detail dt {
+  color: var(--color-text-secondary);
+
+  font-size: 13px;
+  font-weight: 500;
+}
+
+
+.container-modal-detail dd {
+  margin: 0;
+
+  color: var(--color-text-primary);
+
+  font-size: 13px;
+  font-weight: 700;
+
+  text-align: right;
+}
+
+
+/* ==================================================
+   ACCIONES DE MODAL
+================================================== */
+
+.container-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+
+/* ==================================================
+   BOTÓN PRINCIPAL REUTILIZABLE
+================================================== */
+
+.app-modal-primary-button {
+  min-height: 40px;
+
+  padding: 9px 18px;
+
+  border: 0;
+  border-radius: 6px;
+
+  background: var(--color-blue);
+  color: var(--color-white);
+
+  font-size: 14px;
+  font-weight: 600;
+
+  cursor: pointer;
+
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+
+.app-modal-primary-button:hover {
+  opacity: 0.9;
+}
+
+
+.app-modal-primary-button:active {
+  transform: translateY(1px);
+}
+
+
+/* ==================================================
+   MODAL - PREDICCIÓN DE LLENADO
+================================================== */
+
+.prediction-modal-content {
+  width: 100%;
+}
+
+
+.prediction-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+}
+
+
+/* ==================================================
+   TABLA - PREDICCIÓN
+================================================== */
+
+.prediction-table {
+  width: 100%;
+  min-width: 680px;
+
+  border-collapse: collapse;
+
+  background: var(--color-white);
+}
+
+
+.prediction-table th {
+  padding: 12px 14px;
+
+  border-bottom: 2px solid var(--color-border);
+
+  color: var(--color-text-secondary);
+
+  font-size: 12px;
+  font-weight: 700;
+
+  text-align: left;
+  white-space: nowrap;
+}
+
+
+.prediction-table td {
+  padding: 16px 14px;
+
+  border-bottom: 1px solid var(--color-border);
+
+  color: var(--color-text-primary);
+
+  font-size: 13px;
+
+  vertical-align: middle;
+}
+
+
+.prediction-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+
+.prediction-container-name {
+  font-weight: 700;
+}
+
+
+.prediction-action {
+  font-weight: 600;
+}
+
+
+/* ==================================================
+   RIESGO PREVISTO
+================================================== */
+
+.prediction-risk {
+  display: inline-flex;
+  align-items: center;
+
+  padding: 6px 10px;
+
+  border-radius: 999px;
+
+  font-size: 12px;
+  font-weight: 700;
+
+  white-space: nowrap;
+}
+
+
+.prediction-risk--red {
+  color: var(--color-red);
+  background: var(--color-red-soft);
+}
+
+
+.prediction-risk--orange {
+  color: var(--color-orange);
+  background: var(--color-orange-soft);
+}
+
+
+/* ==================================================
+   SIN DATOS PARA ML
+================================================== */
+
+.prediction-modal-empty {
+  padding: 28px 20px;
+
+  border: 1px dashed var(--color-border);
+  border-radius: 10px;
+
+  background: var(--color-background);
+
+  color: var(--color-text-secondary);
+
+  font-size: 14px;
+  font-weight: 500;
+
+  text-align: center;
+}
+
+
+/* ==================================================
+   RECOLECCIONES - ESTILOS REUTILIZABLES
+   Mes / Semana / Año
+================================================== */
+
+.collection-modal,
+.monthly-collection-modal,
+.yearly-collection-modal {
+  display: flex;
+  flex-direction: column;
+
+  gap: 24px;
+}
+
+
+/* ==================================================
+   SELECTOR DE PERIODO
+================================================== */
+
+.collection-period-tabs {
+  display: inline-flex;
+  align-self: flex-start;
+
+  padding: 4px;
+
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+
+  background: var(--color-background);
+}
+
+
+.collection-period-tab {
+  min-height: 36px;
+
+  padding: 7px 16px;
+
+  border: 0;
+  border-radius: 6px;
+
+  background: transparent;
+
+  color: var(--color-text-secondary);
+
+  font-size: 13px;
+  font-weight: 600;
+
+  cursor: pointer;
+
+  transition:
+    background 0.2s ease,
+    color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+
+.collection-period-tab:hover {
+  color: var(--color-text-primary);
+}
+
+
+.collection-period-tab--active {
+  background: var(--color-white);
+
+  color: var(--color-blue);
+
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12);
+}
+
+
+/* ==================================================
+   RESUMEN DE RECOLECCIÓN
+================================================== */
+
+.collection-summary,
+.monthly-collection-summary,
+.yearly-collection-summary {
+  display: grid;
+
+  grid-template-columns:
+    repeat(auto-fit, minmax(180px, 1fr));
+
+  gap: 16px;
+}
+
+
+.collection-summary-item,
+.monthly-summary-item,
+.yearly-summary-item {
+  padding: 16px;
+
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+
+  background: var(--color-background);
+}
+
+
+.collection-summary-label,
+.monthly-summary-label,
+.yearly-summary-label {
+  display: block;
+
+  margin-bottom: 6px;
+
+  color: var(--color-text-secondary);
+
+  font-size: 12px;
+  font-weight: 500;
+}
+
+
+.collection-summary-value,
+.monthly-summary-value,
+.yearly-summary-value {
+  color: var(--color-text-primary);
+
+  font-size: 22px;
+  font-weight: 700;
+}
+
+
+/* ==================================================
+   TABLA DE RECOLECCIONES
+================================================== */
+
+.collection-table-wrapper,
+.monthly-collection-table-wrapper,
+.yearly-collection-table-wrapper {
+  width: 100%;
+
+  overflow-x: auto;
+}
+
+
+.collection-table,
+.monthly-collection-table,
+.yearly-collection-table {
+  width: 100%;
+  min-width: 760px;
+
+  border-collapse: collapse;
+
+  background: var(--color-white);
+}
+
+
+.collection-table th,
+.monthly-collection-table th,
+.yearly-collection-table th {
+  padding: 12px 14px;
+
+  border-bottom: 2px solid var(--color-border);
+
+  color: var(--color-text-secondary);
+
+  font-size: 12px;
+  font-weight: 700;
+
+  text-align: left;
+  white-space: nowrap;
+}
+
+
+.collection-table td,
+.monthly-collection-table td,
+.yearly-collection-table td {
+  padding: 16px 14px;
+
+  border-bottom: 1px solid var(--color-border);
+
+  color: var(--color-text-primary);
+
+  font-size: 13px;
+
+  vertical-align: middle;
+}
+
+
+.collection-table tbody tr:last-child td,
+.monthly-collection-table tbody tr:last-child td,
+.yearly-collection-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+
+.collection-container-name,
+.monthly-container-name,
+.yearly-container-name {
+  font-weight: 700;
+}
+
+
+/* ==================================================
+   RESPONSIVE
+================================================== */
+
+@media (max-width: 680px) {
+
+  .container-modal-grid {
+    grid-template-columns: 1fr;
+  }
+
+
+  .container-modal-actions {
+    justify-content: stretch;
+  }
+
+
+  .app-modal-primary-button {
+    width: 100%;
+  }
+
+
+  .prediction-table th,
+  .prediction-table td {
+    padding: 12px;
+  }
+
+
+  .collection-summary,
+  .monthly-collection-summary,
+  .yearly-collection-summary {
+    grid-template-columns: 1fr;
+  }
+
+
+  .collection-table th,
+  .collection-table td,
+  .monthly-collection-table th,
+  .monthly-collection-table td,
+  .yearly-collection-table th,
+  .yearly-collection-table td {
+    padding: 12px;
+  }
+}
+
+
+@media (max-width: 420px) {
+
+  .collection-period-tabs {
+    width: 100%;
+  }
+
+
+  .collection-period-tab {
+    flex: 1;
+  }
+}
