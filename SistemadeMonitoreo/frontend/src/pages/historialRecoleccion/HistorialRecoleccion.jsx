@@ -1,387 +1,1215 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
-import { Form, Button, Card, Row, Col, InputGroup } from "react-bootstrap";
-import { FaHistory, FaSearch, FaCalendarAlt } from "react-icons/fa";
+import React, {
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+
+import {
+  Form,
+  Button,
+  Card,
+  Row,
+  Col,
+  InputGroup,
+} from "react-bootstrap";
+
+import {
+  FaHistory,
+  FaSearch,
+  FaCalendarAlt,
+} from "react-icons/fa";
+
 import "../../styles/historial-recoleccion.css";
+import "../../styles/historial-recoleccion2.css";
 import HistorialEnTablas from "./HistorialEnTablas";
 import apiClient from "../../utils/apiClient";
 
+
 const LIMIT = 10;
 
-const clampPage = (p, totalPages) => Math.min(Math.max(1, p), totalPages);
 
-const buildValidationErrors = ({ buscarPor, valorBusqueda, fechaInicio, fechaFin }) => {
+/* =========================================================
+   PAGINACIÓN
+   ========================================================= */
+
+const clampPage = (p, totalPages) =>
+  Math.min(
+    Math.max(1, p),
+    totalPages
+  );
+
+
+/* =========================================================
+   VALIDACIONES
+   ========================================================= */
+
+const buildValidationErrors = ({
+  buscarPor,
+  valorBusqueda,
+  fechaInicio,
+  fechaFin,
+}) => {
+
   const errors = {};
 
-  if (!buscarPor) errors.buscarPor = "Este campo es obligatorio";
+  if (!buscarPor) {
+    errors.buscarPor =
+      "Este campo es obligatorio";
+  }
 
-  const value = String(valorBusqueda || "").trim();
-  if (!value) errors.valorBusqueda = "Este campo es obligatorio";
-  else if (value.length < 2) errors.valorBusqueda = "Ingrese al menos 2 caracteres";
+  const value = String(
+    valorBusqueda || ""
+  ).trim();
 
-  if (!fechaInicio) errors.fechaInicio = "Este campo es obligatorio";
-  if (!fechaFin) errors.fechaFin = "Este campo es obligatorio";
+  if (!value) {
+    errors.valorBusqueda =
+      "Este campo es obligatorio";
+  } else if (value.length < 2) {
+    errors.valorBusqueda =
+      "Ingrese al menos 2 caracteres";
+  }
+
+  if (!fechaInicio) {
+    errors.fechaInicio =
+      "Este campo es obligatorio";
+  }
+
+  if (!fechaFin) {
+    errors.fechaFin =
+      "Este campo es obligatorio";
+  }
 
   if (fechaInicio && fechaFin) {
-    const ini = new Date(`${fechaInicio}T00:00:00`);
-    const fin = new Date(`${fechaFin}T23:59:59`);
-    if (ini > fin) errors.fechaFin = "La fecha final no puede ser menor a la inicial";
+
+    const ini =
+      new Date(
+        `${fechaInicio}T00:00:00`
+      );
+
+    const fin =
+      new Date(
+        `${fechaFin}T23:59:59`
+      );
+
+    if (ini > fin) {
+      errors.fechaFin =
+        "La fecha final no puede ser menor a la inicial";
+    }
   }
 
   return errors;
 };
 
-const getErrorMessage = (err) =>
-  err?.response?.data?.message || err?.message || "No se pudo conectar con el servidor.";
 
-const tryOpenNativeDatePicker = (inputEl) => {
+/* =========================================================
+   MENSAJES DE ERROR
+   ========================================================= */
+
+const getErrorMessage = (err) =>
+  err?.response?.data?.message ||
+  err?.message ||
+  "No se pudo conectar con el servidor.";
+
+
+/* =========================================================
+   ABRIR CALENDARIO NATIVO
+   ========================================================= */
+
+const tryOpenNativeDatePicker = (
+  inputEl
+) => {
+
   if (!inputEl) return;
-  if (typeof inputEl.showPicker === "function") return inputEl.showPicker();
+
+  if (
+    typeof inputEl.showPicker ===
+    "function"
+  ) {
+    return inputEl.showPicker();
+  }
+
   inputEl.focus();
   inputEl.click();
 };
 
-const openBlobInNewTab = (blob, preOpenedWindow) => {
-  const url = URL.createObjectURL(blob);
+
+/* =========================================================
+   ABRIR PDF
+   ========================================================= */
+
+const openBlobInNewTab = (
+  blob,
+  preOpenedWindow
+) => {
+
+  const url =
+    URL.createObjectURL(blob);
 
   try {
-    if (preOpenedWindow && !preOpenedWindow.closed) {
-      preOpenedWindow.location.href = url;
+
+    if (
+      preOpenedWindow &&
+      !preOpenedWindow.closed
+    ) {
+
+      preOpenedWindow.location.href =
+        url;
+
       preOpenedWindow.focus();
+
     } else {
-      window.open(url, "_blank");
+
+      window.open(
+        url,
+        "_blank"
+      );
     }
+
   } finally {
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+
+    setTimeout(
+      () =>
+        URL.revokeObjectURL(url),
+      60_000
+    );
   }
 };
 
-const downloadBlob = (blob, filename) => {
-  const url = URL.createObjectURL(blob);
 
-  const a = document.createElement("a");
+/* =========================================================
+   DESCARGAR ARCHIVO
+   ========================================================= */
+
+const downloadBlob = (
+  blob,
+  filename
+) => {
+
+  const url =
+    URL.createObjectURL(blob);
+
+  const a =
+    document.createElement("a");
+
   a.href = url;
   a.download = filename;
+
   document.body.appendChild(a);
+
   a.click();
+
   a.remove();
 
-  setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  setTimeout(
+    () =>
+      URL.revokeObjectURL(url),
+    30_000
+  );
 };
 
-const DateField = ({ name, value, error, inputRef, onChange }) => {
-  const handleIconClick = () => tryOpenNativeDatePicker(inputRef?.current);
+
+/* =========================================================
+   CAMPO DE FECHA
+   ========================================================= */
+
+const DateField = ({
+  name,
+  value,
+  error,
+  inputRef,
+  onChange,
+}) => {
+
+  const handleIconClick = () =>
+    tryOpenNativeDatePicker(
+      inputRef?.current
+    );
 
   return (
-    <div>
-      <InputGroup>
+
+    <div className="historial-date-field">
+
+      <InputGroup className="historial-date-input-group">
+
         <Form.Control
           ref={inputRef}
           type="date"
           name={name}
           value={value}
           onChange={onChange}
-          className={error ? "is-invalid" : ""}
+          className={`
+            app-control
+            ${error ? "is-invalid" : ""}
+          `}
         />
+
         <InputGroup.Text
           role="button"
           tabIndex={0}
           title="Abrir calendario"
-          style={{ cursor: "pointer" }}
+          className="historial-date-trigger"
           onClick={handleIconClick}
           onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") handleIconClick();
+
+            if (
+              e.key === "Enter" ||
+              e.key === " "
+            ) {
+              handleIconClick();
+            }
+
           }}
         >
+
           <FaCalendarAlt />
+
         </InputGroup.Text>
+
       </InputGroup>
 
-      {error && <div className="invalid-feedback d-block">{error}</div>}
+      {error && (
+
+        <div className="invalid-feedback d-block">
+
+          {error}
+
+        </div>
+
+      )}
+
     </div>
   );
 };
 
+
+/* =========================================================
+   COMPONENTE PRINCIPAL
+   ========================================================= */
+
 const HistorialRecoleccion = () => {
-  const [formData, setFormData] = useState({
+
+  /* =======================================================
+     FORMULARIO
+     ======================================================= */
+
+  const [
+    formData,
+    setFormData,
+  ] = useState({
+
     buscarPor: "",
     valorBusqueda: "",
     fechaInicio: "",
     fechaFin: "",
     order: "desc",
+
   });
 
-  const [errors, setErrors] = useState({});
-  const [loading, setLoading] = useState(false);
 
-  const [detalle, setDetalle] = useState([]);
-  const [pesaje, setPesaje] = useState([]);
+  /* =======================================================
+     ESTADOS
+     ======================================================= */
 
-  const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
+  const [
+    errors,
+    setErrors,
+  ] = useState({});
 
-  const [serverMessage, setServerMessage] = useState("");
-  const [hasSearched, setHasSearched] = useState(false);
-  const [exportId, setExportId] = useState("");
+  const [
+    loading,
+    setLoading,
+  ] = useState(false);
 
-  const fechaInicioRef = useRef(null);
-  const fechaFinRef = useRef(null);
 
-  const totalPages = useMemo(() => Math.max(1, Math.ceil((total || 0) / LIMIT)), [total]);
+  const [
+    detalle,
+    setDetalle,
+  ] = useState([]);
 
-  const resetResults = useCallback(() => {
-    setDetalle([]);
-    setPesaje([]);
-    setTotal(0);
-    setPage(1);
-    setExportId("");
-  }, []);
+  const [
+    pesaje,
+    setPesaje,
+  ] = useState([]);
 
-  const clearErrorsFor = useCallback((name) => {
-    setErrors((prev) => (prev[name] ? { ...prev, [name]: "" } : prev));
-  }, []);
 
-  const handleChange = useCallback(
-    (e) => {
-      const { name, value } = e.target;
+  const [
+    page,
+    setPage,
+  ] = useState(1);
 
-      setFormData((prev) => ({ ...prev, [name]: value }));
-      clearErrorsFor(name);
+  const [
+    total,
+    setTotal,
+  ] = useState(0);
 
-      setHasSearched(false);
-      setServerMessage("");
-      resetResults();
-    },
-    [clearErrorsFor, resetResults]
-  );
 
-  const fetchHistorial = useCallback(
-    async (targetPage = 1) => {
-      setLoading(true);
-      setServerMessage("");
+  const [
+    serverMessage,
+    setServerMessage,
+  ] = useState("");
 
-      try {
-        const res = await apiClient.get("/historial-recoleccion", {
-          params: {
-            buscarPor: formData.buscarPor,
-            valorBusqueda: String(formData.valorBusqueda || "").trim(),
-            fechaInicio: formData.fechaInicio,
-            fechaFin: formData.fechaFin,
-            page: targetPage,
-            limit: LIMIT,
-            order: formData.order,
-          },
-        });
+  const [
+    hasSearched,
+    setHasSearched,
+  ] = useState(false);
 
-        const data = res.data || {};
-        const totalValue = Number(data?.total || 0);
+  const [
+    exportId,
+    setExportId,
+  ] = useState("");
 
-        setServerMessage(data?.message || "");
-        setTotal(totalValue);
 
-        const nextPage = Number(data?.page || targetPage);
-        setPage(nextPage);
+  /* =======================================================
+     REFERENCIAS DE FECHA
+     ======================================================= */
 
-        setDetalle(data?.data?.detalle || []);
-        setPesaje(data?.data?.pesaje || []);
+  const fechaInicioRef =
+    useRef(null);
 
-        setExportId(totalValue > 0 && data?.export_id ? String(data.export_id) : "");
-      } catch (err) {
-        resetResults();
-        setServerMessage(getErrorMessage(err));
-      } finally {
-        setLoading(false);
-      }
-    },
-    [formData, resetResults]
-  );
+  const fechaFinRef =
+    useRef(null);
 
-  const handleSubmit = useCallback(
-    async (e) => {
-      e.preventDefault();
 
-      const validationErrors = buildValidationErrors(formData);
-      setErrors(validationErrors);
+  /* =======================================================
+     TOTAL DE PÁGINAS
+     ======================================================= */
 
-      if (Object.keys(validationErrors).length > 0) {
-        setHasSearched(false);
-        setServerMessage("");
-        resetResults();
-        return;
-      }
+  const totalPages =
+    useMemo(
+      () =>
+        Math.max(
+          1,
+          Math.ceil(
+            (total || 0) / LIMIT
+          )
+        ),
+      [total]
+    );
 
-      setHasSearched(true);
+
+  /* =======================================================
+     LIMPIAR RESULTADOS
+     ======================================================= */
+
+  const resetResults =
+    useCallback(() => {
+
+      setDetalle([]);
+      setPesaje([]);
+      setTotal(0);
       setPage(1);
-      await fetchHistorial(1);
-    },
-    [fetchHistorial, formData, resetResults]
-  );
+      setExportId("");
 
-  const handlePageChange = useCallback(
-    async (nextPage) => {
-      if (loading) return;
+    }, []);
 
-      const safeNext = clampPage(nextPage, totalPages);
-      if (safeNext === page) return;
 
-      setPage(safeNext);
-      await fetchHistorial(safeNext);
-    },
-    [fetchHistorial, loading, page, totalPages]
-  );
+  /* =======================================================
+     LIMPIAR ERROR DEL CAMPO
+     ======================================================= */
 
-  const canExport = hasSearched && !loading && total > 0 && Boolean(exportId);
+  const clearErrorsFor =
+    useCallback(
+      (name) => {
 
-  // ✅ PDF: SIEMPRE nueva pestaña + token (axios) + sin noopener/noreferrer
-  const handleExportPdf = useCallback(async () => {
-    if (!canExport) return;
+        setErrors(
+          (prev) =>
+            prev[name]
+              ? {
+                  ...prev,
+                  [name]: "",
+                }
+              : prev
+        );
 
-    const newTab = window.open("about:blank", "_blank");
+      },
+      []
+    );
 
-    try {
-      const res = await apiClient.get("/historial-recoleccion/export/pdf", {
-        params: { exportId },
-        responseType: "blob",
-      });
 
-      const blob = res.data instanceof Blob ? res.data : new Blob([res.data], { type: "application/pdf" });
-      openBlobInNewTab(blob, newTab);
-    } catch (err) {
-      if (newTab && !newTab.closed) newTab.close();
-      setServerMessage(getErrorMessage(err));
-    }
-  }, [canExport, exportId]);
+  /* =======================================================
+     CAMBIO DE CAMPOS
+     ======================================================= */
 
-  // ✅ Excel: descarga con token (axios)
-  const handleExportExcel = useCallback(async () => {
-    if (!canExport) return;
+  const handleChange =
+    useCallback(
+      (e) => {
 
-    try {
-      const res = await apiClient.get("/historial-recoleccion/export/excel", {
-        params: { exportId },
-        responseType: "blob",
-      });
+        const {
+          name,
+          value,
+        } = e.target;
 
-      const blob =
-        res.data instanceof Blob
-          ? res.data
-          : new Blob([res.data], {
-              type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            });
+        setFormData(
+          (prev) => ({
+            ...prev,
+            [name]: value,
+          })
+        );
 
-      downloadBlob(blob, "historial_recoleccion.xlsx");
-    } catch (err) {
-      setServerMessage(getErrorMessage(err));
-    }
-  }, [canExport, exportId]);
+        clearErrorsFor(name);
+
+        setHasSearched(false);
+
+        setServerMessage("");
+
+        resetResults();
+
+      },
+      [
+        clearErrorsFor,
+        resetResults,
+      ]
+    );
+
+
+  /* =======================================================
+     CONSULTAR HISTORIAL
+     ======================================================= */
+
+  const fetchHistorial =
+    useCallback(
+      async (
+        targetPage = 1
+      ) => {
+
+        setLoading(true);
+
+        setServerMessage("");
+
+        try {
+
+          const res =
+            await apiClient.get(
+              "/historial-recoleccion",
+              {
+                params: {
+
+                  buscarPor:
+                    formData.buscarPor,
+
+                  valorBusqueda:
+                    String(
+                      formData.valorBusqueda ||
+                        ""
+                    ).trim(),
+
+                  fechaInicio:
+                    formData.fechaInicio,
+
+                  fechaFin:
+                    formData.fechaFin,
+
+                  page:
+                    targetPage,
+
+                  limit:
+                    LIMIT,
+
+                  order:
+                    formData.order,
+                },
+              }
+            );
+
+
+          const data =
+            res.data || {};
+
+
+          const totalValue =
+            Number(
+              data?.total || 0
+            );
+
+
+          setServerMessage(
+            data?.message || ""
+          );
+
+
+          setTotal(
+            totalValue
+          );
+
+
+          const nextPage =
+            Number(
+              data?.page ||
+                targetPage
+            );
+
+
+          setPage(
+            nextPage
+          );
+
+
+          setDetalle(
+            data?.data?.detalle ||
+              []
+          );
+
+
+          setPesaje(
+            data?.data?.pesaje ||
+              []
+          );
+
+
+          setExportId(
+            totalValue > 0 &&
+              data?.export_id
+              ? String(
+                  data.export_id
+                )
+              : ""
+          );
+
+        } catch (err) {
+
+          resetResults();
+
+          setServerMessage(
+            getErrorMessage(err)
+          );
+
+        } finally {
+
+          setLoading(false);
+
+        }
+
+      },
+      [
+        formData,
+        resetResults,
+      ]
+    );
+
+
+  /* =======================================================
+     ENVIAR FORMULARIO
+     ======================================================= */
+
+  const handleSubmit =
+    useCallback(
+      async (e) => {
+
+        e.preventDefault();
+
+
+        const validationErrors =
+          buildValidationErrors(
+            formData
+          );
+
+
+        setErrors(
+          validationErrors
+        );
+
+
+        if (
+          Object.keys(
+            validationErrors
+          ).length > 0
+        ) {
+
+          setHasSearched(false);
+
+          setServerMessage("");
+
+          resetResults();
+
+          return;
+        }
+
+
+        setHasSearched(true);
+
+        setPage(1);
+
+        await fetchHistorial(1);
+
+      },
+      [
+        fetchHistorial,
+        formData,
+        resetResults,
+      ]
+    );
+
+
+  /* =======================================================
+     CAMBIO DE PÁGINA
+     ======================================================= */
+
+  const handlePageChange =
+    useCallback(
+      async (
+        nextPage
+      ) => {
+
+        if (loading) return;
+
+
+        const safeNext =
+          clampPage(
+            nextPage,
+            totalPages
+          );
+
+
+        if (
+          safeNext === page
+        ) {
+          return;
+        }
+
+
+        setPage(
+          safeNext
+        );
+
+
+        await fetchHistorial(
+          safeNext
+        );
+
+      },
+      [
+        fetchHistorial,
+        loading,
+        page,
+        totalPages,
+      ]
+    );
+
+
+  /* =======================================================
+     EXPORTACIÓN DISPONIBLE
+     ======================================================= */
+
+  const canExport =
+    hasSearched &&
+    !loading &&
+    total > 0 &&
+    Boolean(exportId);
+
+
+  /* =======================================================
+     EXPORTAR PDF
+     ======================================================= */
+
+  const handleExportPdf =
+    useCallback(
+      async () => {
+
+        if (!canExport) {
+          return;
+        }
+
+
+        const newTab =
+          window.open(
+            "about:blank",
+            "_blank"
+          );
+
+
+        try {
+
+          const res =
+            await apiClient.get(
+              "/historial-recoleccion/export/pdf",
+              {
+
+                params: {
+                  exportId,
+                },
+
+                responseType:
+                  "blob",
+              }
+            );
+
+
+          const blob =
+            res.data instanceof Blob
+              ? res.data
+              : new Blob(
+                  [res.data],
+                  {
+                    type:
+                      "application/pdf",
+                  }
+                );
+
+
+          openBlobInNewTab(
+            blob,
+            newTab
+          );
+
+        } catch (err) {
+
+          if (
+            newTab &&
+            !newTab.closed
+          ) {
+            newTab.close();
+          }
+
+
+          setServerMessage(
+            getErrorMessage(err)
+          );
+
+        }
+
+      },
+      [
+        canExport,
+        exportId,
+      ]
+    );
+
+
+  /* =======================================================
+     EXPORTAR EXCEL
+     ======================================================= */
+
+  const handleExportExcel =
+    useCallback(
+      async () => {
+
+        if (!canExport) {
+          return;
+        }
+
+
+        try {
+
+          const res =
+            await apiClient.get(
+              "/historial-recoleccion/export/excel",
+              {
+
+                params: {
+                  exportId,
+                },
+
+                responseType:
+                  "blob",
+              }
+            );
+
+
+          const blob =
+            res.data instanceof Blob
+              ? res.data
+              : new Blob(
+                  [res.data],
+                  {
+                    type:
+                      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                  }
+                );
+
+
+          downloadBlob(
+            blob,
+            "historial_recoleccion.xlsx"
+          );
+
+        } catch (err) {
+
+          setServerMessage(
+            getErrorMessage(err)
+          );
+
+        }
+
+      },
+      [
+        canExport,
+        exportId,
+      ]
+    );
+
+
+  /* =======================================================
+     VISTA
+     ======================================================= */
 
   return (
-    <div className="historial-recoleccion-container p-4 d-flex flex-column align-items-center">
-      <Card className="shadow-sm border-0 w-100 mb-4">
-        <Card.Body>
-          <h4 className="mb-4 d-flex align-items-center">
-            <FaHistory className="text-primary me-2" />
-            Historial de Recolección
-          </h4>
-          <hr className="mb-4" />
 
-          <Form onSubmit={handleSubmit}>
-            <Row className="mb-3 text-center">
-              <Col md={12}>
-                <Form.Label className="fw-semibold">Buscar por</Form.Label>
+    <main className="historial-recoleccion-container app-page">
+
+      {/* ================================================
+          TARJETA DE BÚSQUEDA
+          ================================================ */}
+
+      <Card className="app-card historial-search-card">
+
+        <Card.Body className="app-card-body">
+
+
+          {/* TÍTULO */}
+
+          <div className="app-section-heading">
+
+            <h1 className="app-page-title">
+
+              <FaHistory
+                className="app-page-title-icon"
+                aria-hidden="true"
+              />
+
+              Historial de Recolección
+
+            </h1>
+
+          </div>
+
+
+          <div className="app-divider" />
+
+
+          {/* ============================================
+              FORMULARIO
+              ============================================ */}
+
+          <Form
+            onSubmit={handleSubmit}
+            className="historial-search-form"
+          >
+
+
+            {/* ========================================
+                BUSCAR POR
+                ======================================== */}
+
+            <Row className="historial-form-row">
+
+              <Col xs={12}>
+
+                <Form.Label className="app-label">
+
+                  Buscar por
+
+                </Form.Label>
+
               </Col>
 
-              <Col md={12} className="d-flex justify-content-center">
+
+              <Col
+                xs={12}
+                className="historial-field-wrap"
+              >
+
                 <Form.Select
                   name="buscarPor"
-                  value={formData.buscarPor}
-                  onChange={handleChange}
-                  className={`w-50 ${errors.buscarPor ? "is-invalid" : ""}`}
+                  value={
+                    formData.buscarPor
+                  }
+                  onChange={
+                    handleChange
+                  }
+                  className={`
+                    app-control
+                    historial-field
+                    ${
+                      errors.buscarPor
+                        ? "is-invalid"
+                        : ""
+                    }
+                  `}
                 >
-                  <option value="">Seleccione…</option>
-                  <option value="codigo">Código</option>
-                  <option value="tipo">Tipo Residuo</option>
+
+                  <option value="">
+                    Seleccione…
+                  </option>
+
+                  <option value="codigo">
+                    Código
+                  </option>
+
+                  <option value="tipo">
+                    Tipo Residuo
+                  </option>
+
                 </Form.Select>
+
               </Col>
+
 
               {errors.buscarPor && (
-                <div className="invalid-feedback d-block text-center">{errors.buscarPor}</div>
+
+                <Col xs={12}>
+
+                  <div className="invalid-feedback d-block historial-error">
+
+                    {
+                      errors.buscarPor
+                    }
+
+                  </div>
+
+                </Col>
+
               )}
+
             </Row>
 
-            <Row className="mb-3 text-center">
-              <Col md={12}>
-                <Form.Label className="fw-semibold">Búsqueda</Form.Label>
+
+            {/* ========================================
+                TEXTO DE BÚSQUEDA
+                ======================================== */}
+
+            <Row className="historial-form-row">
+
+              <Col xs={12}>
+
+                <Form.Label className="app-label">
+
+                  Búsqueda
+
+                </Form.Label>
+
               </Col>
 
-              <Col md={12} className="d-flex justify-content-center">
+
+              <Col
+                xs={12}
+                className="historial-field-wrap"
+              >
+
                 <Form.Control
                   type="text"
                   name="valorBusqueda"
                   placeholder="Ej: CNT-001 o Bioinfeccioso..."
-                  value={formData.valorBusqueda}
-                  onChange={handleChange}
-                  className={`w-50 ${errors.valorBusqueda ? "is-invalid" : ""}`}
+                  value={
+                    formData.valorBusqueda
+                  }
+                  onChange={
+                    handleChange
+                  }
+                  className={`
+                    app-control
+                    historial-field
+                    ${
+                      errors.valorBusqueda
+                        ? "is-invalid"
+                        : ""
+                    }
+                  `}
                 />
+
               </Col>
+
 
               {errors.valorBusqueda && (
-                <div className="invalid-feedback d-block text-center">{errors.valorBusqueda}</div>
+
+                <Col xs={12}>
+
+                  <div className="invalid-feedback d-block historial-error">
+
+                    {
+                      errors.valorBusqueda
+                    }
+
+                  </div>
+
+                </Col>
+
               )}
+
             </Row>
 
-            <Row className="mb-3 text-center">
-              <Col md={12}>
-                <Form.Label className="fw-semibold">Rango de Fechas</Form.Label>
+
+            {/* ========================================
+                RANGO DE FECHAS
+                ======================================== */}
+
+            <Row className="historial-form-row">
+
+              <Col xs={12}>
+
+                <Form.Label className="app-label">
+
+                  Rango de Fechas
+
+                </Form.Label>
+
               </Col>
 
-              <Col md={12} className="d-flex justify-content-center gap-3 align-items-center flex-wrap">
-                <DateField
-                  name="fechaInicio"
-                  value={formData.fechaInicio}
-                  error={errors.fechaInicio}
-                  inputRef={fechaInicioRef}
-                  onChange={handleChange}
-                />
 
-                <span className="fw-bold">—</span>
+              <Col xs={12}>
 
-                <DateField
-                  name="fechaFin"
-                  value={formData.fechaFin}
-                  error={errors.fechaFin}
-                  inputRef={fechaFinRef}
-                  onChange={handleChange}
-                />
+                <div className="historial-date-range">
+
+
+                  <DateField
+                    name="fechaInicio"
+                    value={
+                      formData.fechaInicio
+                    }
+                    error={
+                      errors.fechaInicio
+                    }
+                    inputRef={
+                      fechaInicioRef
+                    }
+                    onChange={
+                      handleChange
+                    }
+                  />
+
+
+                  <span
+                    className="historial-date-separator"
+                    aria-hidden="true"
+                  >
+                    —
+                  </span>
+
+
+                  <DateField
+                    name="fechaFin"
+                    value={
+                      formData.fechaFin
+                    }
+                    error={
+                      errors.fechaFin
+                    }
+                    inputRef={
+                      fechaFinRef
+                    }
+                    onChange={
+                      handleChange
+                    }
+                  />
+
+
+                </div>
+
               </Col>
+
             </Row>
 
-            <Row className="mb-3 text-center">
-              <Col md={12}>
-                <Form.Label className="fw-semibold">Orden</Form.Label>
+
+            {/* ========================================
+                ORDEN
+                ======================================== */}
+
+            <Row className="historial-form-row">
+
+              <Col xs={12}>
+
+                <Form.Label className="app-label">
+
+                  Orden
+
+                </Form.Label>
+
               </Col>
 
-              <Col md={12} className="d-flex justify-content-center">
-                <Form.Select name="order" value={formData.order} onChange={handleChange} className="w-50">
-                  <option value="desc">Fecha (Más reciente)</option>
-                  <option value="asc">Fecha (Más antigua)</option>
+
+              <Col
+                xs={12}
+                className="historial-field-wrap"
+              >
+
+                <Form.Select
+                  name="order"
+                  value={
+                    formData.order
+                  }
+                  onChange={
+                    handleChange
+                  }
+                  className="app-control historial-field"
+                >
+
+                  <option value="desc">
+                    Fecha (Más reciente)
+                  </option>
+
+                  <option value="asc">
+                    Fecha (Más antigua)
+                  </option>
+
                 </Form.Select>
+
               </Col>
+
             </Row>
 
-            <div className="d-flex justify-content-center mt-4">
-              <Button type="submit" variant="primary" className="px-4" disabled={loading}>
-                <FaSearch className="me-2" />
-                {loading ? "Consultando..." : "Ver"}
+
+            {/* ========================================
+                BOTÓN VER
+                ======================================== */}
+
+            <div className="historial-submit-wrap">
+
+              <Button
+                type="submit"
+                variant="primary"
+                className="app-btn historial-submit-btn"
+                disabled={loading}
+              >
+
+                <FaSearch
+                  className="me-2"
+                  aria-hidden="true"
+                />
+
+                {
+                  loading
+                    ? "Consultando..."
+                    : "Ver"
+                }
+
               </Button>
+
             </div>
 
-            {serverMessage && <div className="text-center mt-3 fw-semibold">{serverMessage}</div>}
+
+            {/* ========================================
+                MENSAJE BACKEND
+                ======================================== */}
+
+            {serverMessage && (
+
+              <div
+                className="historial-server-message"
+                role="status"
+              >
+
+                {serverMessage}
+
+              </div>
+
+            )}
+
+
           </Form>
+
         </Card.Body>
+
       </Card>
 
+
+      {/* ================================================
+          RESULTADOS
+          ================================================ */}
+
       {hasSearched && (
-        <div className="w-100 d-flex flex-column align-items-center gap-4">
+
+        <section className="historial-results">
+
           <HistorialEnTablas
             loading={loading}
             detalle={detalle}
@@ -389,15 +1217,28 @@ const HistorialRecoleccion = () => {
             page={page}
             total={total}
             limit={LIMIT}
-            onPageChange={handlePageChange}
-            canExport={canExport}
-            onExportPdf={handleExportPdf}
-            onExportExcel={handleExportExcel}
+            onPageChange={
+              handlePageChange
+            }
+            canExport={
+              canExport
+            }
+            onExportPdf={
+              handleExportPdf
+            }
+            onExportExcel={
+              handleExportExcel
+            }
           />
-        </div>
+
+        </section>
+
       )}
-    </div>
+
+    </main>
+
   );
 };
+
 
 export default HistorialRecoleccion;

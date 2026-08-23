@@ -28,7 +28,7 @@ const MonthlyCollectionModalContent = ({
     currentData?.label ?? "";
 
   return (
-    <div className="monthly-collection-modal">
+    <div className="collection-modal">
 
       <div
         className="collection-period-tabs"
@@ -64,30 +64,34 @@ const MonthlyCollectionModalContent = ({
         </button>
       </div>
 
-      <div className="monthly-collection-summary">
-        <div className="monthly-summary-item">
-          <span className="monthly-summary-label">
+      <div className="collection-summary">
+
+        <div className="collection-summary-item">
+          <span className="collection-summary-label">
             Recolectado {periodLabel.toLowerCase()}
           </span>
 
-          <strong className="monthly-summary-value">
+          <strong className="collection-summary-value">
             {totalCollected.toLocaleString()} lb
           </strong>
         </div>
 
-        <div className="monthly-summary-item">
-          <span className="monthly-summary-label">
+        <div className="collection-summary-item">
+          <span className="collection-summary-label">
             Recolecciones realizadas
           </span>
 
-          <strong className="monthly-summary-value">
+          <strong className="collection-summary-value">
             {totalCollections}
           </strong>
         </div>
+
       </div>
 
-      <div className="monthly-collection-table-wrapper">
-        <table className="monthly-collection-table">
+      <div className="collection-table-wrapper">
+
+        <table className="collection-table">
+
           <thead>
             <tr>
               <th>Contenedor</th>
@@ -101,7 +105,8 @@ const MonthlyCollectionModalContent = ({
           <tbody>
             {containers.map((container) => (
               <tr key={container.id}>
-                <td className="monthly-container-name">
+
+                <td className="collection-container-name">
                   {container.name}
                 </td>
 
@@ -120,10 +125,13 @@ const MonthlyCollectionModalContent = ({
                 <td>
                   {container.lastCollection}
                 </td>
+
               </tr>
             ))}
           </tbody>
+
         </table>
+
       </div>
 
       <div className="container-modal-actions">
