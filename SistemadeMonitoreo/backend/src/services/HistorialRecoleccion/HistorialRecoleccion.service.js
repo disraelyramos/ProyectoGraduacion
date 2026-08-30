@@ -1,10 +1,6 @@
 const pool = require("../../config/db");
 
 
-/* =========================================================
-   CONSTANTES
-   ========================================================= */
-
 const BUSQUEDAS_PERMITIDAS = new Set([
   "codigo",
   "tipo",
@@ -22,10 +18,6 @@ const MIN_SEARCH_LENGTH = 2;
 const MAX_SEARCH_LENGTH = 200;
 
 
-/* =========================================================
-   ERROR DE VALIDACIÓN
-   ========================================================= */
-
 function crearErrorValidacion(
   message,
   code = "VALIDATION_ERROR"
@@ -40,10 +32,6 @@ function crearErrorValidacion(
   return error;
 }
 
-
-/* =========================================================
-   NORMALIZAR BUSCAR POR
-   ========================================================= */
 
 function normalizarBuscarPor(valor) {
   const buscarPor =
@@ -66,10 +54,6 @@ function normalizarBuscarPor(valor) {
   return buscarPor;
 }
 
-
-/* =========================================================
-   NORMALIZAR TEXTO DE BÚSQUEDA
-   ========================================================= */
 
 function normalizarValorBusqueda(valor) {
   const texto =
@@ -101,9 +85,42 @@ function normalizarValorBusqueda(valor) {
 }
 
 
-/* =========================================================
-   FECHA
-   ========================================================= */
+function normalizarTexto(valor) {
+  return String(valor || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(
+      /[\u0300-\u036f]/g,
+      ""
+    );
+}
+
+
+function normalizarTipoBusqueda(valor) {
+  const texto =
+    String(valor || "")
+      .trim();
+
+
+  const normalizado =
+    normalizarTexto(
+      texto
+    );
+
+
+  if (
+    normalizado.includes(
+      "bio"
+    )
+  ) {
+    return "Infeccioso";
+  }
+
+
+  return texto;
+}
+
 
 function normalizarFechaISO(
   valor,
@@ -149,10 +166,6 @@ function normalizarFechaISO(
 }
 
 
-/* =========================================================
-   ORDEN
-   ========================================================= */
-
 function normalizarOrden(valor) {
   if (
     valor === undefined ||
@@ -183,10 +196,6 @@ function normalizarOrden(valor) {
   return order;
 }
 
-
-/* =========================================================
-   FILTROS
-   ========================================================= */
 
 function normalizarFiltros(
   filtros = {}
@@ -243,10 +252,6 @@ function normalizarFiltros(
 }
 
 
-/* =========================================================
-   FILTROS CANÓNICOS
-   ========================================================= */
-
 function crearFiltrosAplicados(
   filtrosSeguros
 ) {
@@ -269,10 +274,6 @@ function crearFiltrosAplicados(
   };
 }
 
-
-/* =========================================================
-   PAGINACIÓN
-   ========================================================= */
 
 function normalizarPaginacion(
   opciones = {}
@@ -331,25 +332,24 @@ function normalizarPaginacion(
 }
 
 
-/* =========================================================
-   FILTRO SQL
-
-   Respeta estrictamente la opción seleccionada.
-
-   codigo → c.codigo
-   tipo   → tr.nombre
-   ========================================================= */
-
 function construirFiltroSQL({
   buscarPor,
   fechaInicio,
   fechaFin,
   valorBusqueda,
 }) {
+  const valorBusquedaSQL =
+    buscarPor === "tipo"
+      ? normalizarTipoBusqueda(
+          valorBusqueda
+        )
+      : valorBusqueda;
+
+
   const params = [
     fechaInicio,
     fechaFin,
-    valorBusqueda,
+    valorBusquedaSQL,
   ];
 
 
@@ -391,35 +391,16 @@ function construirFiltroSQL({
 }
 
 
-/* =========================================================
-   DETECTAR SI EL TEXTO PERTENECE AL OTRO CRITERIO
-
-   IMPORTANTE:
-
-   Esta función NO determina si una búsqueda es válida.
-
-   Solamente sirve para detectar:
-
-   Código + Bioinfeccioso
-
-   o
-
-   Tipo Residuo + CNT-001
-
-   Normalizamos:
-   - mayúsculas
-   - espacios
-   - guiones
-   - ciertos signos
-   - tildes
-
-   para evitar falsos negativos.
-   ========================================================= */
-
 async function detectarCriterioAlternativo({
   buscarPor,
   valorBusqueda,
 }) {
+  const valorTipo =
+    normalizarTipoBusqueda(
+      valorBusqueda
+    );
+
+
   const sql = `
     SELECT
 
@@ -492,7 +473,7 @@ async function detectarCriterioAlternativo({
 
           regexp_replace(
             translate(
-              LOWER($1),
+              LOWER($2),
               'áéíóúüñ',
               'aeiouun'
             ),
@@ -511,6 +492,7 @@ async function detectarCriterioAlternativo({
       sql,
       [
         valorBusqueda,
+        valorTipo,
       ]
     );
 
@@ -529,13 +511,6 @@ async function detectarCriterioAlternativo({
     true;
 
 
-  /* =======================================================
-     EL USUARIO ELIGIÓ CÓDIGO
-
-     Solo nos interesa saber si escribió algo
-     perteneciente a Tipo Residuo.
-     ======================================================= */
-
   if (
     buscarPor === "codigo" &&
     !existeCodigo &&
@@ -548,12 +523,6 @@ async function detectarCriterioAlternativo({
   }
 
 
-  /* =======================================================
-     EL USUARIO ELIGIÓ TIPO
-
-     Solo nos interesa saber si escribió un código.
-     ======================================================= */
-
   if (
     buscarPor === "tipo" &&
     !existeTipo &&
@@ -564,21 +533,8 @@ async function detectarCriterioAlternativo({
       "SEARCH_TYPE_MISMATCH"
     );
   }
-
-
-  /*
-    Si no pertenece claramente al criterio contrario,
-    NO generamos alerta.
-
-    El resultado simplemente será:
-    "No se encontraron registros".
-  */
 }
 
-
-/* =========================================================
-   CONTAR HISTORIAL
-   ========================================================= */
 
 async function contarHistorial({
   where,
@@ -590,11 +546,11 @@ async function contarHistorial({
 
     FROM recolecciones r
 
-    JOIN contenedores c
+    INNER JOIN contenedores c
       ON c.id_contenedor =
          r.contenedor_id
 
-    LEFT JOIN tipos_residuo tr
+    INNER JOIN tipos_residuo tr
       ON tr.id =
          c.id_tipo_residuo
 
@@ -615,10 +571,6 @@ async function contarHistorial({
   );
 }
 
-
-/* =========================================================
-   DETALLE
-   ========================================================= */
 
 async function consultarDetalle({
   where,
@@ -648,6 +600,9 @@ async function consultarDetalle({
       d.nombre
         AS distrito,
 
+      tr.id
+        AS tipo_residuo_id,
+
       tr.nombre
         AS tipo_residuo,
 
@@ -666,11 +621,11 @@ async function consultarDetalle({
 
     FROM recolecciones r
 
-    JOIN contenedores c
+    INNER JOIN contenedores c
       ON c.id_contenedor =
          r.contenedor_id
 
-    LEFT JOIN tipos_residuo tr
+    INNER JOIN tipos_residuo tr
       ON tr.id =
          c.id_tipo_residuo
 
@@ -713,10 +668,6 @@ async function consultarDetalle({
 }
 
 
-/* =========================================================
-   MAPEAR DETALLE
-   ========================================================= */
-
 function mapearDetalle(
   rows = []
 ) {
@@ -735,6 +686,11 @@ function mapearDetalle(
 
       distrito:
         row.distrito,
+
+      tipo_residuo_id:
+        Number(
+          row.tipo_residuo_id
+        ),
 
       tipo_residuo:
         row.tipo_residuo,
@@ -761,33 +717,44 @@ function mapearDetalle(
 }
 
 
-/* =========================================================
-   PESAJE
-   ========================================================= */
-
 async function consultarPesajes(
   recoleccionIds
 ) {
   if (
-    !recoleccionIds.length
+    !Array.isArray(
+      recoleccionIds
+    ) ||
+    recoleccionIds.length === 0
   ) {
     return [];
   }
 
 
   const sql = `
-    SELECT
+    SELECT DISTINCT ON (
+      h.recoleccion_id
+    )
+
       h.recoleccion_id,
+
       h.total_en_libras,
+
       h.porcentaje_recolectado,
+
       h.porcentaje_llenado,
+
       h.costo_por_libra_aplicado,
+
       h.total_costo_q
 
     FROM historial_calculo_costos h
 
     WHERE h.recoleccion_id =
       ANY($1::int[])
+
+    ORDER BY
+      h.recoleccion_id ASC,
+      h.id DESC;
   `;
 
 
@@ -804,10 +771,6 @@ async function consultarPesajes(
 }
 
 
-/* =========================================================
-   MAPEAR PESAJE
-   ========================================================= */
-
 function mapearPesajes(
   detalleRows,
   pesajeRows
@@ -817,8 +780,7 @@ function mapearPesajes(
 
 
   for (
-    const row
-    of pesajeRows
+    const row of pesajeRows
   ) {
     pesajePorRecoleccion.set(
       Number(
@@ -878,27 +840,15 @@ function mapearPesajes(
 }
 
 
-/* =========================================================
-   SERVICE PRINCIPAL
-   ========================================================= */
-
 async function consultarHistorial(
   filtros,
   opciones = {}
 ) {
-  /* =======================================================
-     1. FILTROS
-     ======================================================= */
-
   const filtrosSeguros =
     normalizarFiltros(
       filtros
     );
 
-
-  /* =======================================================
-     2. PAGINACIÓN
-     ======================================================= */
 
   const paginacion =
     normalizarPaginacion(
@@ -906,19 +856,11 @@ async function consultarHistorial(
     );
 
 
-  /* =======================================================
-     3. FILTROS PARA SNAPSHOT
-     ======================================================= */
-
   const filtrosAplicados =
     crearFiltrosAplicados(
       filtrosSeguros
     );
 
-
-  /* =======================================================
-     4. SQL SEGÚN CRITERIO SELECCIONADO
-     ======================================================= */
 
   const {
     where,
@@ -929,15 +871,6 @@ async function consultarHistorial(
     );
 
 
-  /* =======================================================
-     5. TOTAL
-
-     Primero respetamos literalmente la opción elegida.
-
-     Código → solo código.
-     Tipo   → solo tipo.
-     ======================================================= */
-
   const total =
     await contarHistorial({
       where,
@@ -945,21 +878,9 @@ async function consultarHistorial(
     });
 
 
-  /* =======================================================
-     6. SIN RESULTADOS
-
-     Solo AQUÍ comprobamos si probablemente usó
-     el criterio contrario.
-
-     Esto evita el problema anterior donde elegir
-     Tipo Residuo podía producir una alerta antes de
-     realizar correctamente la búsqueda.
-     ======================================================= */
-
   if (
     total === 0
   ) {
-
     await detectarCriterioAlternativo({
       buscarPor:
         filtrosSeguros.buscarPor,
@@ -971,19 +892,12 @@ async function consultarHistorial(
 
     return {
       total: 0,
-
       detalle: [],
-
       pesaje: [],
-
       filtrosAplicados,
     };
   }
 
-
-  /* =======================================================
-     7. PÁGINA FUERA DE RANGO
-     ======================================================= */
 
   if (
     paginacion.paginado &&
@@ -991,19 +905,12 @@ async function consultarHistorial(
   ) {
     return {
       total,
-
       detalle: [],
-
       pesaje: [],
-
       filtrosAplicados,
     };
   }
 
-
-  /* =======================================================
-     8. DETALLE
-     ======================================================= */
 
   const detalleRows =
     await consultarDetalle({
@@ -1018,23 +925,16 @@ async function consultarHistorial(
 
 
   if (
-    !detalleRows.length
+    detalleRows.length === 0
   ) {
     return {
       total,
-
       detalle: [],
-
       pesaje: [],
-
       filtrosAplicados,
     };
   }
 
-
-  /* =======================================================
-     9. IDS
-     ======================================================= */
 
   const recoleccionIds =
     detalleRows
@@ -1053,19 +953,11 @@ async function consultarHistorial(
       );
 
 
-  /* =======================================================
-     10. PESAJE
-     ======================================================= */
-
   const pesajeRows =
     await consultarPesajes(
       recoleccionIds
     );
 
-
-  /* =======================================================
-     11. RESPUESTA
-     ======================================================= */
 
   return {
     total,
@@ -1085,10 +977,6 @@ async function consultarHistorial(
   };
 }
 
-
-/* =========================================================
-   EXPORTACIÓN
-   ========================================================= */
 
 module.exports = {
   consultarHistorial,

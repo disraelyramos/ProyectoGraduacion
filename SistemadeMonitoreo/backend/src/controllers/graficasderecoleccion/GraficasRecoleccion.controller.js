@@ -1,244 +1,1259 @@
-const pool = require("../../config/db");
-const xss = require("xss");
+// backend/src/controllers/graficasderecoleccion/GraficasRecoleccion.controller.js
 
-const NOMBRES_MESES = {
-  1: "Enero",
-  2: "Febrero",
-  3: "Marzo",
-  4: "Abril",
-  5: "Mayo",
-  6: "Junio",
-  7: "Julio",
-  8: "Agosto",
-  9: "Septiembre",
-  10: "Octubre",
-  11: "Noviembre",
-  12: "Diciembre",
-};
+const {
+  crearSnapshot,
+  obtenerSnapshotValido,
+} = require(
+  "../../services/HistorialRecoleccion/ExportSnapshot.service"
+);
 
-function parseEnteroSeguro(valor) {
-  const limpio = xss(String(valor ?? "").trim());
-  const numero = parseInt(limpio, 10);
+const {
+  registrarAuditoriaExportacion,
+} = require(
+  "../../services/HistorialRecoleccion/AuditoriaExportaciones.service"
+);
 
-  if (Number.isNaN(numero)) {
-    return null;
+const {
+  buildValidatedFilters,
+} = require(
+  "../../validators/graficasderecoleccion/GraficasRecoleccion.validator"
+);
+
+const {
+  obtenerGraficasRecoleccionCuatrimestral,
+} = require(
+  "../../services/graficasderecoleccion/GraficasRecoleccion.service"
+);
+
+const {
+  buildGraficasRecoleccionCuatrimestralPdfBuffer,
+} = require(
+  "../../exports/pdf/graficasRecoleccionCuatrimestral.pdf"
+);
+
+const {
+  buildGraficasRecoleccionCuatrimestralExcelBuffer,
+} = require(
+  "../../exports/excel/graficasRecoleccionCuatrimestral.excel"
+);
+
+
+/* =========================================================
+   CONSTANTES
+   ========================================================= */
+
+const MODULO =
+  "GRAFICAS_RECOLECCION";
+
+const REPORTE =
+  "reporte_recoleccion_cuatrimestral";
+
+
+/* =========================================================
+   AUTENTICACIÓN DEFENSIVA
+   ========================================================= */
+
+function requireAuth(
+  req,
+  res
+) {
+  if (
+    req.user?.id_usuario
+  ) {
+    return true;
   }
 
-  return numero;
+
+  res
+    .status(401)
+    .json({
+      success:
+        false,
+
+      message:
+        "Usuario no autenticado.",
+    });
+
+
+  return false;
 }
 
-function obtenerMesesPorCuatrimestre(cuatrimestre) {
-  const mesesMap = {
-    1: [1, 2, 3, 4],
-    2: [5, 6, 7, 8],
-    3: [9, 10, 11, 12],
-  };
 
-  return mesesMap[cuatrimestre] || [];
+/* =========================================================
+   IP DE ORIGEN
+   ========================================================= */
+
+function getIp(
+  req
+) {
+  return (
+    req.headers[
+      "x-forwarded-for"
+    ]
+      ?.split(",")[0] ||
+    req.ip ||
+    ""
+  ).trim();
 }
 
-function normalizarTipoResiduo(nombre) {
-  const valor = String(nombre || "")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim();
 
-  if (valor.includes("bio")) {
-    return "Bioinfeccioso";
-  }
+/* =========================================================
+   RESPONDER ERRORES CONTROLADOS
+   ========================================================= */
 
-  if (valor.includes("punzo")) {
-    return "Punzocortante";
-  }
+function responderError(
+  res,
+  error,
+  mensajeInterno =
+    "Error interno del servidor."
+) {
+  const statusCode =
+    (
+      Number.isSafeInteger(
+        error?.statusCode
+      ) &&
+      error.statusCode >= 400 &&
+      error.statusCode <= 599
+    )
+      ? error.statusCode
+      : 500;
 
-  return null;
-}
 
-function crearMesBase(numeroMes) {
-  return {
-    mes: numeroMes,
-    nombreMes: NOMBRES_MESES[numeroMes],
-    categorias: ["Semana 1", "Semana 2", "Semana 3", "Semana 4", "Semana 5"],
-    series: {
-      Bioinfeccioso: [0, 0, 0, 0, 0],
-      Punzocortante: [0, 0, 0, 0, 0],
-    },
-    totales: {
-      bioinfeccioso: 0,
-      punzocortante: 0,
-      general: 0,
-    },
-    promedioSemanal: {
-      bioinfeccioso: 0,
-      punzocortante: 0,
-      general: 0,
-    },
-  };
-}
-
-function redondearDos(valor) {
-  return Number(Number(valor || 0).toFixed(2));
-}
-
-exports.getGraficasRecoleccionCuatrimestral = async (req, res) => {
-  try {
-    if (!req.user || !req.user.id_usuario) {
-      return res.status(401).json({
-        success: false,
-        message: "Usuario no autenticado",
-      });
-    }
-
-    const anio = parseEnteroSeguro(req.query.anio);
-    const cuatrimestre = parseEnteroSeguro(req.query.cuatrimestre);
-
-    if (!anio || anio < 2000 || anio > 3000) {
-      return res.status(400).json({
-        success: false,
-        message: "El año enviado no es válido",
-      });
-    }
-
-    if (![1, 2, 3].includes(cuatrimestre)) {
-      return res.status(400).json({
-        success: false,
-        message: "El cuatrimestre debe ser 1, 2 o 3",
-      });
-    }
-
-    const meses = obtenerMesesPorCuatrimestre(cuatrimestre);
-
-    const query = `
-      WITH fechas_del_mes AS (
-        SELECT
-          EXTRACT(MONTH FROM hcc.calculado_en)::int AS mes,
-          DATE(hcc.calculado_en) AS fecha_evento
-        FROM historial_calculo_costos hcc
-        WHERE EXTRACT(YEAR FROM hcc.calculado_en) = $1
-          AND EXTRACT(MONTH FROM hcc.calculado_en) = ANY($2::int[])
-        GROUP BY EXTRACT(MONTH FROM hcc.calculado_en), DATE(hcc.calculado_en)
-      ),
-      fechas_posicionadas AS (
-        SELECT
-          mes,
-          fecha_evento,
-          ROW_NUMBER() OVER (
-            PARTITION BY mes
-            ORDER BY fecha_evento ASC
-          ) AS semana_indice
-        FROM fechas_del_mes
-      ),
-      totales_por_fecha_y_tipo AS (
-        SELECT
-          EXTRACT(MONTH FROM hcc.calculado_en)::int AS mes,
-          DATE(hcc.calculado_en) AS fecha_evento,
-          tr.nombre AS tipo_residuo,
-          SUM(COALESCE(hcc.total_en_libras, 0)) AS total_libras
-        FROM historial_calculo_costos hcc
-        INNER JOIN tipos_residuo tr
-          ON tr.id = hcc.id_tipo_residuo
-        WHERE EXTRACT(YEAR FROM hcc.calculado_en) = $1
-          AND EXTRACT(MONTH FROM hcc.calculado_en) = ANY($2::int[])
-        GROUP BY
-          EXTRACT(MONTH FROM hcc.calculado_en),
-          DATE(hcc.calculado_en),
-          tr.nombre
+  if (
+    statusCode !== 500
+  ) {
+    return res
+      .status(
+        statusCode
       )
-      SELECT
-        tf.mes,
-        fp.semana_indice,
-        tf.tipo_residuo,
-        tf.total_libras
-      FROM totales_por_fecha_y_tipo tf
-      INNER JOIN fechas_posicionadas fp
-        ON fp.mes = tf.mes
-       AND fp.fecha_evento = tf.fecha_evento
-      WHERE fp.semana_indice <= 5
-      ORDER BY tf.mes ASC, fp.semana_indice ASC;
-    `;
+      .json({
+        success:
+          false,
 
-    const result = await pool.query(query, [anio, meses]);
+        message:
+          error?.message ||
+          "No fue posible procesar la solicitud.",
 
-    const respuestaBase = meses.map((mes) => crearMesBase(mes));
-    const mapaMeses = {};
+        type:
+          error?.type ||
+          "validation",
 
-    for (const item of respuestaBase) {
-      mapaMeses[item.mes] = item;
-    }
+        ...(
+          error?.code
+            ? {
+                code:
+                  error.code,
+              }
+            : {}
+        ),
 
-    for (const row of result.rows) {
-      const mes = Number(row.mes);
-      const semanaIndice = Number(row.semana_indice);
-      const totalLibras = Number(row.total_libras || 0);
-      const tipoNormalizado = normalizarTipoResiduo(row.tipo_residuo);
-
-      if (!mapaMeses[mes] || !tipoNormalizado) {
-        continue;
-      }
-
-      if (semanaIndice < 1 || semanaIndice > 5) {
-        continue;
-      }
-
-      mapaMeses[mes].series[tipoNormalizado][semanaIndice - 1] += totalLibras;
-    }
-
-    for (const mes of respuestaBase) {
-      const totalBio = mes.series.Bioinfeccioso.reduce((acc, val) => acc + val, 0);
-      const totalPunzo = mes.series.Punzocortante.reduce((acc, val) => acc + val, 0);
-      const totalGeneral = totalBio + totalPunzo;
-
-      const semanasBioConDato = mes.series.Bioinfeccioso.filter((v) => v > 0).length;
-      const semanasPunzoConDato = mes.series.Punzocortante.filter((v) => v > 0).length;
-      const semanasGeneralConDato = mes.series.Bioinfeccioso.map((bio, index) => {
-        const punzo = mes.series.Punzocortante[index];
-        return bio + punzo;
-      }).filter((v) => v > 0).length;
-
-      mes.totales.bioinfeccioso = redondearDos(totalBio);
-      mes.totales.punzocortante = redondearDos(totalPunzo);
-      mes.totales.general = redondearDos(totalGeneral);
-
-      mes.promedioSemanal.bioinfeccioso = redondearDos(
-        semanasBioConDato > 0 ? totalBio / semanasBioConDato : 0
-      );
-
-      mes.promedioSemanal.punzocortante = redondearDos(
-        semanasPunzoConDato > 0 ? totalPunzo / semanasPunzoConDato : 0
-      );
-
-      mes.promedioSemanal.general = redondearDos(
-        semanasGeneralConDato > 0 ? totalGeneral / semanasGeneralConDato : 0
-      );
-
-      mes.series = [
-        {
-          name: "Bioinfeccioso",
-          data: mes.series.Bioinfeccioso.map(redondearDos),
-        },
-        {
-          name: "Punzocortante",
-          data: mes.series.Punzocortante.map(redondearDos),
-        },
-      ];
-    }
-
-    return res.status(200).json({
-      success: true,
-      filtros: {
-        anio,
-        cuatrimestre,
-        meses,
-      },
-      data: respuestaBase,
-    });
-  } catch (error) {
-    console.error("Error obteniendo gráficas de recolección:", error.message);
-
-    return res.status(500).json({
-      success: false,
-      message: "Error interno del servidor",
-    });
+        ...(
+          error?.field
+            ? {
+                field:
+                  error.field,
+              }
+            : {}
+        ),
+      });
   }
-};
+
+
+  /*
+    No exponemos errores internos al frontend.
+  */
+
+  return res
+    .status(500)
+    .json({
+      success:
+        false,
+
+      message:
+        mensajeInterno,
+    });
+}
+
+
+/* =========================================================
+   CONVERTIR VALIDACIÓN EN ERROR
+   ========================================================= */
+
+function crearErrorDesdeValidacion(
+  validation
+) {
+  const error =
+    new Error(
+      validation
+        ?.error
+        ?.message ||
+      "Los filtros de la exportación no son válidos."
+    );
+
+
+  error.statusCode =
+    validation?.status ||
+    400;
+
+
+  error.type =
+    validation
+      ?.error
+      ?.type ||
+    "validation";
+
+
+  if (
+    validation
+      ?.error
+      ?.code
+  ) {
+    error.code =
+      validation.error.code;
+  }
+
+
+  if (
+    validation
+      ?.error
+      ?.field
+  ) {
+    error.field =
+      validation.error.field;
+  }
+
+
+  return error;
+}
+
+
+/* =========================================================
+   RESUMEN PARA AUDITORÍA
+   ========================================================= */
+
+function construirResumenAuditoria(
+  resultado
+) {
+  const meses =
+    Array.isArray(
+      resultado?.data
+    )
+      ? resultado.data
+      : [];
+
+
+  const totalGeneralLibras =
+    meses.reduce(
+      (
+        acumulado,
+        mes
+      ) => {
+
+        const total =
+          Number(
+            mes
+              ?.totales
+              ?.general ||
+            0
+          );
+
+
+        return (
+          acumulado +
+          (
+            Number.isFinite(
+              total
+            )
+              ? total
+              : 0
+          )
+        );
+      },
+      0
+    );
+
+
+  return {
+    anio:
+      resultado
+        ?.filtros
+        ?.anio ||
+      null,
+
+    cuatrimestre:
+      resultado
+        ?.filtros
+        ?.cuatrimestre ||
+      null,
+
+    meses:
+      Array.isArray(
+        resultado
+          ?.filtros
+          ?.meses
+      )
+        ? resultado.filtros.meses
+        : [],
+
+    meses_reportados:
+      meses.length,
+
+    total_general_libras:
+      Number(
+        totalGeneralLibras.toFixed(
+          2
+        )
+      ),
+  };
+}
+
+
+/* =========================================================
+   AUDITORÍA FALLIDA
+   ========================================================= */
+
+async function registrarAuditoriaFallida({
+  req,
+  formato,
+  exportId,
+  filtros,
+  error,
+}) {
+  /*
+    Auditoría requiere un UUID válido.
+
+    No generamos valores falsos como "N/A".
+  */
+
+  if (
+    !exportId
+  ) {
+    return;
+  }
+
+
+  try {
+    await registrarAuditoriaExportacion({
+      usuario_id:
+        req.user?.id_usuario ||
+        0,
+
+      usuario:
+        req.user?.usuario ||
+        "N/A",
+
+      rol:
+        req.user?.rol ||
+        "N/A",
+
+      modulo:
+        MODULO,
+
+      reporte:
+        REPORTE,
+
+      formato,
+
+      export_id:
+        exportId,
+
+      filtros_json:
+        filtros || {
+          exportId,
+        },
+
+      total_registros:
+        0,
+
+      resumen_json:
+        null,
+
+      estado:
+        "FALLIDO",
+
+      error_mensaje:
+        error?.message ||
+        `Error al generar ${formato}`,
+
+      ip_origen:
+        getIp(
+          req
+        ),
+
+      user_agent:
+        req.headers[
+          "user-agent"
+        ] || null,
+    });
+
+  } catch (
+    auditError
+  ) {
+    console.error(
+      `Error registrando auditoría fallida (${formato}):`,
+      auditError
+    );
+  }
+}
+
+
+/* =========================================================
+   CONSULTAR GRÁFICAS CUATRIMESTRALES
+
+   GET /api/graficas-recoleccion/cuatrimestral
+   ========================================================= */
+
+exports.getGraficasRecoleccionCuatrimestral =
+  async function getGraficasRecoleccionCuatrimestral(
+    req,
+    res
+  ) {
+
+    /* =====================================================
+       1. AUTENTICACIÓN
+       ===================================================== */
+
+    if (
+      !requireAuth(
+        req,
+        res
+      )
+    ) {
+      return;
+    }
+
+
+    /* =====================================================
+       2. VALIDAR FILTROS
+
+       req.query NO es fuente de verdad.
+       ===================================================== */
+
+    const validation =
+      buildValidatedFilters({
+        source:
+          req.query,
+      });
+
+
+    if (
+      !validation.ok
+    ) {
+      return res
+        .status(
+          validation.status
+        )
+        .json({
+          success:
+            false,
+
+          ...validation.error,
+        });
+    }
+
+
+    /*
+      Desde este punto utilizamos exclusivamente los valores
+      normalizados por backend.
+    */
+
+    const {
+      anio,
+      cuatrimestre,
+    } =
+      validation.filters;
+
+
+    try {
+
+      /* ===================================================
+         3. CONSULTAR SERVICE
+
+         PostgreSQL es la fuente de los datos.
+
+         El Service construye:
+         - meses
+         - categorías
+         - series
+         - totales
+         - promedios
+         =================================================== */
+
+      const resultado =
+        await obtenerGraficasRecoleccionCuatrimestral({
+          anio,
+          cuatrimestre,
+        });
+
+
+      /* ===================================================
+         4. NO EXISTEN DATOS
+
+         IMPORTANTE:
+
+         - no creamos snapshot
+         - no habilitamos PDF
+         - no habilitamos Excel
+         - no enviamos gráficas vacías
+         =================================================== */
+
+      if (
+        !resultado.hayDatos
+      ) {
+        return res
+          .status(200)
+          .json({
+            success:
+              true,
+
+            message:
+              "No se encontraron registros de recolección para el año y cuatrimestre seleccionados.",
+
+            hay_datos:
+              false,
+
+            export_id:
+              null,
+
+            export_expires_at:
+              null,
+
+            export_expires_in_seconds:
+              null,
+
+            filtros: {
+              anio:
+                resultado
+                  .filtros
+                  .anio,
+
+              cuatrimestre:
+                resultado
+                  .filtros
+                  .cuatrimestre,
+
+              meses:
+                resultado
+                  .filtros
+                  .meses,
+            },
+
+            data:
+              [],
+          });
+      }
+
+
+      /* ===================================================
+         5. SNAPSHOT
+
+         Solo se crea cuando existen datos reales.
+
+         Guardamos únicamente criterios normalizados.
+         =================================================== */
+
+      const filtrosSnapshot = {
+        anio:
+          resultado
+            .filtros
+            .anio,
+
+        cuatrimestre:
+          resultado
+            .filtros
+            .cuatrimestre,
+      };
+
+
+      const snapshot =
+        await crearSnapshot({
+          usuarioId:
+            req.user.id_usuario,
+
+          modulo:
+            MODULO,
+
+          filtros:
+            filtrosSnapshot,
+        });
+
+
+      /* ===================================================
+         6. RESPUESTA CON DATOS
+         =================================================== */
+
+      return res
+        .status(200)
+        .json({
+          success:
+            true,
+
+          message:
+            "Gráficas de recolección obtenidas correctamente.",
+
+          hay_datos:
+            true,
+
+          export_id:
+            snapshot.exportId,
+
+          export_expires_at:
+            snapshot.expiresAt,
+
+          export_expires_in_seconds:
+            snapshot.expiresInSeconds,
+
+          filtros: {
+            anio:
+              resultado
+                .filtros
+                .anio,
+
+            cuatrimestre:
+              resultado
+                .filtros
+                .cuatrimestre,
+
+            meses:
+              resultado
+                .filtros
+                .meses,
+          },
+
+          data:
+            resultado.data,
+        });
+
+    } catch (
+      error
+    ) {
+      console.error(
+        "Error getGraficasRecoleccionCuatrimestral:",
+        error
+      );
+
+
+      return responderError(
+        res,
+        error
+      );
+    }
+  };
+
+
+/* =========================================================
+   OBTENER DATOS PARA EXPORTACIÓN
+
+   Frontend envía solamente:
+
+   exportId
+
+   Backend:
+   exportId
+      ↓
+   snapshot
+      ↓
+   usuario
+      ↓
+   módulo
+      ↓
+   filtros almacenados
+      ↓
+   Validator
+      ↓
+   PostgreSQL
+      ↓
+   Service
+      ↓
+   información reconstruida
+   ========================================================= */
+
+async function obtenerDatosExportacion({
+  exportId,
+  usuarioId,
+}) {
+
+  /* =======================================================
+     1. RECUPERAR SNAPSHOT
+     ======================================================= */
+
+  const snapshot =
+    await obtenerSnapshotValido({
+      exportId,
+
+      usuarioId,
+
+      modulo:
+        MODULO,
+    });
+
+
+  /* =======================================================
+     2. SNAPSHOT INVÁLIDO
+     ======================================================= */
+
+  if (
+    !snapshot
+  ) {
+    const error =
+      new Error(
+        "La exportación no está disponible. Presione 'Filtrar' nuevamente para habilitar PDF y Excel."
+      );
+
+
+    error.statusCode =
+      400;
+
+    error.type =
+      "validation";
+
+    error.code =
+      "EXPORT_SNAPSHOT_INVALIDO";
+
+
+    throw error;
+  }
+
+
+  /* =======================================================
+     3. RECUPERAR FILTROS DEL SNAPSHOT
+     ======================================================= */
+
+  const filtrosSnapshot =
+    snapshot.filtros_json ||
+    {};
+
+
+  /* =======================================================
+     4. VALIDAR NUEVAMENTE LOS FILTROS
+     ======================================================= */
+
+  const validation =
+    buildValidatedFilters({
+      source:
+        filtrosSnapshot,
+    });
+
+
+  if (
+    !validation.ok
+  ) {
+    throw crearErrorDesdeValidacion(
+      validation
+    );
+  }
+
+
+  /* =======================================================
+     5. VOLVER A CONSULTAR POSTGRESQL
+
+     No usamos datos guardados en React.
+     No usamos series enviadas por el navegador.
+     ======================================================= */
+
+  const resultado =
+    await obtenerGraficasRecoleccionCuatrimestral({
+      anio:
+        validation
+          .filters
+          .anio,
+
+      cuatrimestre:
+        validation
+          .filters
+          .cuatrimestre,
+    });
+
+
+  /* =======================================================
+     6. LOS DATOS YA NO EXISTEN
+
+     El snapshot puede seguir vigente, pero PostgreSQL sigue
+     siendo la fuente de verdad.
+
+     Si los datos desaparecieron después de crear el
+     snapshot, no generamos un archivo vacío.
+     ======================================================= */
+
+  if (
+    !resultado.hayDatos
+  ) {
+    const error =
+      new Error(
+        "Ya no existen registros para generar esta exportación. Presione 'Filtrar' nuevamente."
+      );
+
+
+    error.statusCode =
+      409;
+
+    error.type =
+      "validation";
+
+    error.code =
+      "EXPORT_DATA_NOT_FOUND";
+
+
+    throw error;
+  }
+
+
+  /* =======================================================
+     7. FILTROS AUTORITATIVOS
+     ======================================================= */
+
+  const filtros = {
+    anio:
+      resultado
+        .filtros
+        .anio,
+
+    cuatrimestre:
+      resultado
+        .filtros
+        .cuatrimestre,
+
+    meses:
+      resultado
+        .filtros
+        .meses,
+  };
+
+
+  return {
+    filtros,
+    resultado,
+  };
+}
+
+
+/* =========================================================
+   EXPORTAR PDF
+
+   GET
+   /api/graficas-recoleccion/cuatrimestral/export/pdf
+   ========================================================= */
+
+exports.exportarPdf =
+  async function exportarPdf(
+    req,
+    res
+  ) {
+
+    /* =====================================================
+       1. AUTENTICACIÓN
+       ===================================================== */
+
+    if (
+      !requireAuth(
+        req,
+        res
+      )
+    ) {
+      return;
+    }
+
+
+    /* =====================================================
+       2. EXPORT ID
+
+       Es el único dato que recibe la exportación.
+       ===================================================== */
+
+    const exportId =
+      String(
+        req.query
+          ?.exportId ||
+        ""
+      ).trim();
+
+
+    if (
+      !exportId
+    ) {
+      return res
+        .status(400)
+        .json({
+          success:
+            false,
+
+          message:
+            "exportId es requerido.",
+
+          type:
+            "validation",
+
+          code:
+            "EXPORT_ID_REQUIRED",
+        });
+    }
+
+
+    let filtros =
+      null;
+
+
+    try {
+
+      /* ===================================================
+         3. RECONSTRUIR DATOS DESDE BACKEND
+         =================================================== */
+
+      const {
+        filtros:
+          filtrosExportacion,
+
+        resultado,
+      } =
+        await obtenerDatosExportacion({
+          exportId,
+
+          usuarioId:
+            req.user.id_usuario,
+        });
+
+
+      filtros =
+        filtrosExportacion;
+
+
+      /* ===================================================
+         4. GENERAR PDF
+         =================================================== */
+
+      const pdfBuffer =
+        await buildGraficasRecoleccionCuatrimestralPdfBuffer({
+          filtros,
+
+          generadoPor:
+            req.user,
+
+          data:
+            resultado.data,
+        });
+
+
+      /* ===================================================
+         5. AUDITORÍA EXITOSA
+         =================================================== */
+
+      await registrarAuditoriaExportacion({
+        usuario_id:
+          req.user.id_usuario,
+
+        usuario:
+          req.user.usuario ||
+          "N/A",
+
+        rol:
+          req.user.rol ||
+          "N/A",
+
+        modulo:
+          MODULO,
+
+        reporte:
+          REPORTE,
+
+        formato:
+          "PDF",
+
+        export_id:
+          exportId,
+
+        filtros_json:
+          filtros,
+
+        total_registros:
+          resultado.data.length,
+
+        resumen_json:
+          construirResumenAuditoria(
+            resultado
+          ),
+
+        estado:
+          "GENERADO",
+
+        error_mensaje:
+          null,
+
+        ip_origen:
+          getIp(
+            req
+          ),
+
+        user_agent:
+          req.headers[
+            "user-agent"
+          ] || null,
+      });
+
+
+      /* ===================================================
+         6. RESPONDER PDF
+         =================================================== */
+
+      res.setHeader(
+        "Content-Type",
+        "application/pdf"
+      );
+
+
+      res.setHeader(
+        "Content-Disposition",
+        'inline; filename="recoleccion_cuatrimestral.pdf"'
+      );
+
+
+      return res
+        .status(200)
+        .send(
+          pdfBuffer
+        );
+
+    } catch (
+      error
+    ) {
+      console.error(
+        "Error exportarPdf (GraficasRecoleccion):",
+        error
+      );
+
+
+      await registrarAuditoriaFallida({
+        req,
+
+        formato:
+          "PDF",
+
+        exportId,
+
+        filtros,
+
+        error,
+      });
+
+
+      return responderError(
+        res,
+        error
+      );
+    }
+  };
+
+
+/* =========================================================
+   EXPORTAR EXCEL
+
+   GET
+   /api/graficas-recoleccion/cuatrimestral/export/excel
+   ========================================================= */
+
+exports.exportarExcel =
+  async function exportarExcel(
+    req,
+    res
+  ) {
+
+    /* =====================================================
+       1. AUTENTICACIÓN
+       ===================================================== */
+
+    if (
+      !requireAuth(
+        req,
+        res
+      )
+    ) {
+      return;
+    }
+
+
+    /* =====================================================
+       2. EXPORT ID
+       ===================================================== */
+
+    const exportId =
+      String(
+        req.query
+          ?.exportId ||
+        ""
+      ).trim();
+
+
+    if (
+      !exportId
+    ) {
+      return res
+        .status(400)
+        .json({
+          success:
+            false,
+
+          message:
+            "exportId es requerido.",
+
+          type:
+            "validation",
+
+          code:
+            "EXPORT_ID_REQUIRED",
+        });
+    }
+
+
+    let filtros =
+      null;
+
+
+    try {
+
+      /* ===================================================
+         3. RECONSTRUIR DATOS DESDE BACKEND
+         =================================================== */
+
+      const {
+        filtros:
+          filtrosExportacion,
+
+        resultado,
+      } =
+        await obtenerDatosExportacion({
+          exportId,
+
+          usuarioId:
+            req.user.id_usuario,
+        });
+
+
+      filtros =
+        filtrosExportacion;
+
+
+      /* ===================================================
+         4. GENERAR EXCEL
+         =================================================== */
+
+      const excelBuffer =
+        await buildGraficasRecoleccionCuatrimestralExcelBuffer({
+          filtros,
+
+          generadoPor:
+            req.user,
+
+          data:
+            resultado.data,
+        });
+
+
+      /* ===================================================
+         5. AUDITORÍA EXITOSA
+         =================================================== */
+
+      await registrarAuditoriaExportacion({
+        usuario_id:
+          req.user.id_usuario,
+
+        usuario:
+          req.user.usuario ||
+          "N/A",
+
+        rol:
+          req.user.rol ||
+          "N/A",
+
+        modulo:
+          MODULO,
+
+        reporte:
+          REPORTE,
+
+        formato:
+          "EXCEL",
+
+        export_id:
+          exportId,
+
+        filtros_json:
+          filtros,
+
+        total_registros:
+          resultado.data.length,
+
+        resumen_json:
+          construirResumenAuditoria(
+            resultado
+          ),
+
+        estado:
+          "GENERADO",
+
+        error_mensaje:
+          null,
+
+        ip_origen:
+          getIp(
+            req
+          ),
+
+        user_agent:
+          req.headers[
+            "user-agent"
+          ] || null,
+      });
+
+
+      /* ===================================================
+         6. RESPONDER EXCEL
+         =================================================== */
+
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      );
+
+
+      res.setHeader(
+        "Content-Disposition",
+        'attachment; filename="recoleccion_cuatrimestral.xlsx"'
+      );
+
+
+      return res
+        .status(200)
+        .send(
+          Buffer.from(
+            excelBuffer
+          )
+        );
+
+    } catch (
+      error
+    ) {
+      console.error(
+        "Error exportarExcel (GraficasRecoleccion):",
+        error
+      );
+
+
+      await registrarAuditoriaFallida({
+        req,
+
+        formato:
+          "EXCEL",
+
+        exportId,
+
+        filtros,
+
+        error,
+      });
+
+
+      return responderError(
+        res,
+        error
+      );
+    }
+  };

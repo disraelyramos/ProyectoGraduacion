@@ -1,16 +1,49 @@
-const express = require("express");
-const router = express.Router();
+// backend/src/routes/graficasderecoleccion/GraficasRecoleccion.routes.js
 
-const authenticateToken = require("../../middlewares/auth.middleware");
+const express =
+  require("express");
+
+
+const router =
+  express.Router();
+
+
+const authenticateToken =
+  require(
+    "../../middlewares/auth.middleware"
+  );
+
+
 const {
   getGraficasRecoleccionCuatrimestral,
-} = require("../../controllers/graficasderecoleccion/GraficasRecoleccion.controller");
+  exportarPdf,
+  exportarExcel,
+} = require(
+  "../../controllers/graficasderecoleccion/GraficasRecoleccion.controller"
+);
 
-// Gráficas de recolección por cuatrimestre
+
 router.get(
   "/cuatrimestral",
   authenticateToken,
   getGraficasRecoleccionCuatrimestral
 );
 
-module.exports = router;
+
+router.get(
+  "/cuatrimestral/export/pdf",
+  authenticateToken,
+  exportarPdf
+);
+
+
+
+router.get(
+  "/cuatrimestral/export/excel",
+  authenticateToken,
+  exportarExcel
+);
+
+
+module.exports =
+  router;

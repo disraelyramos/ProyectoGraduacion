@@ -1,232 +1,1536 @@
-const puppeteer = require("puppeteer");
+const {
+  PDF_COLORS,
+  PDF_STYLES,
+  PDF_TABLE_LAYOUT,
+  crearPdfBuffer,
+} = require("./pdfmake.config");
 
-// ===== Browser singleton (evita delay) =====
-let browserPromise = null;
-async function getBrowser() {
-  if (!browserPromise) {
-    browserPromise = puppeteer.launch({
-      headless: "new",
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
-    });
+
+/* =========================================================
+   CONSTANTES
+   ========================================================= */
+
+const MAX_TEXT_LENGTH =
+  500;
+
+
+/* =========================================================
+   TEXTO SEGURO
+   ========================================================= */
+
+function textoSeguro(
+  valor,
+  maxLength = MAX_TEXT_LENGTH
+) {
+  if (
+    valor === null ||
+    valor === undefined ||
+    valor === ""
+  ) {
+    return "-";
   }
-  return browserPromise;
-}
 
-// ===== Helpers =====
-function safeText(v) {
-  return v === null || v === undefined ? "" : String(v);
-}
 
-function escapeHtml(v) {
-  return safeText(v)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
+  const texto =
+    String(valor).trim();
 
-function fmtDateTimeGT() {
-  const d = new Date();
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(
-    d.getHours()
-  )}:${pad(d.getMinutes())}`;
-}
 
-function fmtQ(n) {
-  const x = Number(n || 0);
-  return `Q ${x.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
-function fmtLb(n) {
-  const x = Number(n || 0);
-  return `${x.toLocaleString()} lbs`;
-}
-
-function fmtQlb(n) {
-  const x = Number(n || 0);
-  return `Q ${x.toFixed(2)}/lb`;
-}
-
-function renderTableRows(rows, cols, emptyColspan) {
-  if (!rows?.length) {
-    return `<tr><td class="empty" colspan="${emptyColspan}">Sin registros para mostrar.</td></tr>`;
+  if (!texto) {
+    return "-";
   }
-  return rows
-    .map((r) => {
-      const tds = cols
-        .map((c) => {
-          const raw = typeof c.value === "function" ? c.value(r) : r?.[c.value];
-          const cls = c.className ? ` class="${c.className}"` : "";
-          return `<td${cls}>${escapeHtml(raw)}</td>`;
-        })
-        .join("");
-      return `<tr>${tds}</tr>`;
+
+
+  return texto.length > maxLength
+    ? `${texto.slice(
+        0,
+        maxLength
+      )}…`
+    : texto;
+}
+
+
+/* =========================================================
+   NÚMERO
+   ========================================================= */
+
+function numero(
+  valor,
+  {
+    minDecimales = 0,
+    maxDecimales = 2,
+  } = {}
+) {
+  if (
+    valor === null ||
+    valor === undefined ||
+    valor === ""
+  ) {
+    return "-";
+  }
+
+
+  const numeroValor =
+    Number(valor);
+
+
+  if (
+    !Number.isFinite(
+      numeroValor
+    )
+  ) {
+    return textoSeguro(
+      valor
+    );
+  }
+
+
+  return new Intl.NumberFormat(
+    "es-GT",
+    {
+      minimumFractionDigits:
+        minDecimales,
+
+      maximumFractionDigits:
+        maxDecimales,
+    }
+  ).format(
+    numeroValor
+  );
+}
+
+
+/* =========================================================
+   MONEDA EN QUETZALES
+   ========================================================= */
+
+function monedaQuetzales(
+  valor,
+  decimales = 2
+) {
+  if (
+    valor === null ||
+    valor === undefined ||
+    valor === ""
+  ) {
+    return "-";
+  }
+
+
+  const numeroValor =
+    Number(valor);
+
+
+  if (
+    !Number.isFinite(
+      numeroValor
+    )
+  ) {
+    return textoSeguro(
+      valor
+    );
+  }
+
+
+  const monto =
+    new Intl.NumberFormat(
+      "es-GT",
+      {
+        minimumFractionDigits:
+          decimales,
+
+        maximumFractionDigits:
+          decimales,
+      }
+    ).format(
+      numeroValor
+    );
+
+
+  return `Q${monto}`;
+}
+
+
+/* =========================================================
+   LIBRAS
+   ========================================================= */
+
+function libras(
+  valor
+) {
+  if (
+    valor === null ||
+    valor === undefined ||
+    valor === ""
+  ) {
+    return "-";
+  }
+
+
+  const numeroValor =
+    Number(valor);
+
+
+  if (
+    !Number.isFinite(
+      numeroValor
+    )
+  ) {
+    return textoSeguro(
+      valor
+    );
+  }
+
+
+  return `${numero(
+    numeroValor,
+    {
+      minDecimales: 0,
+      maxDecimales: 2,
+    }
+  )} lb`;
+}
+
+
+/* =========================================================
+   COSTO POR LIBRA
+
+   Se conservan 4 decimales porque el backend calcula
+   q_por_lb y costo_por_libra_aplicado con precisión.
+   ========================================================= */
+
+function costoPorLibra(
+  valor
+) {
+  if (
+    valor === null ||
+    valor === undefined ||
+    valor === ""
+  ) {
+    return "-";
+  }
+
+
+  const numeroValor =
+    Number(valor);
+
+
+  if (
+    !Number.isFinite(
+      numeroValor
+    )
+  ) {
+    return textoSeguro(
+      valor
+    );
+  }
+
+
+  return `${monedaQuetzales(
+    numeroValor,
+    4
+  )}/lb`;
+}
+
+
+/* =========================================================
+   PORCENTAJE
+   ========================================================= */
+
+function porcentaje(
+  valor
+) {
+  if (
+    valor === null ||
+    valor === undefined ||
+    valor === ""
+  ) {
+    return "-";
+  }
+
+
+  const numeroValor =
+    Number(valor);
+
+
+  if (
+    !Number.isFinite(
+      numeroValor
+    )
+  ) {
+    return textoSeguro(
+      valor
+    );
+  }
+
+
+  return `${numero(
+    numeroValor,
+    {
+      minDecimales: 0,
+      maxDecimales: 2,
+    }
+  )}%`;
+}
+
+
+/* =========================================================
+   FECHA YYYY-MM-DD PARA PDF
+   ========================================================= */
+
+function fechaParaPdf(
+  valor
+) {
+  const fecha =
+    String(
+      valor || ""
+    ).trim();
+
+
+  const match =
+    /^(\d{4})-(\d{2})-(\d{2})$/
+      .exec(
+        fecha
+      );
+
+
+  if (!match) {
+    return textoSeguro(
+      valor
+    );
+  }
+
+
+  const [
+    ,
+    year,
+    month,
+    day,
+  ] =
+    match;
+
+
+  return `${day}/${month}/${year}`;
+}
+
+
+/* =========================================================
+   FECHA/HORA DE GENERACIÓN
+
+   Se fuerza America/Guatemala porque Railway u otro
+   servidor puede utilizar otra zona horaria.
+   ========================================================= */
+
+function fechaHoraGuatemala() {
+  return new Intl.DateTimeFormat(
+    "es-GT",
+    {
+      timeZone:
+        "America/Guatemala",
+
+      day:
+        "2-digit",
+
+      month:
+        "2-digit",
+
+      year:
+        "numeric",
+
+      hour:
+        "2-digit",
+
+      minute:
+        "2-digit",
+
+      hour12:
+        false,
+    }
+  ).format(
+    new Date()
+  );
+}
+
+
+/* =========================================================
+   AGRUPACIÓN PARA MOSTRAR
+   ========================================================= */
+
+function descripcionAgrupacion(
+  valor
+) {
+  switch (
+    String(
+      valor || ""
+    )
+      .trim()
+      .toLowerCase()
+  ) {
+    case "semana":
+      return "Semana";
+
+    case "anio":
+    case "año":
+      return "Año";
+
+    case "mes":
+      return "Mes";
+
+    default:
+      return "-";
+  }
+}
+
+
+/* =========================================================
+   ORDEN PARA MOSTRAR
+   ========================================================= */
+
+function descripcionOrden(
+  valor
+) {
+  return (
+    String(
+      valor || ""
+    )
+      .trim()
+      .toLowerCase() ===
+    "asc"
+  )
+    ? "Más antigua"
+    : "Más reciente";
+}
+
+
+/* =========================================================
+   CELDAS
+   ========================================================= */
+
+function celda(
+  valor,
+  style = "tableCell"
+) {
+  return {
+    text:
+      textoSeguro(
+        valor
+      ),
+
+    style,
+  };
+}
+
+
+function celdaMoneda(
+  valor,
+  decimales = 2
+) {
+  return {
+    text:
+      monedaQuetzales(
+        valor,
+        decimales
+      ),
+
+    style:
+      "tableCellRight",
+  };
+}
+
+
+function celdaLibras(
+  valor
+) {
+  return {
+    text:
+      libras(
+        valor
+      ),
+
+    style:
+      "tableCellRight",
+  };
+}
+
+
+function celdaCostoLibra(
+  valor
+) {
+  return {
+    text:
+      costoPorLibra(
+        valor
+      ),
+
+    style:
+      "tableCellRight",
+  };
+}
+
+
+function celdaPorcentaje(
+  valor
+) {
+  return {
+    text:
+      porcentaje(
+        valor
+      ),
+
+    style:
+      "tableCellRight",
+  };
+}
+
+
+/* =========================================================
+   HEADER DE TABLA
+   ========================================================= */
+
+function crearHeader(
+  columnas
+) {
+  return columnas.map(
+    (texto) => ({
+      text:
+        texto,
+
+      style:
+        "tableHeader",
+
+      fillColor:
+        PDF_COLORS.tableHeader,
+
+      margin: [
+        0,
+        2,
+        0,
+        2,
+      ],
     })
-    .join("");
+  );
 }
 
-function buildHtml({ filtros, generadoPor, kpis, resumen, topContenedores, detalle }) {
-  const nombre = escapeHtml(generadoPor?.nombre);
-  const usuario = escapeHtml(generadoPor?.usuario);
 
-  const kpiCards = [
-    { label: "Total Gastado (Q)", value: fmtQ(kpis?.total_q) },
-    { label: "Total Libras", value: fmtLb(kpis?.total_lbs) },
-    { label: "Promedio Q/lb", value: fmtQlb(kpis?.q_por_lb) },
-    { label: "Recolecciones", value: String(kpis?.recolecciones || 0) },
+/* =========================================================
+   FILAS VACÍAS
+   ========================================================= */
+
+function filaVacia(
+  columnas
+) {
+  return [
+    {
+      text:
+        "Sin registros para mostrar.",
+
+      colSpan:
+        columnas,
+
+      style:
+        "empty",
+
+      margin: [
+        0,
+        6,
+        0,
+        6,
+      ],
+    },
+
+    ...Array.from(
+      {
+        length:
+          columnas - 1,
+      },
+      () => ({})
+    ),
   ];
-
-  const resumenCols = [
-    { value: "periodo" },
-    { value: (r) => fmtQ(r.total_q), className: "num" },
-    { value: (r) => fmtLb(r.total_lbs), className: "num" },
-    { value: (r) => fmtQlb(r.q_por_lb), className: "num" },
-    { value: "recolecciones", className: "num" },
-  ];
-
-  const topCols = [
-    { value: "contenedor_codigo" },
-    { value: (r) => fmtQ(r.total_q), className: "num" },
-  ];
-
-  const detCols = [
-    { value: "fecha" },
-    { value: "codigo_contenedor" },
-    { value: "distrito" },
-    { value: "empresa_recolectora" },
-    { value: (r) => fmtLb(r.total_en_libras), className: "num" },
-    { value: (r) => safeText(r.porcentaje_llenado ?? ""), className: "num" },
-    { value: (r) => safeText(r.costo_por_libra_aplicado ?? ""), className: "num" },
-    { value: (r) => fmtQ(r.total_costo_q), className: "num" },
-  ];
-
-  return `<!doctype html>
-<html lang="es">
-<head>
-<meta charset="utf-8" />
-<title>Reporte de Costos</title>
-<style>
-  *{box-sizing:border-box}
-  body{font-family:Arial,sans-serif;color:#111;margin:0;padding:24px}
-  .center{text-align:center}
-  h1{margin:0;font-size:20px;font-weight:700}
-  .sub{margin-top:4px;font-size:13px;color:#444}
-  .meta{margin-top:10px;font-size:12px}
-  .rule{margin:14px 0;border-top:1px solid #ddd}
-  h2{font-size:14px;margin:18px 0 8px}
-  .filters{font-size:12px;color:#222;line-height:1.35}
-  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:8px}
-  .kpi{border:1px solid #ddd;border-radius:8px;padding:10px}
-  .kpi .v{font-weight:700;font-size:13px}
-  .kpi .l{font-size:11px;color:#444;margin-top:4px}
-
-  table{width:100%;border-collapse:collapse;margin-top:8px}
-  th,td{border:1px solid #ddd;padding:6px;font-size:10.5px;vertical-align:top}
-  th{background:#f3f3f3;font-weight:700;text-align:left}
-  td.num{text-align:right;white-space:nowrap}
-  td.empty{text-align:center;color:#666;padding:12px}
-  thead{display:table-header-group}
-  tr{page-break-inside:avoid}
-  @page{size:A4;margin:20mm}
-</style>
-</head>
-<body>
-  <div class="center">
-    <h1>Reporte de Costos</h1>
-    <div class="sub">Control DSH</div>
-    <div class="meta">
-      Generado por: ${nombre}${usuario ? ` (${usuario})` : ""} &nbsp;&nbsp;&nbsp;
-      Fecha/Hora: ${escapeHtml(fmtDateTimeGT())}
-    </div>
-  </div>
-
-  <div class="rule"></div>
-
-  <h2>Cómo se hizo la búsqueda</h2>
-  <div class="filters">
-    <div>Rango: ${escapeHtml(filtros?.fechaInicio)} — ${escapeHtml(filtros?.fechaFin)}</div>
-    <div>Agrupar por: ${escapeHtml(filtros?.agruparPor)}</div>
-        <div>Distrito: ${escapeHtml(filtros?.distritoNombre || "")}</div>
-  <div>Empresa: ${escapeHtml(filtros?.empresaNombre || "")}</div>
-  <div>Contenedor: ${escapeHtml(filtros?.contenedorCodigo || "")}</div>
-</div>
-
-  <h2>Resultados</h2>
-  <div class="kpis">
-    ${kpiCards
-      .map((k) => `<div class="kpi"><div class="v">${escapeHtml(k.value)}</div><div class="l">${escapeHtml(k.label)}</div></div>`)
-      .join("")}
-  </div>
-
-  <h2>Resumen de Costos</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>Periodo</th>
-        <th>Total (Q)</th>
-        <th>Total lbs</th>
-        <th>Promedio Q/lb</th>
-        <th># Recolecciones</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${renderTableRows(resumen, resumenCols, 5)}
-    </tbody>
-  </table>
-
-  <h2>Top 5 Contenedores por Costo</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>Contenedor</th>
-        <th>Total (Q)</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${renderTableRows(topContenedores, topCols, 2)}
-    </tbody>
-  </table>
-
-  <h2>Detalle de Recolecciones</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>Fecha</th>
-        <th>Código</th>
-        <th>Distrito</th>
-        <th>Empresa</th>
-        <th>Total lbs</th>
-        <th>% Llenado</th>
-        <th>Costo/lb</th>
-        <th>Total (Q)</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${renderTableRows(detalle, detCols, 8)}
-    </tbody>
-  </table>
-</body>
-</html>`;
 }
 
-async function buildHistorialCostoPdfBuffer({ filtros, generadoPor, kpis, resumen, topContenedores, detalle }) {
-  const html = buildHtml({ filtros, generadoPor, kpis, resumen, topContenedores, detalle });
 
-  const browser = await getBrowser();
-  const page = await browser.newPage();
+/* =========================================================
+   FILAS RESUMEN DE COSTOS
+   ========================================================= */
 
-  try {
-    await page.setContent(html, { waitUntil: "domcontentloaded" });
-    return await page.pdf({
-      format: "A4",
-      printBackground: true,
-      margin: { top: "20mm", right: "20mm", bottom: "20mm", left: "20mm" },
-    });
-  } finally {
-    await page.close();
+function crearFilasResumen(
+  resumen = []
+) {
+  if (!resumen.length) {
+    return [
+      filaVacia(5),
+    ];
   }
+
+
+  return resumen.map(
+    (registro) => [
+      celda(
+        registro.periodo
+      ),
+
+      celdaMoneda(
+        registro.total_q,
+        2
+      ),
+
+      celdaLibras(
+        registro.total_lbs
+      ),
+
+      celdaCostoLibra(
+        registro.q_por_lb
+      ),
+
+      celda(
+        registro.recolecciones,
+        "tableCellCenter"
+      ),
+    ]
+  );
 }
 
-module.exports = { buildHistorialCostoPdfBuffer };
+
+/* =========================================================
+   FILAS TOP CONTENEDORES
+   ========================================================= */
+
+function crearFilasTopContenedores(
+  topContenedores = []
+) {
+  if (
+    !topContenedores.length
+  ) {
+    return [
+      filaVacia(2),
+    ];
+  }
+
+
+  return topContenedores.map(
+    (registro) => [
+      celda(
+        registro.contenedor_codigo
+      ),
+
+      celdaMoneda(
+        registro.total_q,
+        2
+      ),
+    ]
+  );
+}
+
+
+/* =========================================================
+   FILAS DETALLE
+   ========================================================= */
+
+function crearFilasDetalle(
+  detalle = []
+) {
+  if (!detalle.length) {
+    return [
+      filaVacia(8),
+    ];
+  }
+
+
+  return detalle.map(
+    (registro) => [
+      celda(
+        registro.fecha,
+        "tableCellCenter"
+      ),
+
+      celda(
+        registro.codigo_contenedor,
+        "tableCellCenter"
+      ),
+
+      celda(
+        registro.distrito
+      ),
+
+      celda(
+        registro.empresa_recolectora
+      ),
+
+      celdaLibras(
+        registro.total_en_libras
+      ),
+
+      celdaPorcentaje(
+        registro.porcentaje_llenado
+      ),
+
+      celdaCostoLibra(
+        registro.costo_por_libra_aplicado
+      ),
+
+      celdaMoneda(
+        registro.total_costo_q,
+        2
+      ),
+    ]
+  );
+}
+
+
+/* =========================================================
+   BLOQUE DE FILTROS
+   ========================================================= */
+
+function crearBloqueFiltros({
+  filtros,
+  totalRegistros,
+}) {
+  return {
+    margin: [
+      0,
+      0,
+      0,
+      8,
+    ],
+
+    table: {
+      widths: [
+        70,
+        "*",
+        70,
+        "*",
+      ],
+
+      body: [
+        [
+          {
+            text:
+              "Rango:",
+
+            style:
+              "filterLabel",
+          },
+
+          {
+            text:
+              `${fechaParaPdf(
+                filtros?.fechaInicio
+              )} — ${fechaParaPdf(
+                filtros?.fechaFin
+              )}`,
+          },
+
+          {
+            text:
+              "Agrupar por:",
+
+            style:
+              "filterLabel",
+          },
+
+          descripcionAgrupacion(
+            filtros?.agruparPor
+          ),
+        ],
+
+        [
+          {
+            text:
+              "Distrito:",
+
+            style:
+              "filterLabel",
+          },
+
+          textoSeguro(
+            filtros?.distritoNombre
+          ),
+
+          {
+            text:
+              "Empresa:",
+
+            style:
+              "filterLabel",
+          },
+
+          textoSeguro(
+            filtros?.empresaNombre
+          ),
+        ],
+
+        [
+          {
+            text:
+              "Contenedor:",
+
+            style:
+              "filterLabel",
+          },
+
+          textoSeguro(
+            filtros?.contenedorCodigo
+          ),
+
+          {
+            text:
+              "Orden:",
+
+            style:
+              "filterLabel",
+          },
+
+          descripcionOrden(
+            filtros?.order
+          ),
+        ],
+
+        [
+          {
+            text:
+              "Registros:",
+
+            style:
+              "filterLabel",
+          },
+
+          textoSeguro(
+            totalRegistros
+          ),
+
+          {},
+          {},
+        ],
+      ],
+    },
+
+    layout: {
+      hLineWidth() {
+        return 0;
+      },
+
+      vLineWidth() {
+        return 0;
+      },
+
+      paddingLeft() {
+        return 2;
+      },
+
+      paddingRight() {
+        return 6;
+      },
+
+      paddingTop() {
+        return 2;
+      },
+
+      paddingBottom() {
+        return 2;
+      },
+    },
+  };
+}
+
+
+/* =========================================================
+   KPIS
+   ========================================================= */
+
+function crearKpis(
+  kpis = {}
+) {
+  const items = [
+    {
+      label:
+        "Total Gastado",
+
+      value:
+        monedaQuetzales(
+          kpis?.total_q,
+          2
+        ),
+    },
+
+    {
+      label:
+        "Total Libras",
+
+      value:
+        libras(
+          kpis?.total_lbs
+        ),
+    },
+
+    {
+      label:
+        "Promedio Q/lb",
+
+      value:
+        costoPorLibra(
+          kpis?.q_por_lb
+        ),
+    },
+
+    {
+      label:
+        "Recolecciones",
+
+      value:
+        textoSeguro(
+          kpis?.recolecciones
+        ),
+    },
+  ];
+
+
+  return {
+    margin: [
+      0,
+      0,
+      0,
+      8,
+    ],
+
+    table: {
+      widths: [
+        "*",
+        "*",
+        "*",
+        "*",
+      ],
+
+      body: [
+        items.map(
+          (item) => ({
+            stack: [
+              {
+                text:
+                  item.value,
+
+                bold:
+                  true,
+
+                fontSize:
+                  10,
+
+                alignment:
+                  "center",
+
+                color:
+                  PDF_COLORS.text,
+
+                margin: [
+                  0,
+                  2,
+                  0,
+                  3,
+                ],
+              },
+
+              {
+                text:
+                  item.label,
+
+                fontSize:
+                  7.5,
+
+                alignment:
+                  "center",
+
+                color:
+                  PDF_COLORS.muted,
+              },
+            ],
+
+            margin: [
+              4,
+              5,
+              4,
+              5,
+            ],
+          })
+        ),
+      ],
+    },
+
+    layout: {
+      hLineWidth() {
+        return 0.5;
+      },
+
+      vLineWidth() {
+        return 0.5;
+      },
+
+      hLineColor() {
+        return PDF_COLORS.border;
+      },
+
+      vLineColor() {
+        return PDF_COLORS.border;
+      },
+
+      paddingLeft() {
+        return 3;
+      },
+
+      paddingRight() {
+        return 3;
+      },
+
+      paddingTop() {
+        return 3;
+      },
+
+      paddingBottom() {
+        return 3;
+      },
+    },
+  };
+}
+
+
+/* =========================================================
+   CONSTRUIR DOCUMENTO
+   ========================================================= */
+
+function construirDocumento({
+  filtros = {},
+  generadoPor = {},
+  kpis = {},
+  resumen = [],
+  topContenedores = [],
+  detalle = [],
+}) {
+  const generadoPorTexto =
+    generadoPor?.nombre ||
+    generadoPor?.usuario ||
+    "N/A";
+
+
+  const totalRegistros =
+    Array.isArray(
+      detalle
+    )
+      ? detalle.length
+      : 0;
+
+
+  return {
+
+    /* =====================================================
+       INFORMACIÓN DEL DOCUMENTO
+       ===================================================== */
+
+    info: {
+      title:
+        "Reporte de Costos",
+
+      subject:
+        "Control DSH",
+
+      creator:
+        "Sistema de Monitoreo",
+    },
+
+
+    /* =====================================================
+       PÁGINA
+       ===================================================== */
+
+    pageSize:
+      "A4",
+
+    /*
+      El detalle contiene 8 columnas.
+
+      Landscape evita comprimir excesivamente empresa,
+      distrito y valores numéricos.
+    */
+    pageOrientation:
+      "landscape",
+
+    pageMargins: [
+      28,
+      32,
+      28,
+      35,
+    ],
+
+
+    /* =====================================================
+       ESTILO GENERAL
+       ===================================================== */
+
+    defaultStyle: {
+      font:
+        "Roboto",
+
+      fontSize:
+        8,
+
+      color:
+        PDF_COLORS.text,
+    },
+
+
+    styles:
+      PDF_STYLES,
+
+
+    /* =====================================================
+       PIE DE PÁGINA
+       ===================================================== */
+
+    footer(
+      currentPage,
+      pageCount
+    ) {
+      return {
+        columns: [
+          {
+            text:
+              "Control DSH",
+
+            style:
+              "footer",
+
+            margin: [
+              28,
+              8,
+              0,
+              0,
+            ],
+          },
+
+          {
+            text:
+              `Página ${currentPage} de ${pageCount}`,
+
+            style:
+              "footer",
+
+            alignment:
+              "right",
+
+            margin: [
+              0,
+              8,
+              28,
+              0,
+            ],
+          },
+        ],
+      };
+    },
+
+
+    /* =====================================================
+       CONTENIDO
+       ===================================================== */
+
+    content: [
+
+      /* =========================
+         TÍTULO
+         ========================= */
+
+      {
+        text:
+          "Reporte de Costos",
+
+        style:
+          "title",
+      },
+
+
+      {
+        text:
+          "Control DSH",
+
+        style:
+          "subtitle",
+
+        margin: [
+          0,
+          2,
+          0,
+          5,
+        ],
+      },
+
+
+      /* =========================
+         METADATOS
+         ========================= */
+
+      {
+        columns: [
+          {
+            text: [
+              {
+                text:
+                  "Generado por: ",
+
+                bold:
+                  true,
+              },
+
+              textoSeguro(
+                generadoPorTexto
+              ),
+
+              generadoPor?.usuario
+                ? ` (${textoSeguro(
+                    generadoPor.usuario
+                  )})`
+                : "",
+            ],
+
+            style:
+              "metadata",
+          },
+
+          {
+            text: [
+              {
+                text:
+                  "Fecha/Hora: ",
+
+                bold:
+                  true,
+              },
+
+              fechaHoraGuatemala(),
+            ],
+
+            style:
+              "metadata",
+
+            alignment:
+              "right",
+          },
+        ],
+
+        margin: [
+          0,
+          0,
+          0,
+          8,
+        ],
+      },
+
+
+      /* =========================
+         LÍNEA
+         ========================= */
+
+      {
+        canvas: [
+          {
+            type:
+              "line",
+
+            x1:
+              0,
+
+            y1:
+              0,
+
+            x2:
+              785,
+
+            y2:
+              0,
+
+            lineWidth:
+              1,
+
+            lineColor:
+              PDF_COLORS.primary,
+          },
+        ],
+
+        margin: [
+          0,
+          0,
+          0,
+          7,
+        ],
+      },
+
+
+      /* =========================
+         FILTROS
+         ========================= */
+
+      {
+        text:
+          "Cómo se hizo la búsqueda",
+
+        style:
+          "sectionTitle",
+      },
+
+
+      crearBloqueFiltros({
+        filtros,
+        totalRegistros,
+      }),
+
+
+      /* =========================
+         KPIS
+         ========================= */
+
+      {
+        text:
+          "Resultados",
+
+        style:
+          "sectionTitle",
+      },
+
+
+      crearKpis(
+        kpis
+      ),
+
+
+      /* =========================
+         RESUMEN
+         ========================= */
+
+      {
+        text:
+          "Resumen de Costos",
+
+        style:
+          "sectionTitle",
+      },
+
+
+      {
+        table: {
+          headerRows:
+            1,
+
+          dontBreakRows:
+            true,
+
+          widths: [
+            "*",
+            110,
+            110,
+            110,
+            90,
+          ],
+
+          body: [
+            crearHeader([
+              "Periodo",
+              "Total (Q)",
+              "Total lb",
+              "Promedio Q/lb",
+              "# Recolecciones",
+            ]),
+
+            ...crearFilasResumen(
+              resumen
+            ),
+          ],
+        },
+
+        layout:
+          PDF_TABLE_LAYOUT,
+      },
+
+
+      /* =========================
+         TOP 5
+         ========================= */
+
+      {
+        text:
+          "Top 5 Contenedores por Costo",
+
+        style:
+          "sectionTitle",
+
+        margin: [
+          0,
+          13,
+          0,
+          5,
+        ],
+      },
+
+
+      {
+        table: {
+          headerRows:
+            1,
+
+          dontBreakRows:
+            true,
+
+          widths: [
+            "*",
+            180,
+          ],
+
+          body: [
+            crearHeader([
+              "Contenedor",
+              "Total (Q)",
+            ]),
+
+            ...crearFilasTopContenedores(
+              topContenedores
+            ),
+          ],
+        },
+
+        layout:
+          PDF_TABLE_LAYOUT,
+      },
+
+
+      /* =========================
+         DETALLE
+         ========================= */
+
+      {
+        text:
+          "Detalle de Recolecciones",
+
+        style:
+          "sectionTitle",
+
+        margin: [
+          0,
+          13,
+          0,
+          5,
+        ],
+      },
+
+
+      {
+        table: {
+          headerRows:
+            1,
+
+          dontBreakRows:
+            true,
+
+          widths: [
+            72,
+            62,
+            75,
+            "*",
+            70,
+            65,
+            88,
+            80,
+          ],
+
+          body: [
+            crearHeader([
+              "Fecha",
+              "Código",
+              "Distrito",
+              "Empresa",
+              "Total lb",
+              "% Llenado",
+              "Costo/lb",
+              "Total (Q)",
+            ]),
+
+            ...crearFilasDetalle(
+              detalle
+            ),
+          ],
+        },
+
+        layout:
+          PDF_TABLE_LAYOUT,
+      },
+    ],
+  };
+}
+
+
+/* =========================================================
+   GENERAR PDF
+
+   CONTRATO PÚBLICO CONSERVADO.
+
+   Controller no necesita saber si internamente utilizamos
+   Puppeteer, pdfmake u otro motor.
+   ========================================================= */
+
+async function buildHistorialCostoPdfBuffer({
+  filtros,
+  generadoPor,
+  kpis,
+  resumen,
+  topContenedores,
+  detalle,
+}) {
+  const documentDefinition =
+    construirDocumento({
+      filtros:
+        filtros &&
+        typeof filtros === "object"
+          ? filtros
+          : {},
+
+      generadoPor:
+        generadoPor &&
+        typeof generadoPor === "object"
+          ? generadoPor
+          : {},
+
+      kpis:
+        kpis &&
+        typeof kpis === "object"
+          ? kpis
+          : {},
+
+      resumen:
+        Array.isArray(
+          resumen
+        )
+          ? resumen
+          : [],
+
+      topContenedores:
+        Array.isArray(
+          topContenedores
+        )
+          ? topContenedores
+          : [],
+
+      detalle:
+        Array.isArray(
+          detalle
+        )
+          ? detalle
+          : [],
+    });
+
+
+  return crearPdfBuffer(
+    documentDefinition
+  );
+}
+
+
+/* =========================================================
+   EXPORTACIÓN PÚBLICA
+   ========================================================= */
+
+module.exports = {
+  buildHistorialCostoPdfBuffer,
+};

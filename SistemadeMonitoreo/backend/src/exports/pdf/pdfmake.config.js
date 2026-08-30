@@ -1,33 +1,136 @@
+const path = require("path");
 const pdfmake = require("pdfmake");
 
 
 /* =========================================================
-   FUENTES
+   FUENTES ROBOTO
 
-   Se utilizan las fuentes Roboto incluidas dentro del
-   paquete pdfmake.
+   Obtenemos las rutas reales instaladas por npm.
 
-   require.resolve obtiene la ruta real instalada por npm,
-   evitando rutas absolutas o dependientes del equipo.
+   Estas mismas rutas serán las ÚNICAS rutas locales
+   autorizadas para pdfmake.
+   ========================================================= */
+
+const ROBOTO_REGULAR =
+  require.resolve(
+    "pdfmake/build/fonts/Roboto/Roboto-Regular.ttf"
+  );
+
+const ROBOTO_MEDIUM =
+  require.resolve(
+    "pdfmake/build/fonts/Roboto/Roboto-Medium.ttf"
+  );
+
+const ROBOTO_ITALIC =
+  require.resolve(
+    "pdfmake/build/fonts/Roboto/Roboto-Italic.ttf"
+  );
+
+const ROBOTO_MEDIUM_ITALIC =
+  require.resolve(
+    "pdfmake/build/fonts/Roboto/Roboto-MediumItalic.ttf"
+  );
+
+
+/* =========================================================
+   POLÍTICA DE ACCESO A URL
+
+   Los reportes del sistema NO necesitan descargar:
+
+   - imágenes externas
+   - fuentes externas
+   - archivos externos
+
+   Por seguridad se bloquea TODO acceso HTTP/HTTPS.
+
+   Esto también evita que una definición de PDF manipulada
+   provoque solicitudes externas desde el servidor.
+   ========================================================= */
+
+pdfmake.setUrlAccessPolicy(
+  () => false
+);
+
+
+/* =========================================================
+   POLÍTICA DE ACCESO LOCAL
+
+   pdfmake necesita leer las fuentes Roboto desde node_modules.
+
+   No damos acceso general al sistema de archivos.
+
+   Únicamente permitimos exactamente las cuatro fuentes
+   utilizadas por nuestros reportes.
+   ========================================================= */
+
+const ARCHIVOS_LOCALES_PERMITIDOS =
+  new Set(
+    [
+      ROBOTO_REGULAR,
+      ROBOTO_MEDIUM,
+      ROBOTO_ITALIC,
+      ROBOTO_MEDIUM_ITALIC,
+    ].map(
+      (archivo) =>
+        path.resolve(
+          archivo
+        )
+    )
+  );
+
+
+pdfmake.setLocalAccessPolicy(
+  (archivoSolicitado) => {
+    if (
+      typeof archivoSolicitado !==
+      "string"
+    ) {
+      return false;
+    }
+
+
+    let rutaNormalizada;
+
+
+    try {
+      rutaNormalizada =
+        path.resolve(
+          archivoSolicitado
+        );
+    } catch {
+      return false;
+    }
+
+
+    return (
+      ARCHIVOS_LOCALES_PERMITIDOS.has(
+        rutaNormalizada
+      )
+    );
+  }
+);
+
+
+/* =========================================================
+   REGISTRAR FUENTES
+
+   Se utilizan únicamente las rutas que acabamos de incluir
+   en la política local.
    ========================================================= */
 
 pdfmake.addFonts({
   Roboto: {
-    normal: require.resolve(
-      "pdfmake/build/fonts/Roboto/Roboto-Regular.ttf"
-    ),
+    normal:
+      ROBOTO_REGULAR,
 
-    bold: require.resolve(
-      "pdfmake/build/fonts/Roboto/Roboto-Medium.ttf"
-    ),
+    bold:
+      ROBOTO_MEDIUM,
 
-    italics: require.resolve(
-      "pdfmake/build/fonts/Roboto/Roboto-Italic.ttf"
-    ),
+    italics:
+      ROBOTO_ITALIC,
 
-    bolditalics: require.resolve(
-      "pdfmake/build/fonts/Roboto/Roboto-MediumItalic.ttf"
-    ),
+    bolditalics:
+      ROBOTO_MEDIUM_ITALIC,
   },
 });
 
@@ -35,97 +138,173 @@ pdfmake.addFonts({
 /* =========================================================
    COLORES GENERALES DE PDF
 
-   Este será el equivalente al CSS general del frontend.
-   Los demás reportes podrán reutilizar estos colores.
+   Equivalente a estilos globales reutilizables para todos
+   los reportes.
    ========================================================= */
 
-const PDF_COLORS = Object.freeze({
-  primary: "#0D6EFD",
+const PDF_COLORS =
+  Object.freeze({
+    primary:
+      "#0D6EFD",
 
-  text: "#212529",
+    text:
+      "#212529",
 
-  muted: "#6C757D",
+    muted:
+      "#6C757D",
 
-  border: "#DDE2E6",
+    border:
+      "#DDE2E6",
 
-  tableHeader: "#111827",
+    tableHeader:
+      "#111827",
 
-  tableHeaderText: "#FFFFFF",
+    tableHeaderText:
+      "#FFFFFF",
 
-  tableAlternate: "#F6F8FA",
-});
+    tableAlternate:
+      "#F6F8FA",
+  });
 
 
 /* =========================================================
    ESTILOS GENERALES
    ========================================================= */
 
-const PDF_STYLES = Object.freeze({
-  title: {
-    fontSize: 17,
-    bold: true,
-    color: PDF_COLORS.text,
-    alignment: "center",
-  },
+const PDF_STYLES =
+  Object.freeze({
+    title: {
+      fontSize:
+        17,
 
-  subtitle: {
-    fontSize: 10,
-    color: PDF_COLORS.muted,
-    alignment: "center",
-  },
+      bold:
+        true,
 
-  metadata: {
-    fontSize: 8,
-    color: PDF_COLORS.muted,
-  },
+      color:
+        PDF_COLORS.text,
 
-  sectionTitle: {
-    fontSize: 11,
-    bold: true,
-    color: PDF_COLORS.text,
-    margin: [0, 8, 0, 5],
-  },
+      alignment:
+        "center",
+    },
 
-  filterLabel: {
-    bold: true,
-  },
 
-  tableHeader: {
-    fontSize: 7.5,
-    bold: true,
-    color: PDF_COLORS.tableHeaderText,
-    alignment: "center",
-  },
+    subtitle: {
+      fontSize:
+        10,
 
-  tableCell: {
-    fontSize: 7.2,
-    color: PDF_COLORS.text,
-  },
+      color:
+        PDF_COLORS.muted,
 
-  tableCellCenter: {
-    fontSize: 7.2,
-    color: PDF_COLORS.text,
-    alignment: "center",
-  },
+      alignment:
+        "center",
+    },
 
-  tableCellRight: {
-    fontSize: 7.2,
-    color: PDF_COLORS.text,
-    alignment: "right",
-  },
 
-  empty: {
-    fontSize: 8,
-    color: PDF_COLORS.muted,
-    alignment: "center",
-    italics: true,
-  },
+    metadata: {
+      fontSize:
+        8,
 
-  footer: {
-    fontSize: 7,
-    color: PDF_COLORS.muted,
-  },
-});
+      color:
+        PDF_COLORS.muted,
+    },
+
+
+    sectionTitle: {
+      fontSize:
+        11,
+
+      bold:
+        true,
+
+      color:
+        PDF_COLORS.text,
+
+      margin: [
+        0,
+        8,
+        0,
+        5,
+      ],
+    },
+
+
+    filterLabel: {
+      bold:
+        true,
+    },
+
+
+    tableHeader: {
+      fontSize:
+        7.5,
+
+      bold:
+        true,
+
+      color:
+        PDF_COLORS.tableHeaderText,
+
+      alignment:
+        "center",
+    },
+
+
+    tableCell: {
+      fontSize:
+        7.2,
+
+      color:
+        PDF_COLORS.text,
+    },
+
+
+    tableCellCenter: {
+      fontSize:
+        7.2,
+
+      color:
+        PDF_COLORS.text,
+
+      alignment:
+        "center",
+    },
+
+
+    tableCellRight: {
+      fontSize:
+        7.2,
+
+      color:
+        PDF_COLORS.text,
+
+      alignment:
+        "right",
+    },
+
+
+    empty: {
+      fontSize:
+        8,
+
+      color:
+        PDF_COLORS.muted,
+
+      alignment:
+        "center",
+
+      italics:
+        true,
+    },
+
+
+    footer: {
+      fontSize:
+        7,
+
+      color:
+        PDF_COLORS.muted,
+    },
+  });
 
 
 /* =========================================================
@@ -137,29 +316,36 @@ const PDF_TABLE_LAYOUT = {
     return 0.5;
   },
 
+
   vLineWidth() {
     return 0.5;
   },
+
 
   hLineColor() {
     return PDF_COLORS.border;
   },
 
+
   vLineColor() {
     return PDF_COLORS.border;
   },
+
 
   paddingLeft() {
     return 4;
   },
 
+
   paddingRight() {
     return 4;
   },
 
+
   paddingTop() {
     return 4;
   },
+
 
   paddingBottom() {
     return 4;
@@ -169,6 +355,9 @@ const PDF_TABLE_LAYOUT = {
 
 /* =========================================================
    CREAR BUFFER PDF
+
+   Todos los reportes utilizan este único punto de entrada
+   para convertir documentDefinition en Buffer.
    ========================================================= */
 
 async function crearPdfBuffer(
@@ -176,7 +365,11 @@ async function crearPdfBuffer(
 ) {
   if (
     !documentDefinition ||
-    typeof documentDefinition !== "object"
+    typeof documentDefinition !==
+      "object" ||
+    Array.isArray(
+      documentDefinition
+    )
   ) {
     throw new Error(
       "La definición del PDF es inválida."
@@ -194,18 +387,18 @@ async function crearPdfBuffer(
     await pdf.getBuffer();
 
 
-  return Buffer.isBuffer(buffer)
+  return Buffer.isBuffer(
+    buffer
+  )
     ? buffer
-    : Buffer.from(buffer);
+    : Buffer.from(
+        buffer
+      );
 }
 
 
 /* =========================================================
    EXPORTACIONES
-
-   IMPORTANTE:
-   historialRecoleccion.pdf.js obtiene estos nombres
-   exactamente desde aquí.
    ========================================================= */
 
 module.exports = {

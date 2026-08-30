@@ -52,9 +52,6 @@ function obtenerEntero(
 }
 
 
-/* =========================================================
-   BOOLEAN
-   ========================================================= */
 
 function obtenerBoolean(nombre) {
   const valor =
