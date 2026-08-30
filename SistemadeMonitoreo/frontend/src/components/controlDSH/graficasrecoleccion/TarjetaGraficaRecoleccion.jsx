@@ -1,10 +1,11 @@
 import React from "react";
 
 import {
-  Card,
-  Row,
-  Col,
-} from "react-bootstrap";
+  FaBiohazard,
+  FaSyringe,
+  FaChartBar,
+  FaCalendarAlt,
+} from "react-icons/fa";
 
 import GraficaLineaRecoleccion
   from "../../charts/GraficaLineaRecoleccion";
@@ -12,20 +13,14 @@ import GraficaLineaRecoleccion
 
 /* =========================================================
    FORMATO VISUAL DE LIBRAS
-
-   IMPORTANTE:
-   Esto NO calcula valores de negocio.
-
-   Solamente formatea visualmente lo que backend ya calculó.
    ========================================================= */
 
 function formatearLibras(
   valor
 ) {
+
   const numero =
-    Number(
-      valor
-    );
+    Number(valor);
 
 
   if (
@@ -33,6 +28,7 @@ function formatearLibras(
       numero
     )
   ) {
+
     return "0.00 lb";
   }
 
@@ -40,11 +36,8 @@ function formatearLibras(
   return `${numero.toLocaleString(
     "es-GT",
     {
-      minimumFractionDigits:
-        2,
-
-      maximumFractionDigits:
-        2,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     }
   )} lb`;
 }
@@ -58,44 +51,45 @@ const TarjetaGraficaRecoleccion = ({
   data,
 }) => {
 
-  /*
-    data viene del backend.
-
-    Este componente:
-    - NO calcula totales
-    - NO calcula promedios
-    - NO modifica series
-    - NO determina meses
-  */
-
   const nombreMes =
     data?.nombreMes ||
     "-";
 
 
   return (
-    <Card className="shadow-sm h-100">
 
-      {/* ===================================================
+    <article className="system-card graficas-month-card">
+
+      {/* =================================================
           ENCABEZADO
-          =================================================== */}
+      ================================================= */}
 
-      <Card.Header className="bg-dark text-white fw-semibold">
+      <header className="graficas-month-header">
 
-        Desechos Sólidos generados en el mes de{" "}
-        {nombreMes}
+        <FaCalendarAlt
+          className="graficas-month-header-icon"
+          aria-hidden="true"
+        />
 
-      </Card.Header>
+
+        <h3 className="graficas-month-title">
+
+          Desechos Sólidos generados en el mes de{" "}
+
+          <span>
+            {nombreMes}
+          </span>
+
+        </h3>
+
+      </header>
 
 
-      <Card.Body>
+      {/* =================================================
+          GRÁFICA
+      ================================================= */}
 
-        {/* =================================================
-            GRÁFICA
-
-            Las categorías y series fueron construidas por
-            el backend.
-            ================================================= */}
+      <div className="graficas-chart-container">
 
         <GraficaLineaRecoleccion
           categorias={
@@ -107,92 +101,128 @@ const TarjetaGraficaRecoleccion = ({
           }
         />
 
+      </div>
+
+
+      {/* =================================================
+          RESUMEN
+      ================================================= */}
+
+      <div className="graficas-summary-grid">
 
         {/* =================================================
-            RESUMEN
+            BIOINFECCIOSO
+        ================================================= */}
 
-            Únicamente mostramos los valores recibidos desde
-            backend.
-            ================================================= */}
+        <div className="graficas-summary-item graficas-summary-bio">
 
-        <Row className="mt-3 g-3">
+          <span className="graficas-summary-icon">
 
-          <Col
-            xs={12}
-            md={4}
-          >
+            <FaBiohazard
+              aria-hidden="true"
+            />
 
-            <div className="border rounded p-2 text-center h-100">
-
-              <div className="small text-muted">
-                Total Bioinfeccioso
-              </div>
-
-              <div className="fw-bold">
-                {formatearLibras(
-                  data
-                    ?.totales
-                    ?.bioinfeccioso
-                )}
-              </div>
-
-            </div>
-
-          </Col>
+          </span>
 
 
-          <Col
-            xs={12}
-            md={4}
-          >
+          <div className="graficas-summary-content">
 
-            <div className="border rounded p-2 text-center h-100">
-
-              <div className="small text-muted">
-                Total Punzocortante
-              </div>
-
-              <div className="fw-bold">
-                {formatearLibras(
-                  data
-                    ?.totales
-                    ?.punzocortante
-                )}
-              </div>
-
-            </div>
-
-          </Col>
+            <span className="graficas-summary-label">
+              Total Bioinfeccioso
+            </span>
 
 
-          <Col
-            xs={12}
-            md={4}
-          >
+            <strong className="graficas-summary-value">
 
-            <div className="border rounded p-2 text-center h-100">
+              {formatearLibras(
+                data
+                  ?.totales
+                  ?.bioinfeccioso
+              )}
 
-              <div className="small text-muted">
-                Promedio General
-              </div>
+            </strong>
 
-              <div className="fw-bold">
-                {formatearLibras(
-                  data
-                    ?.promedioSemanal
-                    ?.general
-                )}
-              </div>
+          </div>
 
-            </div>
+        </div>
 
-          </Col>
 
-        </Row>
+        {/* =================================================
+            PUNZOCORTANTE
+        ================================================= */}
 
-      </Card.Body>
+        <div className="graficas-summary-item graficas-summary-punzocortante">
 
-    </Card>
+          <span className="graficas-summary-icon">
+
+            <FaSyringe
+              aria-hidden="true"
+            />
+
+          </span>
+
+
+          <div className="graficas-summary-content">
+
+            <span className="graficas-summary-label">
+              Total Punzocortante
+            </span>
+
+
+            <strong className="graficas-summary-value">
+
+              {formatearLibras(
+                data
+                  ?.totales
+                  ?.punzocortante
+              )}
+
+            </strong>
+
+          </div>
+
+        </div>
+
+
+        {/* =================================================
+            PROMEDIO
+        ================================================= */}
+
+        <div className="graficas-summary-item graficas-summary-promedio">
+
+          <span className="graficas-summary-icon">
+
+            <FaChartBar
+              aria-hidden="true"
+            />
+
+          </span>
+
+
+          <div className="graficas-summary-content">
+
+            <span className="graficas-summary-label">
+              Promedio General
+            </span>
+
+
+            <strong className="graficas-summary-value">
+
+              {formatearLibras(
+                data
+                  ?.promedioSemanal
+                  ?.general
+              )}
+
+            </strong>
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </article>
   );
 };
 

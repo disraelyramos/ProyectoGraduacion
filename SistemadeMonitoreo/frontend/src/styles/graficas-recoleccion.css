@@ -1,0 +1,896 @@
+/* =========================================================
+   GRAFICAS-RECOLECCION.CSS
+
+   DISEÑO ESPECÍFICO DEL HISTORIAL GRÁFICO
+
+   system.css controla:
+   - botones
+   - inputs
+   - selects
+   - labels
+   - spinners
+   - cards base
+   - tipografía base
+   - contenedores
+   ========================================================= */
+
+
+/* =========================================================
+   PÁGINA
+   ========================================================= */
+
+.graficas-recoleccion-page {
+  width: 100%;
+  min-width: 0;
+}
+
+
+/* =========================================================
+   CABECERA PRINCIPAL
+   ========================================================= */
+
+.graficas-page-header {
+  width: 100%;
+  min-width: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 24px;
+
+  margin-bottom: 24px;
+}
+
+
+.graficas-page-title {
+  min-width: 0;
+
+  display: flex;
+  align-items: flex-start;
+
+  gap: 14px;
+}
+
+
+.graficas-page-title > svg {
+  margin-top: 2px;
+
+  flex-shrink: 0;
+
+  color:
+    var(--color-primario);
+
+  font-size: 1.75rem;
+}
+
+
+.graficas-page-title .system-title {
+  margin-bottom: 4px;
+
+  font-size:
+    clamp(
+      1.45rem,
+      2.2vw,
+      1.9rem
+    );
+}
+
+
+.graficas-page-title .system-subtitle {
+  margin-bottom: 0;
+
+  color:
+    var(--color-texto-secundario);
+}
+
+
+/* =========================================================
+   EXPORTACIONES
+   ========================================================= */
+
+.graficas-export-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+
+  flex-wrap: wrap;
+
+  gap: 10px;
+
+  flex-shrink: 0;
+}
+
+
+.graficas-export-actions .app-btn {
+  min-width: 92px;
+}
+
+
+/* =========================================================
+   TARJETA DE FILTROS
+   ========================================================= */
+
+.graficas-filter-card {
+  width: 100%;
+  min-width: 0;
+
+  padding: 22px;
+
+  border:
+    1px solid
+    var(--color-borde);
+
+  border-radius:
+    var(--radio-card);
+
+  box-shadow:
+    0 4px 14px
+    rgba(0, 0, 0, 0.06);
+}
+
+
+/* =========================================================
+   FILTROS
+   ========================================================= */
+
+.graficas-filter-grid {
+  width: 100%;
+  min-width: 0;
+
+  display: grid;
+
+  grid-template-columns:
+    minmax(180px, 0.8fr)
+    minmax(300px, 1.4fr)
+    minmax(150px, 0.55fr);
+
+  align-items: end;
+
+  gap:
+    18px
+    20px;
+}
+
+
+.graficas-filter-group {
+  margin-bottom: 0;
+}
+
+
+.graficas-filter-card
+.system-form-label {
+  margin-bottom: 8px;
+
+  color:
+    var(--color-texto);
+
+  font-size: 0.88rem;
+}
+
+
+/* =========================================================
+   SELECTS DE FILTROS
+   ========================================================= */
+
+.graficas-filter-card
+.system-form-select {
+  background:
+    var(--color-superficie);
+
+  border-color:
+    var(--color-borde-input);
+}
+
+
+.graficas-filter-card
+.system-form-select:hover {
+  border-color:
+    var(--color-borde-hover);
+}
+
+
+.graficas-filter-card
+.system-form-select:focus {
+  border-color:
+    var(--color-primario);
+
+  box-shadow:
+    0 0 0 3px
+    var(--color-primario-suave);
+}
+
+
+/* =========================================================
+   BOTÓN FILTRAR
+   ========================================================= */
+
+.graficas-filter-action {
+  width: 100%;
+  min-width: 0;
+}
+
+
+.graficas-filter-action
+.app-btn {
+  min-height:
+    var(--input-altura);
+
+  box-shadow:
+    0 3px 8px
+    rgba(0, 127, 136, 0.16);
+}
+
+
+/* =========================================================
+   CAMPOS OBLIGATORIOS
+   ========================================================= */
+
+.graficas-required-help {
+  margin:
+    14px
+    0
+    0;
+
+  color:
+    var(--color-texto-secundario);
+
+  font-size: 0.8rem;
+}
+
+
+/* =========================================================
+   CARGANDO
+   ========================================================= */
+
+.graficas-loading {
+  width: 100%;
+
+  min-height: 180px;
+
+  display: flex;
+  flex-direction: column;
+
+  align-items: center;
+  justify-content: center;
+
+  gap: 12px;
+
+  margin-top: 24px;
+
+  color:
+    var(--color-texto-secundario);
+
+  text-align: center;
+}
+
+
+.graficas-loading p {
+  margin: 0;
+
+  font-size: 0.9rem;
+}
+
+
+/* =========================================================
+   GRID DE RESULTADOS
+
+   PC:
+   Enero    | Febrero
+   Marzo    | Abril
+   ========================================================= */
+
+.graficas-results-grid {
+  width: 100%;
+  min-width: 0;
+
+  display: grid;
+
+  grid-template-columns:
+    repeat(
+      2,
+      minmax(0, 1fr)
+    );
+
+  align-items: stretch;
+
+  gap: 22px;
+
+  margin-top: 22px;
+}
+
+
+/* =========================================================
+   TARJETA DE MES
+   ========================================================= */
+
+.graficas-month-card {
+  width: 100%;
+  min-width: 0;
+
+  display: flex;
+  flex-direction: column;
+
+  padding: 0;
+
+  overflow: hidden;
+
+  background:
+    var(--color-superficie);
+
+  border:
+    1px solid
+    var(--color-borde);
+
+  border-radius:
+    10px;
+
+  box-shadow:
+    0 3px 10px
+    rgba(0, 0, 0, 0.07);
+}
+
+
+/* =========================================================
+   ENCABEZADO DE TARJETA
+
+   Diseño aprobado:
+   franja turquesa
+   ========================================================= */
+
+.graficas-month-header {
+  width: 100%;
+
+  margin: 0;
+
+  padding:
+    12px
+    16px;
+
+  background:
+    linear-gradient(
+      135deg,
+      var(--color-primario-oscuro),
+      var(--color-primario)
+    );
+
+  border: 0;
+
+  border-radius: 0;
+}
+
+
+.graficas-month-title {
+  margin: 0;
+
+  color:
+    var(--color-texto-invertido);
+
+  font-size: 0.9rem;
+
+  font-weight: 700;
+
+  line-height: 1.4;
+}
+
+
+.graficas-month-title span {
+  color:
+    var(--color-texto-invertido);
+}
+
+
+/* =========================================================
+   GRÁFICA
+   ========================================================= */
+
+.graficas-chart-container {
+  width: 100%;
+  min-width: 0;
+
+  flex: 1;
+
+  padding:
+    18px
+    18px
+    4px;
+}
+
+
+/*
+ * Evita que canvas o SVG rompan
+ * el ancho de la tarjeta.
+ */
+
+.graficas-chart-container canvas,
+.graficas-chart-container svg {
+  max-width: 100%;
+}
+
+
+/* =========================================================
+   RESUMEN INFERIOR
+   ========================================================= */
+
+.graficas-summary-grid {
+  width: 100%;
+
+  display: grid;
+
+  grid-template-columns:
+    repeat(
+      3,
+      minmax(0, 1fr)
+    );
+
+  gap: 12px;
+
+  padding:
+    12px
+    14px
+    15px;
+
+  margin-top: 10px;
+}
+
+
+/* =========================================================
+   TARJETAS DE MÉTRICAS
+   ========================================================= */
+
+.graficas-summary-item {
+  position: relative;
+
+  min-width: 0;
+
+  display: flex;
+  flex-direction: column;
+
+  align-items: center;
+  justify-content: center;
+
+  gap: 4px;
+
+  min-height: 66px;
+
+  padding:
+    10px
+    12px;
+
+  background:
+    var(--color-superficie);
+
+  border:
+    1px solid
+    var(--color-borde);
+
+  border-radius:
+    var(--radio-medio);
+
+  text-align: center;
+
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+
+
+.graficas-summary-item:hover {
+  border-color:
+    var(--color-borde-hover);
+
+  box-shadow:
+    var(--sombra-suave);
+
+  transform:
+    translateY(-1px);
+}
+
+
+/* =========================================================
+   DIFERENCIACIÓN VISUAL DE MÉTRICAS
+   ========================================================= */
+
+.graficas-summary-item:nth-child(1) {
+  border-top:
+    3px solid
+    var(--color-primario);
+}
+
+
+.graficas-summary-item:nth-child(2) {
+  border-top:
+    3px solid
+    var(--color-peligro);
+}
+
+
+.graficas-summary-item:nth-child(3) {
+  border-top:
+    3px solid
+    var(--color-info);
+}
+
+
+/* =========================================================
+   LABEL DE MÉTRICA
+   ========================================================= */
+
+.graficas-summary-label {
+  display: block;
+
+  margin: 0;
+
+  color:
+    var(--color-texto-secundario);
+
+  font-size: 0.75rem;
+
+  font-weight: 500;
+
+  line-height: 1.3;
+}
+
+
+/* =========================================================
+   VALOR DE MÉTRICA
+   ========================================================= */
+
+.graficas-summary-value {
+  display: block;
+
+  color:
+    var(--color-texto);
+
+  font-size: 0.95rem;
+
+  font-weight: 700;
+
+  line-height: 1.25;
+
+  overflow-wrap: anywhere;
+}
+
+
+/* =========================================================
+   LAPTOP PEQUEÑA
+   ========================================================= */
+
+@media (max-width: 1150px) {
+
+  .graficas-results-grid {
+    gap: 18px;
+  }
+
+
+  .graficas-chart-container {
+    padding:
+      16px
+      14px
+      4px;
+  }
+
+
+  .graficas-summary-grid {
+    gap: 9px;
+
+    padding:
+      10px
+      12px
+      14px;
+  }
+
+
+  .graficas-summary-item {
+    padding:
+      9px
+      8px;
+  }
+
+}
+
+
+/* =========================================================
+   TABLET
+   ========================================================= */
+
+@media (max-width: 900px) {
+
+  .graficas-page-header {
+    align-items: flex-start;
+  }
+
+
+  .graficas-filter-grid {
+    grid-template-columns:
+      repeat(
+        2,
+        minmax(0, 1fr)
+      );
+  }
+
+
+  .graficas-filter-action {
+    grid-column:
+      1 / -1;
+  }
+
+
+  .graficas-filter-action
+  .app-btn {
+    width: 100%;
+  }
+
+
+  /*
+   * En tablet ponemos una gráfica por fila.
+   * Así evitamos que Chart.js se comprima.
+   */
+
+  .graficas-results-grid {
+    grid-template-columns: 1fr;
+  }
+
+}
+
+
+/* =========================================================
+   CELULARES
+   ========================================================= */
+
+@media (max-width: 600px) {
+
+  .graficas-page-header {
+    flex-direction: column;
+
+    align-items: stretch;
+
+    gap: 16px;
+
+    margin-bottom: 18px;
+  }
+
+
+  .graficas-page-title {
+    gap: 10px;
+  }
+
+
+  .graficas-page-title > svg {
+    font-size: 1.3rem;
+  }
+
+
+  /* EXPORTACIONES */
+
+  .graficas-export-actions {
+    width: 100%;
+
+    display: grid;
+
+    grid-template-columns:
+      repeat(
+        2,
+        minmax(0, 1fr)
+      );
+
+    gap: 8px;
+  }
+
+
+  .graficas-export-actions .app-btn {
+    width: 100%;
+
+    min-width: 0;
+  }
+
+
+  /* FILTROS */
+
+  .graficas-filter-card {
+    padding:
+      18px
+      14px;
+  }
+
+
+  .graficas-filter-grid {
+    grid-template-columns: 1fr;
+
+    gap: 16px;
+  }
+
+
+  .graficas-filter-action {
+    grid-column: auto;
+  }
+
+
+  /* RESULTADOS */
+
+  .graficas-results-grid {
+    grid-template-columns: 1fr;
+
+    gap: 16px;
+
+    margin-top: 18px;
+  }
+
+
+  .graficas-month-header {
+    padding:
+      11px
+      13px;
+  }
+
+
+  .graficas-month-title {
+    font-size: 0.86rem;
+  }
+
+
+  .graficas-chart-container {
+    padding:
+      14px
+      10px
+      2px;
+  }
+
+
+  /*
+   * Las tres métricas todavía caben
+   * en teléfonos medianos.
+   */
+
+  .graficas-summary-grid {
+    grid-template-columns:
+      repeat(
+        3,
+        minmax(0, 1fr)
+      );
+
+    gap: 7px;
+
+    padding:
+      10px;
+  }
+
+
+  .graficas-summary-item {
+    min-height: 62px;
+
+    padding:
+      8px
+      5px;
+  }
+
+
+  .graficas-summary-label {
+    font-size: 0.68rem;
+  }
+
+
+  .graficas-summary-value {
+    font-size: 0.82rem;
+  }
+
+}
+
+
+/* =========================================================
+   CELULARES PEQUEÑOS
+   ========================================================= */
+
+@media (max-width: 480px) {
+
+  .graficas-export-actions {
+    grid-template-columns: 1fr;
+  }
+
+
+  /*
+   * En teléfonos pequeños las métricas
+   * pasan a una columna para evitar
+   * contenido comprimido.
+   */
+
+  .graficas-summary-grid {
+    grid-template-columns: 1fr;
+
+    gap: 8px;
+  }
+
+
+  .graficas-summary-item {
+    min-height: 58px;
+  }
+
+
+  .graficas-summary-label {
+    font-size: 0.74rem;
+  }
+
+
+  .graficas-summary-value {
+    font-size: 0.9rem;
+  }
+
+}
+
+
+/* =========================================================
+   CELULARES MUY PEQUEÑOS
+   ========================================================= */
+
+@media (max-width: 380px) {
+
+  .graficas-page-title {
+    gap: 8px;
+  }
+
+
+  .graficas-page-title > svg {
+    font-size: 1.15rem;
+  }
+
+
+  .graficas-filter-card {
+    padding:
+      16px
+      12px;
+  }
+
+
+  .graficas-month-title {
+    font-size: 0.82rem;
+  }
+
+
+  .graficas-chart-container {
+    padding:
+      12px
+      6px
+      2px;
+  }
+
+}
+
+
+/* =========================================================
+   PANTALLAS GRANDES
+   ========================================================= */
+
+@media (min-width: 1500px) {
+
+  .graficas-results-grid {
+    gap: 24px;
+  }
+
+
+  .graficas-chart-container {
+    padding:
+      20px
+      22px
+      4px;
+  }
+
+}
+
+
+/* =========================================================
+   ACCESIBILIDAD
+   ========================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+
+  .graficas-summary-item {
+    transition: none;
+  }
+
+
+  .graficas-summary-item:hover {
+    transform: none;
+  }
+
+}

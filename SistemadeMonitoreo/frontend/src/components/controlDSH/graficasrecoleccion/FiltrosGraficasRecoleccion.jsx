@@ -3,13 +3,9 @@ import React, {
 } from "react";
 
 import {
-  Card,
-  Row,
-  Col,
-  Form,
-  Button,
-  Spinner,
-} from "react-bootstrap";
+  FaSearch,
+  FaFilter,
+} from "react-icons/fa";
 
 
 const FiltrosGraficasRecoleccion = ({
@@ -23,10 +19,6 @@ const FiltrosGraficasRecoleccion = ({
 
   /* =========================================================
      AÑOS DISPONIBLES
-
-     Esto solamente controla las opciones visibles.
-
-     Backend sigue validando realmente el año recibido.
      ========================================================= */
 
   const currentYear =
@@ -50,10 +42,6 @@ const FiltrosGraficasRecoleccion = ({
 
   /* =========================================================
      FILTROS COMPLETOS
-
-     Solo UX.
-
-     Backend mantiene la validación real.
      ========================================================= */
 
   const filtrosCompletos =
@@ -66,9 +54,7 @@ const FiltrosGraficasRecoleccion = ({
      ========================================================= */
 
   const handleAnioChange =
-    (
-      event
-    ) => {
+    (event) => {
 
       const valor =
         event.target.value;
@@ -77,20 +63,16 @@ const FiltrosGraficasRecoleccion = ({
       if (
         valor === ""
       ) {
-        setAnio(
-          ""
-        );
+
+        setAnio("");
 
         return;
       }
 
 
       setAnio(
-        Number(
-          valor
-        )
+        Number(valor)
       );
-
     };
 
 
@@ -99,9 +81,7 @@ const FiltrosGraficasRecoleccion = ({
      ========================================================= */
 
   const handleCuatrimestreChange =
-    (
-      event
-    ) => {
+    (event) => {
 
       const valor =
         event.target.value;
@@ -110,20 +90,16 @@ const FiltrosGraficasRecoleccion = ({
       if (
         valor === ""
       ) {
-        setCuatrimestre(
-          ""
-        );
+
+        setCuatrimestre("");
 
         return;
       }
 
 
       setCuatrimestre(
-        Number(
-          valor
-        )
+        Number(valor)
       );
-
     };
 
 
@@ -132,202 +108,212 @@ const FiltrosGraficasRecoleccion = ({
      ========================================================= */
 
   return (
-    <Card className="shadow-sm">
 
-      <Card.Body>
+    <section className="system-card graficas-filter-card">
 
-        <Row className="align-items-end g-3">
+      {/* =====================================================
+          TÍTULO DE FILTROS
+      ===================================================== */}
 
-          {/* =================================================
-              AÑO
-              ================================================= */}
+      <header className="graficas-filter-header">
 
-          <Col
-            xs={12}
-            md={4}
+        <FaFilter
+          aria-hidden="true"
+        />
+
+
+        <h2 className="graficas-filter-title">
+          Filtros de búsqueda
+        </h2>
+
+      </header>
+
+
+      {/* =====================================================
+          FILTROS
+      ===================================================== */}
+
+      <div className="graficas-filter-grid">
+
+        {/* =================================================
+            AÑO
+        ================================================= */}
+
+        <div className="system-form-group graficas-filter-group">
+
+          <label
+            htmlFor="grafica-anio"
+            className="system-form-label"
           >
 
-            <Form.Group>
+            Año
 
-              <Form.Label>
-                Año
+            <span className="system-form-required">
+              *
+            </span>
 
-                <span className="text-danger ms-1">
-                  *
-                </span>
-              </Form.Label>
+          </label>
 
 
-              <Form.Select
-                value={
-                  anio
-                }
-
-                onChange={
-                  handleAnioChange
-                }
-
-                disabled={
-                  loading
-                }
-              >
-
-                <option value="">
-                  Seleccione un año
-                </option>
-
-
-                {years.map(
-                  (
-                    year
-                  ) => (
-
-                    <option
-                      key={
-                        year
-                      }
-
-                      value={
-                        year
-                      }
-                    >
-                      {year}
-                    </option>
-
-                  )
-                )}
-
-              </Form.Select>
-
-            </Form.Group>
-
-          </Col>
-
-
-          {/* =================================================
-              CUATRIMESTRE
-              ================================================= */}
-
-          <Col
-            xs={12}
-            md={4}
+          <select
+            id="grafica-anio"
+            className="system-form-select"
+            value={anio}
+            onChange={
+              handleAnioChange
+            }
+            disabled={loading}
           >
 
-            <Form.Group>
-
-              <Form.Label>
-                Cuatrimestre
-
-                <span className="text-danger ms-1">
-                  *
-                </span>
-              </Form.Label>
+            <option value="">
+              Seleccione un año
+            </option>
 
 
-              <Form.Select
-                value={
-                  cuatrimestre
-                }
+            {years.map(
+              (year) => (
 
-                onChange={
-                  handleCuatrimestreChange
-                }
-
-                disabled={
-                  loading
-                }
-              >
-
-                <option value="">
-                  Seleccione un cuatrimestre
+                <option
+                  key={year}
+                  value={year}
+                >
+                  {year}
                 </option>
 
+              )
+            )}
 
-                <option value="1">
-                  Primer cuatrimestre — Enero a Abril
-                </option>
-
-
-                <option value="2">
-                  Segundo cuatrimestre — Mayo a Agosto
-                </option>
-
-
-                <option value="3">
-                  Tercer cuatrimestre — Septiembre a Diciembre
-                </option>
-
-              </Form.Select>
-
-            </Form.Group>
-
-          </Col>
-
-
-          {/* =================================================
-              FILTRAR
-              ================================================= */}
-
-          <Col
-            xs={12}
-            md={4}
-          >
-
-            <Button
-              type="button"
-
-              variant="primary"
-
-              className="w-100"
-
-              onClick={
-                onFiltrar
-              }
-
-              disabled={
-                loading ||
-                !filtrosCompletos
-              }
-            >
-
-              {loading ? (
-                <>
-                  <Spinner
-                    animation="border"
-                    size="sm"
-                    className="me-2"
-                  />
-
-                  Consultando...
-                </>
-              ) : (
-                <>
-                  <i className="bi bi-search me-2" />
-
-                  Filtrar
-                </>
-              )}
-
-            </Button>
-
-          </Col>
-
-        </Row>
-
-
-        <div className="small text-muted mt-2">
-
-          <span className="text-danger">
-            *
-          </span>
-
-          {" "}Campos obligatorios.
+          </select>
 
         </div>
 
-      </Card.Body>
 
-    </Card>
+        {/* =================================================
+            CUATRIMESTRE
+        ================================================= */}
+
+        <div className="system-form-group graficas-filter-group">
+
+          <label
+            htmlFor="grafica-cuatrimestre"
+            className="system-form-label"
+          >
+
+            Cuatrimestre
+
+            <span className="system-form-required">
+              *
+            </span>
+
+          </label>
+
+
+          <select
+            id="grafica-cuatrimestre"
+            className="system-form-select"
+            value={cuatrimestre}
+            onChange={
+              handleCuatrimestreChange
+            }
+            disabled={loading}
+          >
+
+            <option value="">
+              Seleccione un cuatrimestre
+            </option>
+
+
+            <option value="1">
+              Primer cuatrimestre — Enero a Abril
+            </option>
+
+
+            <option value="2">
+              Segundo cuatrimestre — Mayo a Agosto
+            </option>
+
+
+            <option value="3">
+              Tercer cuatrimestre — Septiembre a Diciembre
+            </option>
+
+          </select>
+
+        </div>
+
+
+        {/* =================================================
+            FILTRAR
+        ================================================= */}
+
+        <div className="graficas-filter-action">
+
+          <button
+            type="button"
+            className="app-btn app-btn-primary app-btn-block"
+            onClick={
+              onFiltrar
+            }
+            disabled={
+              loading ||
+              !filtrosCompletos
+            }
+          >
+
+            {loading ? (
+
+              <>
+
+                <span
+                  className="system-spinner system-spinner-small"
+                  aria-hidden="true"
+                />
+
+                <span>
+                  Consultando...
+                </span>
+
+              </>
+
+            ) : (
+
+              <>
+
+                <FaSearch
+                  aria-hidden="true"
+                />
+
+                <span>
+                  Filtrar
+                </span>
+
+              </>
+
+            )}
+
+          </button>
+
+        </div>
+
+      </div>
+
+
+      {/* =====================================================
+          CAMPOS OBLIGATORIOS
+      ===================================================== */}
+
+      <p className="graficas-required-help">
+
+        <span className="system-form-required">
+          *
+        </span>
+
+        {" "}
+        Campos obligatorios.
+
+      </p>
+
+    </section>
   );
 };
 

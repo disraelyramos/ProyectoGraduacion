@@ -3,11 +3,10 @@ import React, {
 } from "react";
 
 import {
-  Card,
-  Table,
-  Button,
-  Spinner,
-} from "react-bootstrap";
+  FaClipboardList,
+  FaChevronLeft,
+  FaChevronRight,
+} from "react-icons/fa";
 
 
 const fmtQ =
@@ -17,11 +16,8 @@ const fmtQ =
     ).toLocaleString(
       "es-GT",
       {
-        minimumFractionDigits:
-          2,
-
-        maximumFractionDigits:
-          2,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
       }
     )}`;
 
@@ -33,14 +29,15 @@ const fmtLb =
     ).toLocaleString(
       "es-GT",
       {
-        minimumFractionDigits:
-          0,
-
-        maximumFractionDigits:
-          2,
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
       }
     )} lbs`;
 
+
+/* =========================================================
+   PORCENTAJE
+   ========================================================= */
 
 const fmtPct =
   (value) => {
@@ -74,15 +71,16 @@ const fmtPct =
     return `${numero.toLocaleString(
       "es-GT",
       {
-        minimumFractionDigits:
-          2,
-
-        maximumFractionDigits:
-          2,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
       }
     )}%`;
   };
 
+
+/* =========================================================
+   COSTO POR LIBRA
+   ========================================================= */
 
 const fmtQlb =
   (value) => {
@@ -116,15 +114,16 @@ const fmtQlb =
     return `Q ${numero.toLocaleString(
       "es-GT",
       {
-        minimumFractionDigits:
-          4,
-
-        maximumFractionDigits:
-          4,
+        minimumFractionDigits: 4,
+        maximumFractionDigits: 4,
       }
     )}/lb`;
   };
 
+
+/* =========================================================
+   COMPONENTE
+   ========================================================= */
 
 export default function TablaDetalle({
   detalle,
@@ -184,8 +183,7 @@ export default function TablaDetalle({
       ? 0
       : (
           (
-            page -
-            1
+            page - 1
           ) *
           limit
         ) + 1;
@@ -195,98 +193,58 @@ export default function TablaDetalle({
     Math.min(
       page *
       limit,
-
       total
     );
 
 
   return (
-    <Card className="shadow-sm border-0">
 
-      <Card.Body>
+    <section className="system-card">
 
-        <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+      {/* =================================================
+          CABECERA
+      ================================================= */}
 
-          <div className="fw-bold">
+      <div className="system-card-header">
+
+        <div>
+
+          <h3 className="system-card-title">
+
+            <FaClipboardList />
+
+            {" "}
             Detalle de Recolecciones
-          </div>
 
-
-          <div className="d-flex align-items-center gap-2">
-
-            {loading ? (
-              <Spinner
-                size="sm"
-              />
-            ) : null}
-
-
-            <small className="text-muted">
-              Mostrando {from}-{to} de {total}
-            </small>
-
-
-            <Button
-              size="sm"
-
-              variant="outline-dark"
-
-              disabled={
-                loading ||
-                page <= 1
-              }
-
-              onClick={
-                () =>
-                  onPageChange?.(
-                    page - 1
-                  )
-              }
-            >
-              ◀
-            </Button>
-
-
-            <small className="text-muted">
-              {page} / {totalPages}
-            </small>
-
-
-            <Button
-              size="sm"
-
-              variant="outline-dark"
-
-              disabled={
-                loading ||
-                page >= totalPages
-              }
-
-              onClick={
-                () =>
-                  onPageChange?.(
-                    page + 1
-                  )
-              }
-            >
-              ▶
-            </Button>
-
-          </div>
+          </h3>
 
         </div>
 
 
-        <Table
-          responsive
-          bordered
-          hover
-          size="sm"
-          className="mb-0"
-        >
+        {loading && (
 
-          <thead className="table-dark">
+          <span
+            className="system-spinner system-spinner-small-dark"
+            aria-label="Cargando"
+          />
+
+        )}
+
+      </div>
+
+
+      {/* =================================================
+          TABLA
+      ================================================= */}
+
+      <div className="system-table-wrapper">
+
+        <table className="system-table">
+
+          <thead>
+
             <tr>
+
               <th>
                 Fecha
               </th>
@@ -303,22 +261,24 @@ export default function TablaDetalle({
                 Empresa
               </th>
 
-              <th className="text-end">
+              <th className="system-text-right">
                 Total lbs
               </th>
 
-              <th className="text-end">
+              <th className="system-text-right">
                 % Llenado
               </th>
 
-              <th className="text-end">
+              <th className="system-text-right">
                 Costo/lb
               </th>
 
-              <th className="text-end">
+              <th className="system-text-right">
                 Total Pagado (Q)
               </th>
+
             </tr>
+
           </thead>
 
 
@@ -340,64 +300,164 @@ export default function TablaDetalle({
                     {row.fecha || "-"}
                   </td>
 
+
                   <td>
-                    {row.codigo_contenedor || "-"}
+
+                    <span className="system-badge system-badge-info">
+
+                      {row.codigo_contenedor || "-"}
+
+                    </span>
+
                   </td>
+
 
                   <td>
                     {row.distrito || "-"}
                   </td>
 
+
                   <td>
                     {row.empresa_recolectora || "-"}
                   </td>
 
-                  <td className="text-end">
+
+                  <td className="system-table-number">
+
                     {fmtLb(
                       row.total_en_libras
                     )}
+
                   </td>
 
-                  <td className="text-end">
+
+                  <td className="system-table-number">
+
                     {fmtPct(
                       row.porcentaje_llenado
                     )}
+
                   </td>
 
-                  <td className="text-end">
+
+                  <td className="system-table-number">
+
                     {fmtQlb(
                       row.costo_por_libra_aplicado
                     )}
+
                   </td>
 
-                  <td className="text-end">
+
+                  <td className="system-table-number">
+
                     {fmtQ(
                       row.total_costo_q
                     )}
+
                   </td>
 
                 </tr>
+
               )
             )}
 
 
-            {rows.length === 0 ? (
+            {rows.length === 0 && (
+
               <tr>
+
                 <td
                   colSpan={8}
-                  className="text-center text-muted py-3"
+                  className="system-table-empty"
                 >
                   Sin registros para mostrar.
                 </td>
+
               </tr>
-            ) : null}
+
+            )}
 
           </tbody>
 
-        </Table>
+        </table>
 
-      </Card.Body>
+      </div>
 
-    </Card>
+
+      {/* =================================================
+          PAGINACIÓN
+      ================================================= */}
+
+      <div className="system-pagination-container">
+
+        <span className="system-text-muted">
+
+          Mostrando{" "}
+          <strong>
+            {from}-{to}
+          </strong>
+          {" "}de{" "}
+          <strong>
+            {total}
+          </strong>
+
+        </span>
+
+
+        <div className="system-pagination">
+
+          <button
+            type="button"
+            className="system-page-button"
+            disabled={
+              loading ||
+              page <= 1
+            }
+            onClick={
+              () =>
+                onPageChange?.(
+                  page - 1
+                )
+            }
+            aria-label="Página anterior"
+            title="Página anterior"
+          >
+            <FaChevronLeft />
+          </button>
+
+
+          <span className="system-badge system-badge-neutral">
+
+            Página {page} de {totalPages}
+
+          </span>
+
+
+          <button
+            type="button"
+            className="system-page-button"
+            disabled={
+              loading ||
+              page >= totalPages
+            }
+            onClick={
+              () =>
+                onPageChange?.(
+                  page + 1
+                )
+            }
+            aria-label="Página siguiente"
+            title="Página siguiente"
+          >
+            <FaChevronRight />
+          </button>
+
+        </div>
+
+      </div>
+
+    </section>
+
   );
 }

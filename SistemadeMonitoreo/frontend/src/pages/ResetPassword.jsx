@@ -1,168 +1,588 @@
-import React, { useState, useMemo } from "react";
-import { FaLock, FaCheckCircle, FaTimesCircle } from "react-icons/fa";
-import { toast } from "react-toastify";
-import { useParams, useNavigate, Link } from "react-router-dom";
-import axios from "axios";
+import React, {
+  useMemo,
+  useState,
+} from "react";
+
+import {
+  FaLock,
+  FaCheckCircle,
+  FaTimesCircle,
+} from "react-icons/fa";
+
+import {
+  toast,
+} from "react-toastify";
+
+import {
+  useParams,
+  useNavigate,
+  Link,
+} from "react-router-dom";
+
+import apiClient
+  from "../utils/apiClient";
+
 import "../styles/login.css";
 
+
+/* =========================================================
+   INDICADOR DE REGLA
+   ========================================================= */
+
+const RuleItem = ({
+  ok,
+  children,
+}) => (
+
+  <li
+    className={
+      `password-rule ${
+        ok
+          ? "password-rule-valid"
+          : "password-rule-invalid"
+      }`
+    }
+  >
+
+    {ok ? (
+
+      <FaCheckCircle
+        aria-hidden="true"
+      />
+
+    ) : (
+
+      <FaTimesCircle
+        aria-hidden="true"
+      />
+
+    )}
+
+
+    <span>
+      {children}
+    </span>
+
+  </li>
+
+);
+
+
+/* =========================================================
+   COMPONENTE
+   ========================================================= */
+
 const ResetPassword = () => {
-  const { token } = useParams();
-  const navigate = useNavigate();
 
-  const [nuevaContrasena, setNuevaContrasena] = useState("");
-  const [confirmarContrasena, setConfirmarContrasena] = useState("");
-  const [loading, setLoading] = useState(false);
+  const {
+    token,
+  } =
+    useParams();
 
-  //  Reglas de la contraseña (sin carácter especial)
-  const rules = useMemo(() => {
-    const np = nuevaContrasena || "";
-    return {
-      length: np.length >= 8,
-      upper: /[A-Z]/.test(np),
-      lower: /[a-z]/.test(np),
-      number: /\d/.test(np),
-    };
-  }, [nuevaContrasena]);
 
-  const cumpleRequisitos = rules.length && rules.upper && rules.lower && rules.number;
-  const coincideConfirmacion =
-    confirmarContrasena.length > 0 && nuevaContrasena === confirmarContrasena;
+  const navigate =
+    useNavigate();
 
-  const disableSubmit = loading || !cumpleRequisitos || !coincideConfirmacion;
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const [
+    nuevaContrasena,
+    setNuevaContrasena,
+  ] =
+    useState("");
 
-    if (!nuevaContrasena || !confirmarContrasena) {
-      toast.error("Por favor complete ambos campos");
-      return;
-    }
 
-    if (!cumpleRequisitos) {
-      toast.error("La nueva contraseña no cumple los requisitos");
-      return;
-    }
+  const [
+    confirmarContrasena,
+    setConfirmarContrasena,
+  ] =
+    useState("");
 
-    if (nuevaContrasena !== confirmarContrasena) {
-      toast.error("Las contraseñas no coinciden");
-      return;
-    }
 
-    try {
-      setLoading(true);
-      const res = await axios.post("http://localhost:3001/api/recuperacion/restablecer", {
-        token,
+  const [
+    loading,
+    setLoading,
+  ] =
+    useState(false);
+
+
+  /* =======================================================
+     REGLAS DE CONTRASEÑA
+
+     Se mantiene la lógica actual:
+     - mínimo 8 caracteres
+     - mayúscula
+     - minúscula
+     - número
+     ======================================================= */
+
+  const rules =
+    useMemo(
+      () => {
+
+        const nueva =
+          nuevaContrasena ||
+          "";
+
+
+        return {
+
+          length:
+            nueva.length >= 8,
+
+          upper:
+            /[A-Z]/.test(
+              nueva
+            ),
+
+          lower:
+            /[a-z]/.test(
+              nueva
+            ),
+
+          number:
+            /\d/.test(
+              nueva
+            ),
+        };
+
+      },
+      [
         nuevaContrasena,
-        confirmarContrasena,
-      });
+      ]
+    );
 
-      toast.success(res.data.message || "Contraseña restablecida con éxito ");
-      navigate("/");
-    } catch (err) {
-      console.error(" Error restableciendo contraseña:", err);
-      if (err.response && err.response.data) {
-        toast.error(err.response.data.message || "No se pudo restablecer la contraseña");
-      } else {
-        toast.error("Error en la conexión con el servidor");
+
+  const cumpleRequisitos =
+    rules.length &&
+    rules.upper &&
+    rules.lower &&
+    rules.number;
+
+
+  const coincideConfirmacion =
+    confirmarContrasena.length > 0 &&
+    nuevaContrasena ===
+      confirmarContrasena;
+
+
+  const disableSubmit =
+    loading ||
+    !cumpleRequisitos ||
+    !coincideConfirmacion;
+
+
+  /* =======================================================
+     RESTABLECER CONTRASEÑA
+     ======================================================= */
+
+  const handleSubmit =
+    async (
+      event
+    ) => {
+
+      event.preventDefault();
+
+
+      if (
+        !nuevaContrasena ||
+        !confirmarContrasena
+      ) {
+
+        toast.error(
+          "Por favor complete ambos campos"
+        );
+
+        return;
       }
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  const Icon = ({ ok }) =>
-    ok ? <FaCheckCircle className="me-2" style={{ color: "#16a34a" }} /> : <FaTimesCircle className="me-2" style={{ color: "#dc2626" }} />;
+
+      if (
+        !cumpleRequisitos
+      ) {
+
+        toast.error(
+          "La nueva contraseña no cumple los requisitos"
+        );
+
+        return;
+      }
+
+
+      if (
+        nuevaContrasena !==
+        confirmarContrasena
+      ) {
+
+        toast.error(
+          "Las contraseñas no coinciden"
+        );
+
+        return;
+      }
+
+
+      try {
+
+        setLoading(
+          true
+        );
+
+
+        /*
+         * apiClient ya utiliza:
+         *
+         * VITE_API_URL
+         *        +
+         *      /api
+         *
+         * No se coloca localhost aquí.
+         */
+
+        const {
+          data,
+        } =
+          await apiClient.post(
+            "/recuperacion/restablecer",
+            {
+              token,
+              nuevaContrasena,
+              confirmarContrasena,
+            }
+          );
+
+
+        toast.success(
+          data?.message ||
+          "Contraseña restablecida con éxito"
+        );
+
+
+        navigate("/");
+
+
+      } catch (
+        error
+      ) {
+
+        console.error(
+          "Error restableciendo contraseña:",
+          error
+        );
+
+
+        const message =
+          error
+            ?.response
+            ?.data
+            ?.message ||
+          "Error en la conexión con el servidor";
+
+
+        toast.error(
+          message
+        );
+
+
+      } finally {
+
+        setLoading(
+          false
+        );
+      }
+    };
+
+
+  /* =======================================================
+     VALIDACIÓN VISUAL
+     ======================================================= */
+
+  const nuevaValidationClass =
+    nuevaContrasena.length === 0
+      ? ""
+      : cumpleRequisitos
+        ? "is-valid"
+        : "is-invalid";
+
+
+  const confirmacionValidationClass =
+    confirmarContrasena.length === 0
+      ? ""
+      : coincideConfirmacion
+        ? "is-valid"
+        : "is-invalid";
+
+
+  /* =======================================================
+     RENDER
+     ======================================================= */
 
   return (
-    <div className="login-container">
-      {/* Sección izquierda */}
-      <div className="brand-section">
-        <h2 className="brand-title">Sistema de Monitoreo Bioinfeccioso</h2>
-      </div>
 
-      {/* Sección derecha */}
-      <div className="login-form-section">
-        <h2 className="login-title">Restablecer Contraseña</h2>
-        <p className="login-description">
-          Ingrese su nueva contraseña para completar el proceso de recuperación.
-        </p>
+    <main className="login-page">
 
-        <form onSubmit={handleSubmit}>
-          {/* Nueva contraseña */}
-          <div className="mb-3">
-            <div className="input-group">
-              <span className="input-group-text">
-                <FaLock />
-              </span>
+      <div className="login-container">
+
+        {/* =================================================
+            PANEL IZQUIERDO
+        ================================================= */}
+
+        <section className="brand-section">
+
+          <h1 className="brand-title">
+            Sistema de Monitoreo Bioinfeccioso
+          </h1>
+
+        </section>
+
+
+        {/* =================================================
+            PANEL DERECHO
+        ================================================= */}
+
+        <section className="login-form-section">
+
+          <div className="reconfirmar-header">
+
+            <span className="reconfirmar-icon">
+
+              <FaLock
+                aria-hidden="true"
+              />
+
+            </span>
+
+
+            <h2 className="login-title">
+              Restablecer Contraseña
+            </h2>
+
+
+            <p className="system-subtitle">
+              Ingrese su nueva contraseña para completar el proceso de recuperación.
+            </p>
+
+          </div>
+
+
+          <form
+            className="system-form"
+            onSubmit={
+              handleSubmit
+            }
+          >
+
+            {/* ===============================================
+                NUEVA CONTRASEÑA
+            =============================================== */}
+
+            <div className="system-form-group">
+
+              <label
+                htmlFor="nuevaContrasena"
+                className="system-form-label"
+              >
+                Nueva contraseña
+              </label>
+
+
               <input
                 type="password"
                 id="nuevaContrasena"
-                className={`form-control ${nuevaContrasena && !cumpleRequisitos ? "is-invalid" : ""}`}
-                placeholder="Nueva contraseña"
-                value={nuevaContrasena}
-                onChange={(e) => setNuevaContrasena(e.target.value)}
+                className={
+                  `system-form-control ${nuevaValidationClass}`
+                }
+                placeholder="Ingrese su nueva contraseña"
+                value={
+                  nuevaContrasena
+                }
+                onChange={
+                  (event) =>
+                    setNuevaContrasena(
+                      event.target.value
+                    )
+                }
                 required
-                disabled={loading}
+                disabled={
+                  loading
+                }
                 autoComplete="new-password"
               />
+
+
+              {nuevaContrasena &&
+              !cumpleRequisitos && (
+
+                <small className="system-form-error">
+                  La nueva contraseña no cumple con los requisitos.
+                </small>
+
+              )}
+
             </div>
-          </div>
 
-          {/* Checklist de requisitos */}
-          <div className="p-3 mt-2 mb-3 rounded" style={{ background: "#f6f8ff", borderLeft: "4px solid #3758f9" }}>
-            <div style={{ fontWeight: 700, marginBottom: 6 }}>Requisitos de la contraseña:</div>
-            <ul className="mb-0" style={{ paddingLeft: 0, listStyle: "none" }}>
-              <li className="d-flex align-items-center">
-                <Icon ok={rules.length} /> Mínimo 8 caracteres
-              </li>
-              <li className="d-flex align-items-center">
-                <Icon ok={rules.upper} /> Al menos una letra mayúscula
-              </li>
-              <li className="d-flex align-items-center">
-                <Icon ok={rules.lower} /> Al menos una letra minúscula
-              </li>
-              <li className="d-flex align-items-center">
-                <Icon ok={rules.number} /> Al menos un número
-              </li>
-            </ul>
-          </div>
 
-          {/* Confirmar contraseña */}
-          <div className="mb-3">
-            <div className="input-group">
-              <span className="input-group-text">
-                <FaLock />
-              </span>
+            {/* ===============================================
+                REQUISITOS
+            =============================================== */}
+
+            <div className="password-requirements">
+
+              <h3 className="password-requirements-title">
+                Requisitos de la contraseña
+              </h3>
+
+
+              <ul className="password-rules">
+
+                <RuleItem
+                  ok={
+                    rules.length
+                  }
+                >
+                  Mínimo 8 caracteres
+                </RuleItem>
+
+
+                <RuleItem
+                  ok={
+                    rules.upper
+                  }
+                >
+                  Al menos una letra mayúscula
+                </RuleItem>
+
+
+                <RuleItem
+                  ok={
+                    rules.lower
+                  }
+                >
+                  Al menos una letra minúscula
+                </RuleItem>
+
+
+                <RuleItem
+                  ok={
+                    rules.number
+                  }
+                >
+                  Al menos un número
+                </RuleItem>
+
+              </ul>
+
+            </div>
+
+
+            {/* ===============================================
+                CONFIRMAR CONTRASEÑA
+            =============================================== */}
+
+            <div className="system-form-group">
+
+              <label
+                htmlFor="confirmarContrasena"
+                className="system-form-label"
+              >
+                Confirmar contraseña
+              </label>
+
+
               <input
                 type="password"
                 id="confirmarContrasena"
-                className={`form-control ${confirmarContrasena && !coincideConfirmacion ? "is-invalid" : ""}`}
-                placeholder="Confirmar contraseña"
-                value={confirmarContrasena}
-                onChange={(e) => setConfirmarContrasena(e.target.value)}
+                className={
+                  `system-form-control ${confirmacionValidationClass}`
+                }
+                placeholder="Confirme su nueva contraseña"
+                value={
+                  confirmarContrasena
+                }
+                onChange={
+                  (event) =>
+                    setConfirmarContrasena(
+                      event.target.value
+                    )
+                }
                 required
-                disabled={loading}
+                disabled={
+                  loading
+                }
                 autoComplete="new-password"
               />
-              {confirmarContrasena && !coincideConfirmacion && (
-                <div className="invalid-feedback">Las contraseñas no coinciden.</div>
+
+
+              {confirmarContrasena &&
+              !coincideConfirmacion && (
+
+                <small className="system-form-error">
+                  Las contraseñas no coinciden.
+                </small>
+
               )}
+
             </div>
-          </div>
 
-          {/* Botón */}
-          <button type="submit" className="btn-login w-100" disabled={disableSubmit}>
-            {loading ? "Procesando..." : "Restablecer Contraseña"}
-          </button>
 
-          {/* Link volver */}
-          <Link to="/" className="forgot-password">
-            Volver al inicio de sesión
-          </Link>
-        </form>
+            {/* ===============================================
+                BOTÓN
+            =============================================== */}
+
+            <button
+              type="submit"
+              className="app-btn app-btn-primary app-btn-block"
+              disabled={
+                disableSubmit
+              }
+            >
+
+              {loading ? (
+
+                <>
+
+                  <span
+                    className="system-spinner system-spinner-small"
+                    aria-hidden="true"
+                  />
+
+                  <span>
+                    Procesando...
+                  </span>
+
+                </>
+
+              ) : (
+
+                <span>
+                  Restablecer Contraseña
+                </span>
+
+              )}
+
+            </button>
+
+
+            {/* ===============================================
+                VOLVER
+            =============================================== */}
+
+            <Link
+              to="/"
+              className="forgot-password"
+            >
+              Volver al inicio de sesión
+            </Link>
+
+          </form>
+
+        </section>
+
       </div>
-    </div>
+
+    </main>
+
   );
 };
+
 
 export default ResetPassword;

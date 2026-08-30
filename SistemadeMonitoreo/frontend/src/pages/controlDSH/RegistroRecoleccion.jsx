@@ -8,17 +8,9 @@ import React, {
 } from "react";
 
 import {
-  Form,
-  Button,
-  Row,
-  Col,
-  Card,
-  Spinner,
-  Alert,
-} from "react-bootstrap";
-
-import {
   FaClipboardList,
+  FaSave,
+  FaTimes,
 } from "react-icons/fa";
 
 import apiClient from "../../utils/apiClient";
@@ -31,23 +23,14 @@ import {
 import "../../styles/nuevo-registro.css";
 
 
-// ======================================================
-// COMPONENTE
-// ======================================================
-
 const RegistroRecoleccion = ({
   onCancel,
   onFinish,
 }) => {
 
-  // ====================================================
-  // DATOS SOLO PARA PRESENTACIÓN
-  // ====================================================
-  //
-  // Código, responsable y fecha vienen del BACKEND.
-  //
-  // El frontend NO decide esos valores.
-  // ====================================================
+  /* =====================================================
+     DATOS DEL PROCESO
+     ===================================================== */
 
   const [
     datosProceso,
@@ -59,15 +42,14 @@ const RegistroRecoleccion = ({
   });
 
 
-  // ====================================================
-  // CATÁLOGOS
-  // ====================================================
+  /* =====================================================
+     CATÁLOGOS
+     ===================================================== */
 
   const [
     distritos,
     setDistritos,
   ] = useState([]);
-
 
   const [
     empresas,
@@ -75,15 +57,9 @@ const RegistroRecoleccion = ({
   ] = useState([]);
 
 
-  // ====================================================
-  // CAMPOS INTRODUCIDOS POR EL USUARIO
-  // ====================================================
-  //
-  // Estos sí deben existir temporalmente en React
-  // porque forman parte del formulario.
-  //
-  // El backend volverá a validarlos todos.
-  // ====================================================
+  /* =====================================================
+     DATOS INTRODUCIDOS POR EL USUARIO
+     ===================================================== */
 
   const [
     formData,
@@ -97,14 +73,9 @@ const RegistroRecoleccion = ({
   });
 
 
-  // ====================================================
-  // PORCENTAJES CALCULADOS POR BACKEND
-  // ====================================================
-  //
-  // Solamente se muestran.
-  //
-  // NO se envían posteriormente en Guardar.
-  // ====================================================
+  /* =====================================================
+     PORCENTAJES CALCULADOS POR BACKEND
+     ===================================================== */
 
   const [
     preview,
@@ -115,27 +86,24 @@ const RegistroRecoleccion = ({
   });
 
 
-  // ====================================================
-  // ESTADOS UI
-  // ====================================================
+  /* =====================================================
+     ESTADOS DE UI
+     ===================================================== */
 
   const [
     loadingInicial,
     setLoadingInicial,
   ] = useState(true);
 
-
   const [
     previewLoading,
     setPreviewLoading,
   ] = useState(false);
 
-
   const [
     saving,
     setSaving,
   ] = useState(false);
-
 
   const [
     errors,
@@ -143,21 +111,20 @@ const RegistroRecoleccion = ({
   ] = useState({});
 
 
-  // ====================================================
-  // PROTECCIONES CONTRA PETICIONES REPETIDAS
-  // ====================================================
+  /* =====================================================
+     PROTECCIONES
+     ===================================================== */
 
   const guardarEnCursoRef =
     useRef(false);
-
 
   const previewRequestRef =
     useRef(0);
 
 
-  // ====================================================
-  // FORMATEAR FECHA DEL SERVIDOR
-  // ====================================================
+  /* =====================================================
+     FORMATEAR FECHA
+     ===================================================== */
 
   const formatearFecha = (
     value
@@ -167,20 +134,16 @@ const RegistroRecoleccion = ({
       return "";
     }
 
-
     const fecha =
       new Date(value);
-
 
     if (
       Number.isNaN(
         fecha.getTime()
       )
     ) {
-
       return String(value);
     }
-
 
     const dia =
       String(
@@ -190,39 +153,24 @@ const RegistroRecoleccion = ({
         "0"
       );
 
-
     const mes =
       String(
-        fecha.getMonth() +
-        1
+        fecha.getMonth() + 1
       ).padStart(
         2,
         "0"
       );
 
-
     const anio =
       fecha.getFullYear();
-
 
     return `${dia}/${mes}/${anio}`;
   };
 
 
-  // ====================================================
-  // CARGAR DATOS DE FOTO 4
-  // ====================================================
-  //
-  // Backend:
-  //
-  // usuario autenticado
-  //        ↓
-  // busca EN_PROCESO
-  //        ↓
-  // verifica que Foto 3 esté calculada
-  //        ↓
-  // devuelve únicamente información visual.
-  // ====================================================
+  /* =====================================================
+     CARGAR DATOS DE RECOLECCIÓN
+     ===================================================== */
 
   const cargarDatosProceso =
     useCallback(async () => {
@@ -232,39 +180,34 @@ const RegistroRecoleccion = ({
           "/control-dsh/registro-pesaje/recoleccion/datos"
         );
 
-
       const data =
         res?.data || {};
-
 
       setDatosProceso({
         codigo_contenedor:
           String(
-            data
-              ?.codigo_contenedor ||
+            data?.codigo_contenedor ||
             ""
           ),
 
         responsable:
           String(
-            data
-              ?.responsable ||
+            data?.responsable ||
             ""
           ),
 
         fecha_recoleccion:
           formatearFecha(
-            data
-              ?.fecha_servidor
+            data?.fecha_servidor
           ),
       });
 
     }, []);
 
 
-  // ====================================================
-  // CARGAR CATÁLOGOS
-  // ====================================================
+  /* =====================================================
+     CARGAR CATÁLOGOS
+     ===================================================== */
 
   const cargarCatalogos =
     useCallback(async () => {
@@ -284,7 +227,6 @@ const RegistroRecoleccion = ({
           ),
         ]);
 
-
       setDistritos(
         Array.isArray(
           resDistritos.data
@@ -292,7 +234,6 @@ const RegistroRecoleccion = ({
           ? resDistritos.data
           : []
       );
-
 
       setEmpresas(
         Array.isArray(
@@ -305,23 +246,18 @@ const RegistroRecoleccion = ({
     }, []);
 
 
-  // ====================================================
-  // INICIALIZAR FOTO 4
-  // ====================================================
+  /* =====================================================
+     INICIALIZACIÓN
+     ===================================================== */
 
   useEffect(() => {
 
-    let activo =
-      true;
-
+    let activo = true;
 
     const inicializar =
       async () => {
 
-        setLoadingInicial(
-          true
-        );
-
+        setLoadingInicial(true);
 
         try {
 
@@ -330,13 +266,11 @@ const RegistroRecoleccion = ({
             cargarCatalogos(),
           ]);
 
-
         } catch (err) {
 
           if (!activo) {
             return;
           }
-
 
           await showBackendAlert({
             status:
@@ -353,11 +287,9 @@ const RegistroRecoleccion = ({
               },
           });
 
-
         } finally {
 
           if (activo) {
-
             setLoadingInicial(
               false
             );
@@ -365,15 +297,10 @@ const RegistroRecoleccion = ({
         }
       };
 
-
     inicializar();
 
-
     return () => {
-
-      activo =
-        false;
-
+      activo = false;
     };
 
   }, [
@@ -382,14 +309,9 @@ const RegistroRecoleccion = ({
   ]);
 
 
-  // ====================================================
-  // VALIDACIONES FRONTEND
-  // ====================================================
-  //
-  // Son solamente UX.
-  //
-  // El backend debe repetir todas las validaciones.
-  // ====================================================
+  /* =====================================================
+     VALIDACIONES FRONTEND
+     ===================================================== */
 
   const validateField = (
     name,
@@ -401,7 +323,6 @@ const RegistroRecoleccion = ({
         value ?? ""
       ).trim();
 
-
     const requeridos = [
       "distrito_id",
       "empresa_id",
@@ -409,28 +330,22 @@ const RegistroRecoleccion = ({
       "cantidad_libras_pendientes",
     ];
 
-
     if (
       requeridos.includes(
         name
       ) &&
       !valor
     ) {
-
       return "Este campo es obligatorio";
     }
 
 
-    // ==================================================
-    // IDs
-    // ==================================================
+    /* IDs */
 
     if (
       (
-        name ===
-          "distrito_id" ||
-        name ===
-          "empresa_id"
+        name === "distrito_id" ||
+        name === "empresa_id"
       ) &&
       valor
     ) {
@@ -438,39 +353,31 @@ const RegistroRecoleccion = ({
       const numero =
         Number(valor);
 
-
       if (
         !Number.isInteger(
           numero
         ) ||
         numero <= 0
       ) {
-
         return "Seleccione una opción válida";
       }
     }
 
 
-    // ==================================================
-    // RECIBO
-    // ==================================================
+    /* NÚMERO DE RECIBO */
 
     if (
-      name ===
-        "numero_recibo" &&
+      name === "numero_recibo" &&
       valor &&
       !/^[a-zA-Z0-9-]+$/.test(
         valor
       )
     ) {
-
       return "Use solo letras, números o guiones";
     }
 
 
-    // ==================================================
-    // LIBRAS PENDIENTES
-    // ==================================================
+    /* LIBRAS PENDIENTES */
 
     if (
       name ===
@@ -483,14 +390,11 @@ const RegistroRecoleccion = ({
           valor
         )
       ) {
-
         return "Ej: 0, 10, 10.5";
       }
 
-
       const numero =
         Number(valor);
-
 
       if (
         !Number.isFinite(
@@ -498,19 +402,17 @@ const RegistroRecoleccion = ({
         ) ||
         numero < 0
       ) {
-
         return "Cantidad inválida";
       }
     }
-
 
     return "";
   };
 
 
-  // ====================================================
-  // CAMBIAR CAMPO
-  // ====================================================
+  /* =====================================================
+     CAMBIAR CAMPO
+     ===================================================== */
 
   const setField = (
     name,
@@ -520,11 +422,9 @@ const RegistroRecoleccion = ({
     setFormData(
       (prev) => ({
         ...prev,
-        [name]:
-          value,
+        [name]: value,
       })
     );
-
 
     setErrors(
       (prev) => ({
@@ -540,29 +440,9 @@ const RegistroRecoleccion = ({
   };
 
 
-  // ====================================================
-  // PREVIEW DE PORCENTAJES
-  // ====================================================
-  //
-  // IMPORTANTE:
-  //
-  // Frontend manda únicamente:
-  //
-  // cantidad_libras_pendientes
-  //
-  // Backend obtiene:
-  //
-  // total_en_libras
-  //
-  // desde el mismo EN_PROCESO.
-  //
-  // Backend calcula:
-  //
-  // % pendiente
-  // % recolectado
-  //
-  // No calculamos ninguno aquí.
-  // ====================================================
+  /* =====================================================
+     PREVIEW DE PORCENTAJES
+     ===================================================== */
 
   useEffect(() => {
 
@@ -574,33 +454,18 @@ const RegistroRecoleccion = ({
       ).trim();
 
 
-    // ==================================================
-    // CAMPO VACÍO
-    // ==================================================
-
     if (!valor) {
 
       setPreview({
-        porcentaje_pendiente:
-          0,
-
-        porcentaje_recolectado:
-          0,
+        porcentaje_pendiente: 0,
+        porcentaje_recolectado: 0,
       });
 
-
-      setPreviewLoading(
-        false
-      );
-
+      setPreviewLoading(false);
 
       return;
     }
 
-
-    // ==================================================
-    // NO CONSULTAR SI EL CAMPO YA ES INVÁLIDO
-    // ==================================================
 
     const errorCampo =
       validateField(
@@ -612,32 +477,14 @@ const RegistroRecoleccion = ({
     if (errorCampo) {
 
       setPreview({
-        porcentaje_pendiente:
-          0,
-
-        porcentaje_recolectado:
-          0,
+        porcentaje_pendiente: 0,
+        porcentaje_recolectado: 0,
       });
-
 
       return;
     }
 
 
-    /*
-     * Debounce.
-     *
-     * Evita:
-     *
-     * 1
-     * 10
-     * 100
-     *
-     * = tres peticiones inmediatas.
-     *
-     * Esperamos a que el usuario deje
-     * de escribir durante 500 ms.
-     */
     const timer =
       setTimeout(
         async () => {
@@ -646,14 +493,10 @@ const RegistroRecoleccion = ({
             previewRequestRef.current +
             1;
 
-
           previewRequestRef.current =
             requestId;
 
-
-          setPreviewLoading(
-            true
-          );
+          setPreviewLoading(true);
 
 
           try {
@@ -664,17 +507,11 @@ const RegistroRecoleccion = ({
 
                 {
                   cantidad_libras_pendientes:
-                    Number(
-                      valor
-                    ),
+                    Number(valor),
                 }
               );
 
 
-            /*
-             * Si otra petición más nueva
-             * ya ocurrió, ignoramos ésta.
-             */
             if (
               requestId !==
               previewRequestRef.current
@@ -711,11 +548,8 @@ const RegistroRecoleccion = ({
 
 
             setPreview({
-              porcentaje_pendiente:
-                0,
-
-              porcentaje_recolectado:
-                0,
+              porcentaje_pendiente: 0,
+              porcentaje_recolectado: 0,
             });
 
 
@@ -741,10 +575,7 @@ const RegistroRecoleccion = ({
               requestId ===
               previewRequestRef.current
             ) {
-
-              setPreviewLoading(
-                false
-              );
+              setPreviewLoading(false);
             }
           }
 
@@ -755,11 +586,7 @@ const RegistroRecoleccion = ({
 
 
     return () => {
-
-      clearTimeout(
-        timer
-      );
-
+      clearTimeout(timer);
     };
 
   }, [
@@ -768,9 +595,9 @@ const RegistroRecoleccion = ({
   ]);
 
 
-  // ====================================================
-  // CANCELAR
-  // ====================================================
+  /* =====================================================
+     CANCELAR
+     ===================================================== */
 
   const handleCancelar = () => {
 
@@ -783,27 +610,22 @@ const RegistroRecoleccion = ({
 
 
     showConfirmAlert(
-
       "¿Desea cancelar el proceso?",
 
       "Si confirma, el proceso será cancelado y deberá iniciar uno nuevo.",
 
-
       async () => {
-
         await onCancel?.();
-
       },
-
 
       null
     );
   };
 
 
-  // ====================================================
-  // VALIDAR FORMULARIO COMPLETO
-  // ====================================================
+  /* =====================================================
+     VALIDAR FORMULARIO COMPLETO
+     ===================================================== */
 
   const validarFormulario = () => {
 
@@ -843,9 +665,9 @@ const RegistroRecoleccion = ({
   };
 
 
-  // ====================================================
-  // GUARDAR RECOLECCIÓN
-  // ====================================================
+  /* =====================================================
+     GUARDAR RECOLECCIÓN
+     ===================================================== */
 
   const guardarRecoleccion =
     async () => {
@@ -868,57 +690,27 @@ const RegistroRecoleccion = ({
       guardarEnCursoRef.current =
         true;
 
-
-      setSaving(
-        true
-      );
+      setSaving(true);
 
 
       try {
-
-        // ===============================================
-        // PAYLOAD
-        // ===============================================
-        //
-        // ÚNICAMENTE datos realmente introducidos
-        // o seleccionados por el usuario.
-        //
-        // NO enviamos:
-        //
-        // proceso_token
-        // historial_calculo_id
-        // contenedor_id
-        // peso total
-        // costo
-        // porcentaje pendiente
-        // porcentaje recolectado
-        // responsable
-        // fecha
-        // lectura_id
-        // ===============================================
 
         const payload = {
 
           empresa_id:
             Number(
-              formData
-                .empresa_id
+              formData.empresa_id
             ),
-
 
           distrito_id:
             Number(
-              formData
-                .distrito_id
+              formData.distrito_id
             ),
-
 
           numero_recibo:
             String(
-              formData
-                .numero_recibo
+              formData.numero_recibo
             ).trim(),
-
 
           cantidad_libras_pendientes:
             Number(
@@ -926,11 +718,9 @@ const RegistroRecoleccion = ({
                 .cantidad_libras_pendientes
             ),
 
-
           observaciones:
             String(
-              formData
-                .observaciones ||
+              formData.observaciones ||
               ""
             ).trim() ||
             null,
@@ -939,15 +729,10 @@ const RegistroRecoleccion = ({
 
         await apiClient.post(
           "/control-dsh/registro-pesaje/recoleccion",
-
           payload
         );
 
 
-        /*
-         * Solo después de confirmación
-         * del backend.
-         */
         await onFinish?.();
 
 
@@ -974,17 +759,14 @@ const RegistroRecoleccion = ({
         guardarEnCursoRef.current =
           false;
 
-
-        setSaving(
-          false
-        );
+        setSaving(false);
       }
     };
 
 
-  // ====================================================
-  // SUBMIT
-  // ====================================================
+  /* =====================================================
+     SUBMIT
+     ===================================================== */
 
   const handleSubmit = (
     event
@@ -1009,705 +791,564 @@ const RegistroRecoleccion = ({
 
 
     showConfirmAlert(
-
       "¿Desea guardar la recolección?",
 
       "Se finalizará el proceso actual.",
 
-
       async () => {
-
         await guardarRecoleccion();
-
       },
-
 
       null
     );
   };
 
 
-  // ====================================================
-  // CARGANDO
-  // ====================================================
+  /* =====================================================
+     CARGANDO
+     ===================================================== */
 
-  if (
-    loadingInicial
-  ) {
+  if (loadingInicial) {
 
     return (
+      <div className="registro-recoleccion">
 
-      <div
-        className="
-          registro-recoleccion-container
-          p-4
-        "
-      >
+        <div className="system-card registro-recoleccion-loading">
 
-        <Card
-          className="
-            shadow-sm
-            border-0
-          "
-        >
+          <span
+            className="system-spinner"
+            aria-hidden="true"
+          />
 
-          <Card.Body
-            className="
-              text-center
-              py-5
-            "
-          >
+          <p>
+            Cargando información de recolección...
+          </p>
 
-            <Spinner
-              animation="border"
-              className="mb-3"
-            />
-
-
-            <div>
-              Cargando información de recolección...
-            </div>
-
-          </Card.Body>
-
-        </Card>
+        </div>
 
       </div>
     );
   }
 
 
-  // ====================================================
-  // RENDER
-  // ====================================================
+  /* =====================================================
+     RENDER
+     ===================================================== */
 
   return (
 
-    <div
-      className="
-        registro-recoleccion-container
-        p-4
-      "
-    >
+    <div className="registro-recoleccion">
 
-      <Card
-        className="
-          shadow-sm
-          border-0
-        "
-      >
+      <div className="system-card registro-recoleccion-card">
 
-        <Card.Body>
+        {/* ===============================================
+            CABECERA
+        =============================================== */}
 
-          <h4
-            className="
-              mb-4
-              d-flex
-              align-items-center
-            "
-          >
+        <header className="system-card-header registro-recoleccion-header">
 
-            <FaClipboardList
-              className="
-                text-primary
-                me-2
-              "
-            />
+          <div className="registro-recoleccion-title">
 
-            Registro de Recolección
+            <FaClipboardList />
 
-          </h4>
+            <div>
 
+              <h2 className="system-card-title">
+                Registro de Recolección
+              </h2>
 
-          <Form
-            onSubmit={
-              handleSubmit
-            }
-          >
-
-            <Row>
-
-
-              {/* ======================================= */}
-              {/* COLUMNA IZQUIERDA                      */}
-              {/* ======================================= */}
-
-              <Col md={6}>
-
-
-                {/* CÓDIGO */}
-
-                <Form.Group
-                  className="mb-3"
-                >
-
-                  <Form.Label>
-                    Código del Contenedor
-                  </Form.Label>
-
-
-                  <Form.Control
-                    type="text"
-
-                    value={
-                      datosProceso
-                        .codigo_contenedor
-                    }
-
-                    disabled
-                  />
-
-                </Form.Group>
-
-
-                {/* FECHA */}
-
-                <Form.Group
-                  className="mb-3"
-                >
-
-                  <Form.Label>
-                    Fecha de Recolección
-                  </Form.Label>
-
-
-                  <Form.Control
-                    type="text"
-
-                    value={
-                      datosProceso
-                        .fecha_recoleccion
-                    }
-
-                    disabled
-                  />
-
-                </Form.Group>
-
-
-                {/* DISTRITO */}
-
-                <Form.Group
-                  className="mb-3"
-                >
-
-                  <Form.Label>
-                    Distrito
-                  </Form.Label>
-
-
-                  <Form.Select
-                    value={
-                      formData
-                        .distrito_id
-                    }
-
-                    disabled={
-                      saving
-                    }
-
-                    onChange={(
-                      event
-                    ) =>
-                      setField(
-                        "distrito_id",
-                        event.target.value
-                      )
-                    }
-
-                    className={
-                      errors
-                        .distrito_id
-                        ? "is-invalid"
-                        : ""
-                    }
-                  >
-
-                    <option value="">
-                      Seleccione un distrito
-                    </option>
-
-
-                    {distritos.map(
-                      (
-                        distrito
-                      ) => (
-
-                        <option
-                          key={
-                            distrito.id
-                          }
-
-                          value={
-                            String(
-                              distrito.id
-                            )
-                          }
-                        >
-
-                          {distrito.nombre}
-
-                        </option>
-                      )
-                    )}
-
-                  </Form.Select>
-
-
-                  {errors
-                    .distrito_id && (
-
-                    <div
-                      className="invalid-feedback"
-                    >
-
-                      {
-                        errors
-                          .distrito_id
-                      }
-
-                    </div>
-                  )}
-
-                </Form.Group>
-
-
-                {/* RECIBO */}
-
-                <Form.Group
-                  className="mb-3"
-                >
-
-                  <Form.Label>
-                    Número de Recibo
-                  </Form.Label>
-
-
-                  <Form.Control
-                    type="text"
-
-                    value={
-                      formData
-                        .numero_recibo
-                    }
-
-                    disabled={
-                      saving
-                    }
-
-                    onChange={(
-                      event
-                    ) =>
-                      setField(
-                        "numero_recibo",
-                        event.target.value
-                      )
-                    }
-
-                    className={
-                      errors
-                        .numero_recibo
-                        ? "is-invalid"
-                        : ""
-                    }
-
-                    autoComplete="off"
-                  />
-
-
-                  {errors
-                    .numero_recibo && (
-
-                    <div
-                      className="invalid-feedback"
-                    >
-
-                      {
-                        errors
-                          .numero_recibo
-                      }
-
-                    </div>
-                  )}
-
-                </Form.Group>
-
-              </Col>
-
-
-              {/* ======================================= */}
-              {/* COLUMNA DERECHA                        */}
-              {/* ======================================= */}
-
-              <Col md={6}>
-
-
-                {/* RESPONSABLE */}
-
-                <Form.Group
-                  className="mb-3"
-                >
-
-                  <Form.Label>
-                    Responsable
-                  </Form.Label>
-
-
-                  <Form.Control
-                    type="text"
-
-                    value={
-                      datosProceso
-                        .responsable
-                    }
-
-                    disabled
-                  />
-
-                </Form.Group>
-
-
-                {/* EMPRESA */}
-
-                <Form.Group
-                  className="mb-3"
-                >
-
-                  <Form.Label>
-                    Empresa Recolectora
-                  </Form.Label>
-
-
-                  <Form.Select
-                    value={
-                      formData
-                        .empresa_id
-                    }
-
-                    disabled={
-                      saving
-                    }
-
-                    onChange={(
-                      event
-                    ) =>
-                      setField(
-                        "empresa_id",
-                        event.target.value
-                      )
-                    }
-
-                    className={
-                      errors
-                        .empresa_id
-                        ? "is-invalid"
-                        : ""
-                    }
-                  >
-
-                    <option value="">
-                      Seleccione una empresa
-                    </option>
-
-
-                    {empresas.map(
-                      (
-                        empresa
-                      ) => (
-
-                        <option
-                          key={
-                            empresa.id
-                          }
-
-                          value={
-                            String(
-                              empresa.id
-                            )
-                          }
-                        >
-
-                          {empresa.nombre}
-
-                        </option>
-                      )
-                    )}
-
-                  </Form.Select>
-
-
-                  {errors
-                    .empresa_id && (
-
-                    <div
-                      className="invalid-feedback"
-                    >
-
-                      {
-                        errors
-                          .empresa_id
-                      }
-
-                    </div>
-                  )}
-
-                </Form.Group>
-
-
-                {/* LIBRAS PENDIENTES */}
-
-                <Form.Group
-                  className="mb-3"
-                >
-
-                  <Form.Label>
-                    Cantidad en Libras Pendientes
-                  </Form.Label>
-
-
-                  <Form.Control
-                    type="text"
-
-                    value={
-                      formData
-                        .cantidad_libras_pendientes
-                    }
-
-                    disabled={
-                      saving
-                    }
-
-                    onChange={(
-                      event
-                    ) =>
-                      setField(
-                        "cantidad_libras_pendientes",
-                        event.target.value
-                      )
-                    }
-
-                    placeholder="Ej: 0, 10, 10.5"
-
-                    className={
-                      errors
-                        .cantidad_libras_pendientes
-                        ? "is-invalid"
-                        : ""
-                    }
-
-                    inputMode="decimal"
-
-                    autoComplete="off"
-                  />
-
-
-                  {errors
-                    .cantidad_libras_pendientes && (
-
-                    <div
-                      className="invalid-feedback"
-                    >
-
-                      {
-                        errors
-                          .cantidad_libras_pendientes
-                      }
-
-                    </div>
-                  )}
-
-                </Form.Group>
-
-
-                {/* % PENDIENTE */}
-
-                <Form.Group
-                  className="mb-3"
-                >
-
-                  <Form.Label>
-                    % DSH Pendientes de Recolectar
-                  </Form.Label>
-
-
-                  <Form.Control
-                    type="text"
-
-                    value={
-                      previewLoading
-                        ? "Calculando..."
-
-                        : `${Number(
-                            preview
-                              .porcentaje_pendiente ||
-                            0
-                          ).toFixed(
-                            2
-                          )} %`
-                    }
-
-                    disabled
-                  />
-
-                </Form.Group>
-
-
-                {/* % RECOLECTADO */}
-
-                <Form.Group
-                  className="mb-3"
-                >
-
-                  <Form.Label>
-                    % DSH Recolectados
-                  </Form.Label>
-
-
-                  <Form.Control
-                    type="text"
-
-                    value={
-                      previewLoading
-                        ? "Calculando..."
-
-                        : `${Number(
-                            preview
-                              .porcentaje_recolectado ||
-                            0
-                          ).toFixed(
-                            2
-                          )} %`
-                    }
-
-                    disabled
-                  />
-
-                </Form.Group>
-
-              </Col>
-
-            </Row>
-
-
-            {/* ========================================= */}
-            {/* OBSERVACIONES                            */}
-            {/* ========================================= */}
-
-            <Row>
-
-              <Col md={12}>
-
-                <Form.Group
-                  className="mb-3"
-                >
-
-                  <Form.Label>
-                    Observaciones (opcional)
-                  </Form.Label>
-
-
-                  <Form.Control
-                    as="textarea"
-
-                    rows={3}
-
-                    value={
-                      formData
-                        .observaciones
-                    }
-
-                    disabled={
-                      saving
-                    }
-
-                    onChange={(
-                      event
-                    ) =>
-                      setField(
-                        "observaciones",
-                        event.target.value
-                      )
-                    }
-                  />
-
-                </Form.Group>
-
-              </Col>
-
-            </Row>
-
-
-            {/* ========================================= */}
-            {/* BOTONES                                  */}
-            {/* ========================================= */}
-
-            <div
-              className="
-                d-flex
-                justify-content-end
-                gap-2
-              "
-            >
-
-              <Button
-                type="button"
-
-                variant="secondary"
-
-                onClick={
-                  handleCancelar
-                }
-
-                disabled={
-                  saving
-                }
-              >
-
-                Cancelar
-
-              </Button>
-
-
-              <Button
-                type="submit"
-
-                variant="success"
-
-                disabled={
-                  saving ||
-                  previewLoading
-                }
-              >
-
-                {saving ? (
-
-                  <>
-
-                    <Spinner
-                      animation="border"
-                      size="sm"
-                      className="me-2"
-                    />
-
-                    Guardando...
-
-                  </>
-
-                ) : (
-
-                  "Guardar"
-
-                )}
-
-              </Button>
+              <p className="system-card-description">
+                Complete los datos requeridos para
+                finalizar la recolección.
+              </p>
 
             </div>
 
-          </Form>
+          </div>
 
-        </Card.Body>
+        </header>
 
-      </Card>
+
+        {/* ===============================================
+            FORMULARIO
+        =============================================== */}
+
+        <form
+          className="system-form"
+          onSubmit={handleSubmit}
+        >
+
+          <div className="system-form-grid">
+
+            {/* ===========================================
+                CÓDIGO
+            =========================================== */}
+
+            <div className="system-form-group">
+
+              <label
+                htmlFor="recoleccion-codigo"
+                className="system-form-label"
+              >
+                Código del Contenedor
+              </label>
+
+              <input
+                id="recoleccion-codigo"
+                type="text"
+                className="system-form-control"
+                value={
+                  datosProceso
+                    .codigo_contenedor
+                }
+                disabled
+              />
+
+            </div>
+
+
+            {/* ===========================================
+                RESPONSABLE
+            =========================================== */}
+
+            <div className="system-form-group">
+
+              <label
+                htmlFor="recoleccion-responsable"
+                className="system-form-label"
+              >
+                Responsable
+              </label>
+
+              <input
+                id="recoleccion-responsable"
+                type="text"
+                className="system-form-control"
+                value={
+                  datosProceso.responsable
+                }
+                disabled
+              />
+
+            </div>
+
+
+            {/* ===========================================
+                FECHA
+            =========================================== */}
+
+            <div className="system-form-group">
+
+              <label
+                htmlFor="recoleccion-fecha"
+                className="system-form-label"
+              >
+                Fecha de Recolección
+              </label>
+
+              <input
+                id="recoleccion-fecha"
+                type="text"
+                className="system-form-control"
+                value={
+                  datosProceso
+                    .fecha_recoleccion
+                }
+                disabled
+              />
+
+            </div>
+
+
+            {/* ===========================================
+                EMPRESA
+            =========================================== */}
+
+            <div className="system-form-group">
+
+              <label
+                htmlFor="recoleccion-empresa"
+                className="system-form-label"
+              >
+                Empresa Recolectora
+              </label>
+
+              <select
+                id="recoleccion-empresa"
+                className={`system-form-select ${
+                  errors.empresa_id
+                    ? "is-invalid"
+                    : ""
+                }`}
+                value={
+                  formData.empresa_id
+                }
+                disabled={saving}
+                onChange={(event) =>
+                  setField(
+                    "empresa_id",
+                    event.target.value
+                  )
+                }
+              >
+
+                <option value="">
+                  Seleccione una empresa
+                </option>
+
+                {empresas.map(
+                  (empresa) => (
+
+                    <option
+                      key={empresa.id}
+                      value={String(
+                        empresa.id
+                      )}
+                    >
+                      {empresa.nombre}
+                    </option>
+
+                  )
+                )}
+
+              </select>
+
+
+              {errors.empresa_id && (
+
+                <small className="system-form-error">
+                  {errors.empresa_id}
+                </small>
+
+              )}
+
+            </div>
+
+
+            {/* ===========================================
+                DISTRITO
+            =========================================== */}
+
+            <div className="system-form-group">
+
+              <label
+                htmlFor="recoleccion-distrito"
+                className="system-form-label"
+              >
+                Distrito
+              </label>
+
+              <select
+                id="recoleccion-distrito"
+                className={`system-form-select ${
+                  errors.distrito_id
+                    ? "is-invalid"
+                    : ""
+                }`}
+                value={
+                  formData.distrito_id
+                }
+                disabled={saving}
+                onChange={(event) =>
+                  setField(
+                    "distrito_id",
+                    event.target.value
+                  )
+                }
+              >
+
+                <option value="">
+                  Seleccione un distrito
+                </option>
+
+                {distritos.map(
+                  (distrito) => (
+
+                    <option
+                      key={distrito.id}
+                      value={String(
+                        distrito.id
+                      )}
+                    >
+                      {distrito.nombre}
+                    </option>
+
+                  )
+                )}
+
+              </select>
+
+
+              {errors.distrito_id && (
+
+                <small className="system-form-error">
+                  {errors.distrito_id}
+                </small>
+
+              )}
+
+            </div>
+
+
+            {/* ===========================================
+                RECIBO
+            =========================================== */}
+
+            <div className="system-form-group">
+
+              <label
+                htmlFor="recoleccion-recibo"
+                className="system-form-label"
+              >
+                Número de Recibo
+              </label>
+
+              <input
+                id="recoleccion-recibo"
+                type="text"
+                className={`system-form-control ${
+                  errors.numero_recibo
+                    ? "is-invalid"
+                    : ""
+                }`}
+                value={
+                  formData.numero_recibo
+                }
+                disabled={saving}
+                onChange={(event) =>
+                  setField(
+                    "numero_recibo",
+                    event.target.value
+                  )
+                }
+                placeholder="Ej: REC-001"
+                autoComplete="off"
+              />
+
+
+              {errors.numero_recibo && (
+
+                <small className="system-form-error">
+                  {errors.numero_recibo}
+                </small>
+
+              )}
+
+            </div>
+
+
+            {/* ===========================================
+                LIBRAS PENDIENTES
+            =========================================== */}
+
+            <div className="system-form-group">
+
+              <label
+                htmlFor="recoleccion-libras"
+                className="system-form-label"
+              >
+                Cantidad en Libras Pendientes
+              </label>
+
+              <input
+                id="recoleccion-libras"
+                type="text"
+                className={`system-form-control ${
+                  errors
+                    .cantidad_libras_pendientes
+                    ? "is-invalid"
+                    : ""
+                }`}
+                value={
+                  formData
+                    .cantidad_libras_pendientes
+                }
+                disabled={saving}
+                onChange={(event) =>
+                  setField(
+                    "cantidad_libras_pendientes",
+                    event.target.value
+                  )
+                }
+                placeholder="Ej: 0, 10, 10.5"
+                inputMode="decimal"
+                autoComplete="off"
+              />
+
+
+              {errors
+                .cantidad_libras_pendientes && (
+
+                <small className="system-form-error">
+                  {
+                    errors
+                      .cantidad_libras_pendientes
+                  }
+                </small>
+
+              )}
+
+            </div>
+
+
+            {/* ===========================================
+                PORCENTAJE PENDIENTE
+            =========================================== */}
+
+            <div className="system-form-group">
+
+              <label
+                htmlFor="recoleccion-porcentaje-pendiente"
+                className="system-form-label"
+              >
+                % DSH Pendientes de Recolectar
+              </label>
+
+              <input
+                id="recoleccion-porcentaje-pendiente"
+                type="text"
+                className="system-form-control"
+                value={
+                  previewLoading
+                    ? "Calculando..."
+                    : `${Number(
+                        preview
+                          .porcentaje_pendiente ||
+                        0
+                      ).toFixed(2)} %`
+                }
+                disabled
+              />
+
+            </div>
+
+
+            {/* ===========================================
+                PORCENTAJE RECOLECTADO
+            =========================================== */}
+
+            <div className="system-form-group">
+
+              <label
+                htmlFor="recoleccion-porcentaje-recolectado"
+                className="system-form-label"
+              >
+                % DSH Recolectados
+              </label>
+
+              <input
+                id="recoleccion-porcentaje-recolectado"
+                type="text"
+                className="system-form-control"
+                value={
+                  previewLoading
+                    ? "Calculando..."
+                    : `${Number(
+                        preview
+                          .porcentaje_recolectado ||
+                        0
+                      ).toFixed(2)} %`
+                }
+                disabled
+              />
+
+            </div>
+
+
+            {/* ===========================================
+                OBSERVACIONES
+            =========================================== */}
+
+            <div className="system-form-group system-form-full">
+
+              <label
+                htmlFor="recoleccion-observaciones"
+                className="system-form-label"
+              >
+                Observaciones
+                <span className="registro-optional">
+                  Opcional
+                </span>
+              </label>
+
+              <textarea
+                id="recoleccion-observaciones"
+                className="system-form-textarea"
+                value={
+                  formData.observaciones
+                }
+                disabled={saving}
+                onChange={(event) =>
+                  setField(
+                    "observaciones",
+                    event.target.value
+                  )
+                }
+                placeholder="Ingrese una observación si es necesario"
+              />
+
+            </div>
+
+          </div>
+
+
+          {/* =============================================
+              ACCIONES
+          ============================================= */}
+
+          <div className="system-actions registro-recoleccion-actions">
+
+            <button
+              type="button"
+              className="app-btn app-btn-cancel"
+              onClick={handleCancelar}
+              disabled={saving}
+            >
+              <FaTimes />
+
+              <span>
+                Cancelar
+              </span>
+            </button>
+
+
+            <button
+              type="submit"
+              className="app-btn app-btn-primary"
+              disabled={
+                saving ||
+                previewLoading
+              }
+            >
+
+              {saving ? (
+                <>
+                  <span
+                    className="system-spinner system-spinner-small"
+                    aria-hidden="true"
+                  />
+
+                  <span>
+                    Guardando...
+                  </span>
+                </>
+              ) : (
+                <>
+                  <FaSave />
+
+                  <span>
+                    Guardar
+                  </span>
+                </>
+              )}
+
+            </button>
+
+          </div>
+
+        </form>
+
+      </div>
 
     </div>
   );

@@ -1,0 +1,458 @@
+/* =========================================================
+   TABLES.CSS
+   SISTEMA GLOBAL DE TABLAS
+   =========================================================
+   Este archivo controla únicamente:
+
+   - tablas
+   - encabezados
+   - filas
+   - celdas
+   - scroll horizontal
+   - columnas de acciones
+   - estado sin resultados
+   - paginación
+   - responsive de tablas
+   ========================================================= */
+
+
+/* =========================================================
+   CONTENEDOR DE TABLA
+   Evita que la tabla rompa toda la página
+   ========================================================= */
+
+.system-table-wrapper {
+  width: 100%;
+  max-width: 100%;
+
+  min-width: 0;
+
+  overflow-x: auto;
+  overflow-y: hidden;
+
+  background:
+    var(--color-superficie);
+
+  border:
+    1px solid
+    var(--color-borde);
+
+  border-radius:
+    var(--radio-medio);
+
+  -webkit-overflow-scrolling: touch;
+}
+
+
+/* =========================================================
+   TABLA BASE
+   ========================================================= */
+
+.system-table {
+  width: 100%;
+
+  min-width: 850px;
+
+  border-collapse: collapse;
+
+  table-layout: auto;
+
+  color:
+    var(--color-texto);
+
+  background:
+    var(--color-superficie);
+
+  font-size: 0.9rem;
+}
+
+
+/* =========================================================
+   ENCABEZADOS
+   ========================================================= */
+
+.system-table thead {
+  background:
+    var(--color-superficie-secundaria);
+}
+
+
+.system-table th {
+  padding:
+    12px
+    14px;
+
+  color:
+    var(--color-texto);
+
+  background:
+    var(--color-superficie-secundaria);
+
+  border-bottom:
+    1px solid
+    var(--color-borde);
+
+  text-align: left;
+
+  vertical-align: middle;
+
+  font-size: 0.85rem;
+
+  font-weight: 700;
+
+  line-height: 1.3;
+
+  white-space: nowrap;
+}
+
+
+/* =========================================================
+   CELDAS
+   ========================================================= */
+
+.system-table td {
+  padding:
+    12px
+    14px;
+
+  border-bottom:
+    1px solid
+    #edf0f2;
+
+  vertical-align: middle;
+
+  line-height: 1.4;
+}
+
+
+/* =========================================================
+   FILAS
+   ========================================================= */
+
+.system-table tbody tr {
+  transition:
+    background-color 0.15s ease;
+}
+
+
+.system-table tbody tr:hover {
+  background:
+    #fafbfc;
+}
+
+
+.system-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+
+/* =========================================================
+   TEXTO LARGO
+   ========================================================= */
+
+.system-table td {
+  overflow-wrap: break-word;
+}
+
+
+/* =========================================================
+   COLUMNAS NUMÉRICAS
+   ========================================================= */
+
+.system-table-number {
+  text-align: right;
+}
+
+
+/* =========================================================
+   COLUMNA DE ACCIONES
+   ========================================================= */
+
+.system-table-actions {
+  text-align: center;
+
+  white-space: nowrap;
+}
+
+
+.system-table-actions-group {
+  display: inline-flex;
+
+  align-items: center;
+  justify-content: center;
+
+  flex-wrap: nowrap;
+
+  gap: 6px;
+}
+
+
+/* =========================================================
+   ESTADO SIN RESULTADOS
+   ========================================================= */
+
+.system-table-empty {
+  padding:
+    36px
+    16px !important;
+
+  color:
+    var(--color-texto-secundario);
+
+  text-align: center !important;
+
+  font-size: 0.9rem;
+
+  font-weight: 400;
+}
+
+
+/* =========================================================
+   PAGINACIÓN
+   ========================================================= */
+
+.system-pagination-container {
+  width: 100%;
+
+  display: flex;
+
+  align-items: center;
+  justify-content: flex-end;
+
+  margin-top: 18px;
+}
+
+
+.system-pagination {
+  display: flex;
+
+  align-items: center;
+
+  flex-wrap: wrap;
+
+  gap: 6px;
+}
+
+
+/* =========================================================
+   BOTÓN DE PÁGINA
+   ========================================================= */
+
+.system-page-button {
+  width: 36px;
+  min-width: 36px;
+
+  height: 36px;
+
+  display: inline-flex;
+
+  align-items: center;
+  justify-content: center;
+
+  padding: 0;
+
+  color:
+    var(--color-texto-secundario);
+
+  background:
+    var(--color-superficie);
+
+  border:
+    1px solid
+    var(--color-borde);
+
+  border-radius:
+    var(--radio-pequeno);
+
+  font-family: inherit;
+
+  font-size: 0.85rem;
+
+  font-weight: 600;
+
+  line-height: 1;
+
+  cursor: pointer;
+
+  transition:
+    color 0.2s ease,
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+
+.system-page-button:hover:not(:disabled) {
+  color:
+    var(--color-primario);
+
+  background:
+    var(--color-superficie-secundaria);
+
+  border-color:
+    var(--color-primario);
+}
+
+
+.system-page-button.active {
+  color: #ffffff;
+
+  background:
+    var(--color-primario);
+
+  border-color:
+    var(--color-primario);
+}
+
+
+.system-page-button:focus-visible {
+  outline:
+    3px solid
+    var(--color-primario-suave);
+
+  outline-offset: 2px;
+}
+
+
+.system-page-button:disabled {
+  color:
+    var(--color-texto-suave);
+
+  background:
+    var(--color-superficie-secundaria);
+
+  cursor: not-allowed;
+}
+
+
+/* =========================================================
+   SCROLLBAR DE TABLAS
+   ========================================================= */
+
+.system-table-wrapper::-webkit-scrollbar {
+  height: 8px;
+}
+
+
+.system-table-wrapper::-webkit-scrollbar-track {
+  background:
+    var(--color-superficie-secundaria);
+}
+
+
+.system-table-wrapper::-webkit-scrollbar-thumb {
+  background: #b8c1c8;
+
+  border-radius: 999px;
+}
+
+
+.system-table-wrapper::-webkit-scrollbar-thumb:hover {
+  background: #929ea7;
+}
+
+
+/* =========================================================
+   TABLET
+   ========================================================= */
+
+@media (max-width: 900px) {
+
+  .system-table {
+    min-width: 800px;
+
+    font-size: 0.86rem;
+  }
+
+
+  .system-table th,
+  .system-table td {
+    padding:
+      11px
+      12px;
+  }
+
+}
+
+
+/* =========================================================
+   CELULARES
+   ========================================================= */
+
+@media (max-width: 600px) {
+
+  .system-table-wrapper {
+    border-radius:
+      var(--radio-pequeno);
+  }
+
+
+  .system-table {
+    min-width: 760px;
+
+    font-size: 0.82rem;
+  }
+
+
+  .system-table th,
+  .system-table td {
+    padding:
+      10px
+      11px;
+  }
+
+
+  .system-table th {
+    font-size: 0.8rem;
+  }
+
+
+  .system-pagination-container {
+    justify-content: center;
+  }
+
+
+  .system-page-button {
+    width: 34px;
+    min-width: 34px;
+
+    height: 34px;
+  }
+
+}
+
+
+/* =========================================================
+   CELULARES MUY PEQUEÑOS
+   ========================================================= */
+
+@media (max-width: 380px) {
+
+  .system-table {
+    font-size: 0.8rem;
+  }
+
+
+  .system-table th,
+  .system-table td {
+    padding:
+      9px
+      10px;
+  }
+
+}
+
+
+/* =========================================================
+   ACCESIBILIDAD
+   ========================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+
+  .system-table tbody tr,
+  .system-page-button {
+    transition: none;
+  }
+
+}
+

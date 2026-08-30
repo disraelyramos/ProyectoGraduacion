@@ -1,49 +1,707 @@
-/* Card personalizado */
+/* =========================================================
+   NUEVO-REGISTRO.CSS
+   SOLO ESTILOS ESPECÍFICOS DEL FLUJO NUEVO REGISTRO
+
+   Cards generales, botones, alertas, colores y containers
+   vienen desde system.css.
+   ========================================================= */
+
+
+/* =========================================================
+   LAYOUT PRINCIPAL
+   ========================================================= */
+
+.nuevo-registro-page {
+  min-width: 0;
+}
+
+
+.nuevo-registro-layout {
+  width: 100%;
+
+  min-width: 0;
+
+  display: grid;
+
+  grid-template-columns:
+    minmax(0, 620px);
+
+  align-items: start;
+
+  gap: 24px;
+}
+
+
+/* Cuando Foto 4 está visible */
+
+.nuevo-registro-layout.with-recoleccion {
+  grid-template-columns:
+    minmax(340px, 500px)
+    minmax(0, 1fr);
+}
+
+
+/* =========================================================
+   TARJETA PRINCIPAL
+   ========================================================= */
+
 .nuevo-registro-card {
-  width: 600px;
-  min-height: 450px;
-  border-radius: 12px;
+  min-width: 0;
 }
 
-/*Progress bar personalizada */
+
+/* =========================================================
+   CABECERA
+   ========================================================= */
+
+.nuevo-registro-header {
+  width: 100%;
+
+  margin-bottom: 22px;
+
+  padding-bottom: 16px;
+
+  border-bottom:
+    1px solid
+    var(--color-borde);
+}
+
+
+.nuevo-registro-title {
+  display: flex;
+
+  align-items: flex-start;
+
+  gap: 12px;
+}
+
+
+.nuevo-registro-title > svg {
+  margin-top: 2px;
+
+  flex-shrink: 0;
+
+  color:
+    var(--color-primario);
+
+  font-size: 1.35rem;
+}
+
+
+/* =========================================================
+   LISTA DE RESIDUOS
+   ========================================================= */
+
+.nuevo-registro-list {
+  width: 100%;
+
+  display: grid;
+
+  gap: 16px;
+
+  margin-bottom: 22px;
+}
+
+
+/* =========================================================
+   TARJETA DE RESIDUO
+   ========================================================= */
+
+.residuo-card {
+  width: 100%;
+
+  min-width: 0;
+
+  display: block;
+
+  padding:
+    16px;
+
+  color:
+    var(--color-texto);
+
+  background:
+    var(--color-superficie);
+
+  border:
+    1px solid
+    var(--color-borde);
+
+  border-radius:
+    var(--radio-medio);
+
+  text-align: left;
+
+  cursor: pointer;
+
+  font-family: inherit;
+
+  transition:
+    border-color 0.2s ease,
+    background-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.15s ease;
+}
+
+
+.residuo-card:hover:not(:disabled) {
+  border-color:
+    var(--color-primario);
+
+  background:
+    #fbfdfd;
+
+  box-shadow:
+    var(--sombra-suave);
+
+  transform:
+    translateY(-1px);
+}
+
+
+.residuo-card:focus-visible {
+  outline:
+    3px solid
+    var(--color-primario-suave);
+
+  outline-offset: 2px;
+}
+
+
+.residuo-card:disabled,
+.residuo-card.disabled {
+  opacity: 0.6;
+
+  cursor: not-allowed;
+
+  transform: none;
+}
+
+
+/* =========================================================
+   CABECERA DE CADA RESIDUO
+   ========================================================= */
+
+.residuo-card-header {
+  width: 100%;
+
+  display: flex;
+
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 14px;
+
+  margin-bottom: 12px;
+}
+
+
+.residuo-card-identity {
+  min-width: 0;
+
+  display: flex;
+
+  align-items: center;
+
+  gap: 10px;
+}
+
+
+/* =========================================================
+   ICONO
+   ========================================================= */
+
+.residuo-card-icon {
+  width: 38px;
+  height: 38px;
+
+  display: inline-flex;
+
+  align-items: center;
+  justify-content: center;
+
+  flex-shrink: 0;
+
+  border-radius: 50%;
+
+  font-size: 1rem;
+}
+
+
+/* Punzocortante */
+
+.residuo-card--punzocortante
+.residuo-card-icon {
+  color:
+    var(--color-peligro);
+
+  background:
+    var(--color-peligro-suave);
+}
+
+
+/* Bioinfeccioso */
+
+.residuo-card--bioinfeccioso
+.residuo-card-icon {
+  color: #9a6a08;
+
+  background:
+    var(--color-advertencia-suave);
+}
+
+
+/* =========================================================
+   NOMBRE DEL RESIDUO
+   ========================================================= */
+
+.residuo-card-name {
+  min-width: 0;
+
+  color:
+    var(--color-texto);
+
+  font-size: 0.95rem;
+
+  font-weight: 700;
+
+  overflow-wrap: anywhere;
+}
+
+
+/* =========================================================
+   PORCENTAJE
+   ========================================================= */
+
+.residuo-card-percentage {
+  flex-shrink: 0;
+
+  color:
+    var(--color-texto);
+
+  font-size: 1rem;
+
+  font-weight: 700;
+}
+
+
+/* =========================================================
+   BARRA DE PROGRESO
+   ========================================================= */
+
 .custom-progress {
-  height: 26px;
-  border-radius: 8px;
+  width: 100%;
+
+  height: 16px;
+
   overflow: hidden;
+
+  background: #edf1f3;
+
+  border-radius: 999px;
 }
 
-/* Ajustes al título */
-.nuevo-registro-card .card-title {
+
+.custom-progress-bar {
+  height: 100%;
+
+  border-radius: inherit;
+
+  transition:
+    width 0.3s ease;
+}
+
+
+/* Punzocortante */
+
+.residuo-card--punzocortante
+.custom-progress-bar {
+  background:
+    var(--color-peligro);
+}
+
+
+/* Bioinfeccioso */
+
+.residuo-card--bioinfeccioso
+.custom-progress-bar {
+  background:
+    var(--color-advertencia);
+}
+
+
+/* =========================================================
+   MENSAJE SIN DATOS
+   ========================================================= */
+
+.residuo-card-empty {
+  display: block;
+
+  margin-top: 9px;
+
+  color:
+    var(--color-texto-secundario);
+
+  font-size: 0.8rem;
+
+  line-height: 1.4;
+}
+
+
+/* =========================================================
+   INFORMACIÓN
+   ========================================================= */
+
+.nuevo-registro-info {
+  display: flex;
+
+  align-items: flex-start;
+
+  gap: 10px;
+}
+
+
+.nuevo-registro-info > svg {
+  margin-top: 3px;
+
+  flex-shrink: 0;
+
+  font-size: 1rem;
+}
+
+
+/* =========================================================
+   FOTO 4
+   ========================================================= */
+
+.nuevo-registro-recoleccion {
+  width: 100%;
+
+  min-width: 0;
+}
+
+
+/* =========================================================
+   TEMPORAL - MODAL COSTO
+   =========================================================
+   Esta regla NO debería vivir aquí definitivamente.
+
+   Se mantiene temporalmente hasta revisar ModalCosto.
+   ========================================================= */
+
+.modal-costo-header {
+  color: #ffffff;
+
+  background:
+    #343a40;
+}
+
+
+/* =========================================================
+   TEMPORAL - VALIDACIÓN BOOTSTRAP
+   =========================================================
+   No borrar todavía.
+
+   Puede estar siendo utilizada por ModalCosto o
+   ModalTotales.
+
+   Cuando actualicemos esos componentes, estas reglas
+   podrán eliminarse.
+   ========================================================= */
+
+.is-invalid {
+  border-color:
+    var(--color-peligro) !important;
+}
+
+
+.invalid-feedback {
+  display: block;
+
+  font-size: 0.85rem;
+}
+
+
+/* =========================================================
+   LAPTOP / TABLET HORIZONTAL
+   ========================================================= */
+
+@media (max-width: 1100px) {
+
+  .nuevo-registro-layout.with-recoleccion {
+    grid-template-columns: 1fr;
+  }
+
+}
+
+
+/* =========================================================
+   TABLET
+   ========================================================= */
+
+@media (max-width: 900px) {
+
+  .nuevo-registro-layout {
+    grid-template-columns: 1fr;
+
+    gap: 18px;
+  }
+
+
+  .nuevo-registro-card {
+    width: 100%;
+  }
+
+}
+
+
+/* =========================================================
+   CELULARES
+   ========================================================= */
+
+@media (max-width: 600px) {
+
+  .nuevo-registro-layout {
+    gap: 14px;
+  }
+
+
+  .nuevo-registro-header {
+    margin-bottom: 18px;
+
+    padding-bottom: 13px;
+  }
+
+
+  .nuevo-registro-list {
+    gap: 12px;
+
+    margin-bottom: 18px;
+  }
+
+
+  .residuo-card {
+    padding:
+      14px;
+  }
+
+
+  .residuo-card-header {
+    margin-bottom: 10px;
+  }
+
+
+  .residuo-card-icon {
+    width: 36px;
+    height: 36px;
+  }
+
+
+  .custom-progress {
+    height: 14px;
+  }
+
+
+  .nuevo-registro-info {
+    font-size: 0.84rem;
+  }
+
+}
+
+
+/* =========================================================
+   CELULARES MUY PEQUEÑOS
+   ========================================================= */
+
+@media (max-width: 380px) {
+
+  .residuo-card {
+    padding:
+      12px;
+  }
+
+
+  .residuo-card-header {
+    gap: 8px;
+  }
+
+
+  .residuo-card-identity {
+    gap: 8px;
+  }
+
+
+  .residuo-card-icon {
+    width: 34px;
+    height: 34px;
+  }
+
+
+  .residuo-card-name {
+    font-size: 0.88rem;
+  }
+
+
+  .residuo-card-percentage {
+    font-size: 0.9rem;
+  }
+
+}
+
+
+/* =========================================================
+   ACCESIBILIDAD
+   ========================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+
+  .residuo-card,
+  .custom-progress-bar {
+    transition: none;
+  }
+
+}
+
+/* =========================================================
+   REGISTRO DE RECOLECCIÓN
+   FOTO 4
+   ========================================================= */
+
+.registro-recoleccion {
+  width: 100%;
+
+  min-width: 0;
+}
+
+
+/* =========================================================
+   TARJETA
+   ========================================================= */
+
+.registro-recoleccion-card {
+  width: 100%;
+
+  min-width: 0;
+}
+
+
+/* =========================================================
+   CABECERA
+   ========================================================= */
+
+.registro-recoleccion-header {
+  margin-bottom: 22px;
+
+  padding-bottom: 16px;
+
+  border-bottom:
+    1px solid
+    var(--color-borde);
+}
+
+
+.registro-recoleccion-title {
+  display: flex;
+
+  align-items: flex-start;
+
+  gap: 11px;
+}
+
+
+.registro-recoleccion-title > svg {
+  margin-top: 2px;
+
+  flex-shrink: 0;
+
+  color:
+    var(--color-primario);
+
   font-size: 1.3rem;
 }
 
-/* Cabecera negra clara */
-.modal-costo-header {
-  background-color: #343a40; /* gris oscuro */
-  color: #fff;
+
+/* =========================================================
+   TEXTO OPCIONAL
+   ========================================================= */
+
+.registro-optional {
+  margin-left: 7px;
+
+  color:
+    var(--color-texto-suave);
+
+  font-size: 0.78rem;
+
+  font-weight: 400;
 }
 
-/* Estilo del campo en error */
-.is-invalid {
-  border-color: #dc3545 !important;
+
+/* =========================================================
+   ACCIONES
+   ========================================================= */
+
+.registro-recoleccion-actions {
+  margin-top: 6px;
+
+  padding-top: 18px;
+
+  border-top:
+    1px solid
+    var(--color-borde);
 }
 
-/* Feedback debajo del input */
-.invalid-feedback {
-  display: block; /* aseguramos que siempre se vea */
+
+/* =========================================================
+   CARGANDO
+   ========================================================= */
+
+.registro-recoleccion-loading {
+  min-height: 220px;
+
+  display: flex;
+
+  flex-direction: column;
+
+  align-items: center;
+  justify-content: center;
+
+  gap: 14px;
+
+  color:
+    var(--color-texto-secundario);
+
+  text-align: center;
+}
+
+
+.registro-recoleccion-loading p {
+  margin: 0;
+
   font-size: 0.9rem;
 }
 
-/* Bloques de residuo clickeables */
-.residuo-card {
-  padding: 10px;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.3s ease-in-out;
-}
 
-.residuo-card:hover {
-  box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.2);
-  transform: translateY(-2px);
-  background-color: #f9f9f9;
+/* =========================================================
+   CELULARES
+   ========================================================= */
+
+@media (max-width: 600px) {
+
+  .registro-recoleccion-header {
+    margin-bottom: 18px;
+
+    padding-bottom: 13px;
+  }
+
+
+  .registro-recoleccion-actions {
+    padding-top: 14px;
+  }
+
+
+  .registro-recoleccion-loading {
+    min-height: 180px;
+  }
+
 }

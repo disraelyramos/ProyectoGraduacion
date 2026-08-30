@@ -1,341 +1,485 @@
 /* =========================================================
-   ESTILOS GENERALES DEL SISTEMA
+   HISTORIAL-RECOLECCION.CSS
 
-   Este archivo contiene únicamente estilos reutilizables.
-   Cambiar aquí colores, bordes, sombras o tamaños afectará
-   todas las pantallas que utilicen las clases app-*.
+   SOLO ESTILOS ESPECÍFICOS DE:
+   - filtros
+   - búsqueda
+   - fechas
+   - layout de resultados
+   - botones de exportación como grupo
+
+   NO contiene:
+   - estilos globales
+   - botones globales
+   - inputs globales
+   - cards globales
+   - tablas
+   - paginación de tablas
+
+   Todo eso viene de:
+   system.css
+   tables.css
    ========================================================= */
-
-:root {
-  /* =========================
-     COLORES
-     ========================= */
-
-  --app-color-primary: #0d6efd;
-  --app-color-primary-hover: #0b5ed7;
-  --app-color-primary-soft: #eaf2ff;
-
-  --app-color-success: #198754;
-  --app-color-success-hover: #157347;
-
-  --app-color-danger: #dc3545;
-  --app-color-danger-hover: #bb2d3b;
-
-  --app-color-text: #212529;
-  --app-color-text-muted: #6c757d;
-  --app-color-heading: #202124;
-
-  --app-color-surface: #ffffff;
-
-  --app-color-border: #dee2e6;
-  --app-color-border-soft: #e9ecef;
-
-  --app-color-table-head: #111827;
-  --app-color-table-head-border: #2d3748;
-  --app-color-row-hover: #f4f7fb;
-
-
-  /* =========================
-     BORDES
-     ========================= */
-
-  --app-radius-sm: 0.45rem;
-  --app-radius-md: 0.75rem;
-  --app-radius-lg: 1rem;
-
-
-  /* =========================
-     SOMBRAS
-     ========================= */
-
-  --app-shadow-sm:
-    0 0.125rem 0.5rem rgba(0, 0, 0, 0.07);
-
-
-  /* =========================
-     ESPACIADOS
-     ========================= */
-
-  --app-space-2: 0.5rem;
-  --app-space-3: 0.75rem;
-  --app-space-4: 1rem;
-  --app-space-5: 1.5rem;
-  --app-space-6: 2rem;
-
-
-  /* =========================
-     CONTROLES
-     ========================= */
-
-  --app-control-height: 2.75rem;
-
-
-  /* =========================
-     CONTENIDO
-     ========================= */
-
-  --app-content-max-width: 1440px;
-
-
-  /* =========================
-     TRANSICIONES
-     ========================= */
-
-  --app-transition: 160ms ease;
-}
 
 
 /* =========================================================
-   CONTENEDOR GENERAL
-   Mobile First
+   PÁGINA
    ========================================================= */
 
-.app-page {
-  width: 100%;
-  max-width: var(--app-content-max-width);
-
-  margin: 0 auto;
-
-  padding: var(--app-space-4);
-
-  min-width: 0;
-}
-
-
-/* =========================================================
-   TARJETAS
-   ========================================================= */
-
-.app-card {
+.historial-recoleccion-page {
   width: 100%;
   min-width: 0;
-
-  background-color: var(--app-color-surface);
-
-  border: 1px solid var(--app-color-border-soft) !important;
-  border-radius: var(--app-radius-lg) !important;
-
-  box-shadow: var(--app-shadow-sm);
-
-  overflow: hidden;
 }
 
 
-.app-card-body {
-  padding: var(--app-space-4);
+/* =========================================================
+   TARJETA DE BÚSQUEDA
+   ========================================================= */
 
+.historial-search-card {
+  width: 100%;
   min-width: 0;
 }
 
 
 /* =========================================================
-   TÍTULOS
+   CABECERA
    ========================================================= */
 
-.app-section-heading {
+.historial-search-header {
+  width: 100%;
+  min-width: 0;
+}
+
+
+.historial-search-title {
   display: flex;
-  align-items: center;
 
-  width: 100%;
-  min-width: 0;
+  align-items: flex-start;
+
+  gap: 12px;
 }
 
 
-.app-page-title {
-  display: flex;
-  align-items: center;
+.historial-search-title > svg {
+  margin-top: 3px;
 
-  gap: var(--app-space-2);
-
-  margin: 0;
-
-  color: var(--app-color-heading);
-
-  font-size: clamp(1.25rem, 4vw, 1.65rem);
-  font-weight: 700;
-  line-height: 1.25;
-
-  overflow-wrap: anywhere;
-}
-
-
-.app-page-title-icon {
   flex-shrink: 0;
 
-  color: var(--app-color-primary);
+  color:
+    var(--color-primario);
+
+  font-size: 1.35rem;
 }
 
 
-.app-subtitle {
-  margin: 0;
+.historial-search-title .system-title {
+  margin-bottom: 5px;
+}
 
-  color: var(--app-color-heading);
 
-  font-size: clamp(1rem, 3vw, 1.15rem);
-  font-weight: 650;
-  line-height: 1.35;
-
-  overflow-wrap: anywhere;
+.historial-search-title .system-subtitle {
+  margin-bottom: 0;
 }
 
 
 /* =========================================================
-   DIVISOR
+   FORMULARIO
    ========================================================= */
 
-.app-divider {
+.historial-search-form {
   width: 100%;
-  height: 2px;
 
-  margin: var(--app-space-4) 0;
+  min-width: 0;
+}
 
-  background-color: var(--app-color-primary);
+
+/* =========================================================
+   GRID DE FILTROS
+   ========================================================= */
+
+.historial-filter-grid {
+  width: 100%;
+
+  min-width: 0;
+
+  display: grid;
+
+  grid-template-columns:
+    minmax(180px, 0.9fr)
+    minmax(260px, 1.4fr)
+    minmax(210px, 1fr);
+
+  gap:
+    18px
+    22px;
+
+  align-items: start;
+}
+
+
+.historial-filter-group {
+  min-width: 0;
+
+  margin-bottom: 0;
+}
+
+
+/* =========================================================
+   CAMPOS ESPECÍFICOS
+   ========================================================= */
+
+.historial-field {
+  min-width: 0;
+}
+
+
+/* =========================================================
+   BUSCADOR CON ICONO
+   ========================================================= */
+
+.historial-search-input-group {
+  position: relative;
+
+  width: 100%;
+
+  min-width: 0;
+}
+
+
+.historial-search-icon {
+  position: absolute;
+
+  top: 1px;
+  bottom: 1px;
+  left: 1px;
+
+  width: 44px;
+
+  display: flex;
+
+  align-items: center;
+  justify-content: center;
+
+  z-index: 2;
+
+  color:
+    var(--color-texto-suave);
+
+  border-right:
+    1px solid
+    var(--color-borde-input);
+
+  pointer-events: none;
+
+  transition:
+    color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+
+.historial-search-input {
+  padding-left: 56px;
+}
+
+
+.historial-search-input-group:focus-within
+.historial-search-icon {
+  color:
+    var(--color-primario);
+
+  border-color:
+    var(--color-primario);
+}
+
+
+/* =========================================================
+   RANGO DE FECHAS
+   ========================================================= */
+
+.historial-date-group {
+  width: 100%;
+
+  min-width: 0;
+
+  margin-top: 22px;
+
+  margin-bottom: 0;
+}
+
+
+.historial-date-range {
+  width: 100%;
+
+  min-width: 0;
+
+  display: grid;
+
+  grid-template-columns:
+    minmax(0, 1fr)
+    auto
+    minmax(0, 1fr);
+
+  align-items: start;
+
+  gap: 12px;
+}
+
+
+/* =========================================================
+   CAMPO DE FECHA
+   ========================================================= */
+
+.historial-date-field {
+  width: 100%;
+
+  min-width: 0;
+}
+
+
+.historial-date-input-group {
+  position: relative;
+
+  width: 100%;
+
+  min-width: 0;
+}
+
+
+.historial-date-input {
+  padding-right: 54px;
+}
+
+
+/* =========================================================
+   BOTÓN CALENDARIO
+   ========================================================= */
+
+.historial-date-trigger {
+  position: absolute;
+
+  top: 1px;
+  right: 1px;
+  bottom: 1px;
+
+  width: 46px;
+
+  display: flex;
+
+  align-items: center;
+  justify-content: center;
+
+  padding: 0;
+
+  color:
+    var(--color-texto-secundario);
+
+  background:
+    var(--color-superficie-secundaria);
 
   border: 0;
-}
 
+  border-left:
+    1px solid
+    var(--color-borde-input);
 
-/* =========================================================
-   LABELS
-   ========================================================= */
+  border-radius:
+    0
+    calc(var(--radio-medio) - 1px)
+    calc(var(--radio-medio) - 1px)
+    0;
 
-.app-label {
-  margin-bottom: var(--app-space-2);
-
-  color: var(--app-color-text);
-
-  font-weight: 600;
-}
-
-
-/* =========================================================
-   INPUTS Y SELECTS
-   ========================================================= */
-
-.app-control {
-  width: 100%;
-  min-width: 0;
-  min-height: var(--app-control-height);
-
-  border-color: var(--app-color-border);
-  border-radius: var(--app-radius-sm);
+  cursor: pointer;
 
   transition:
-    border-color var(--app-transition),
-    box-shadow var(--app-transition);
+    color 0.2s ease,
+    background-color 0.2s ease,
+    border-color 0.2s ease;
 }
 
 
-.app-control:focus {
-  border-color: var(--app-color-primary);
+.historial-date-trigger:hover {
+  color:
+    var(--color-primario);
 
-  box-shadow:
-    0 0 0 0.2rem rgba(13, 110, 253, 0.18);
+  background:
+    var(--color-primario-suave);
+
+  border-left-color:
+    var(--color-primario);
+}
+
+
+.historial-date-trigger:focus-visible {
+  outline:
+    3px solid
+    var(--color-primario-suave);
+
+  outline-offset: 1px;
 }
 
 
 /* =========================================================
-   BOTONES GENERALES
+   SEPARADOR DE FECHAS
    ========================================================= */
 
-.app-btn {
-  min-height: 2.5rem;
+.historial-date-separator {
+  min-height:
+    var(--input-altura);
 
-  border-radius: var(--app-radius-sm);
+  display: flex;
+
+  align-items: center;
+  justify-content: center;
+
+  color:
+    var(--color-texto-suave);
 
   font-weight: 600;
 
-  transition:
-    background-color var(--app-transition),
-    border-color var(--app-transition),
-    transform var(--app-transition),
-    box-shadow var(--app-transition);
-}
-
-
-.app-btn:not(:disabled):active {
-  transform: translateY(1px);
-}
-
-
-/* Botones pequeños como PDF / Excel */
-
-.app-btn--compact {
-  min-width: 0;
-  min-height: 2.25rem;
-
-  padding-left: 0.85rem;
-  padding-right: 0.85rem;
+  user-select: none;
 }
 
 
 /* =========================================================
-   BOTÓN PRINCIPAL
+   ERRORES
    ========================================================= */
 
-.btn-primary {
-  --bs-btn-bg: var(--app-color-primary);
-  --bs-btn-border-color: var(--app-color-primary);
-
-  --bs-btn-hover-bg: var(--app-color-primary-hover);
-  --bs-btn-hover-border-color: var(--app-color-primary-hover);
-
-  --bs-btn-active-bg: var(--app-color-primary-hover);
-  --bs-btn-active-border-color: var(--app-color-primary-hover);
-}
-
-
-/* =========================================================
-   BOTÓN VERDE
-   ========================================================= */
-
-.btn-success {
-  --bs-btn-bg: var(--app-color-success);
-  --bs-btn-border-color: var(--app-color-success);
-
-  --bs-btn-hover-bg: var(--app-color-success-hover);
-  --bs-btn-hover-border-color: var(--app-color-success-hover);
-
-  --bs-btn-active-bg: var(--app-color-success-hover);
-  --bs-btn-active-border-color: var(--app-color-success-hover);
-}
-
-
-/* =========================================================
-   BOTÓN ROJO
-   ========================================================= */
-
-.btn-danger {
-  --bs-btn-bg: var(--app-color-danger);
-  --bs-btn-border-color: var(--app-color-danger);
-
-  --bs-btn-hover-bg: var(--app-color-danger-hover);
-  --bs-btn-hover-border-color: var(--app-color-danger-hover);
-
-  --bs-btn-active-bg: var(--app-color-danger-hover);
-  --bs-btn-active-border-color: var(--app-color-danger-hover);
-}
-
-
-/* =========================================================
-   TABLAS RESPONSIVE
-   No comprime la tabla.
-   Si no cabe aparece desplazamiento horizontal.
-   ========================================================= */
-
-.app-table-scroll {
+.historial-error {
   width: 100%;
+}
+
+
+/* =========================================================
+   BOTÓN VER
+   ========================================================= */
+
+.historial-submit-wrap {
+  width: 100%;
+
+  display: flex;
+
+  justify-content: center;
+
+  margin-top: 24px;
+}
+
+
+.historial-submit-btn {
+  min-width: 125px;
+}
+
+
+/* =========================================================
+   RESULTADOS
+   ========================================================= */
+
+.historial-results {
+  width: 100%;
+
   min-width: 0;
 
-  max-height: 24rem;
+  margin-top: 26px;
+}
 
-  overflow-x: auto;
-  overflow-y: auto;
 
-  border: 1px solid var(--app-color-border-soft);
-  border-radius: var(--app-radius-md);
+.historial-tables {
+  width: 100%;
 
-  -webkit-overflow-scrolling: touch;
+  min-width: 0;
+}
+
+
+.historial-results-card {
+  width: 100%;
+
+  min-width: 0;
+}
+
+
+/* =========================================================
+   CABECERA DE RESULTADOS
+   ========================================================= */
+
+.historial-results-header {
+  width: 100%;
+
+  min-width: 0;
+
+  display: flex;
+
+  align-items: flex-start;
+  justify-content: space-between;
+
+  gap: 20px;
+}
+
+
+/* =========================================================
+   TÍTULO RESULTADOS
+   ========================================================= */
+
+.historial-results-title-wrap {
+  min-width: 0;
+
+  display: flex;
+
+  align-items: flex-start;
+
+  gap: 11px;
+}
+
+
+.historial-results-title-icon {
+  margin-top: 3px;
+
+  flex-shrink: 0;
+
+  color:
+    var(--color-primario);
+
+  font-size: 1.2rem;
+}
+
+
+/* =========================================================
+   EXPORTACIÓN
+   ========================================================= */
+
+.historial-export-actions {
+  display: flex;
+
+  align-items: center;
+  justify-content: flex-end;
+
+  flex-wrap: wrap;
+
+  gap: 10px;
+
+  flex-shrink: 0;
+}
+
+
+/* =========================================================
+   SECCIONES DE RESULTADOS
+   ========================================================= */
+
+.historial-result-section {
+  width: 100%;
+
+  min-width: 0;
+}
+
+
+.historial-result-section
++ .historial-result-section {
+  margin-top: 30px;
+}
+
+
+.historial-table-title {
+  color:
+    var(--color-texto);
 }
 
 
@@ -343,42 +487,150 @@
    TABLET
    ========================================================= */
 
-@media (min-width: 576px) {
+@media (max-width: 900px) {
 
-  .app-page {
-    padding: var(--app-space-5);
+  .historial-filter-grid {
+    grid-template-columns:
+      repeat(
+        2,
+        minmax(0, 1fr)
+      );
+
+    gap:
+      16px
+      18px;
   }
 
 
-  .app-card-body {
-    padding: var(--app-space-5);
+  .historial-filter-group:last-child {
+    grid-column:
+      1 / -1;
+  }
+
+
+  .historial-results-header {
+    flex-direction: column;
+
+    align-items: stretch;
+
+    gap: 16px;
+  }
+
+
+  .historial-export-actions {
+    justify-content: flex-start;
   }
 
 }
 
 
 /* =========================================================
-   ESCRITORIO
+   CELULARES
    ========================================================= */
 
-@media (min-width: 992px) {
+@media (max-width: 600px) {
 
-  .app-page {
-    padding: var(--app-space-6);
+  .historial-search-title {
+    gap: 9px;
+  }
+
+
+  .historial-filter-grid {
+    grid-template-columns: 1fr;
+
+    gap: 16px;
+  }
+
+
+  .historial-filter-group:last-child {
+    grid-column: auto;
+  }
+
+
+  .historial-date-group {
+    margin-top: 18px;
+  }
+
+
+  .historial-date-range {
+    grid-template-columns: 1fr;
+
+    gap: 10px;
+  }
+
+
+  .historial-date-separator {
+    min-height: 14px;
+
+    line-height: 1;
+  }
+
+
+  .historial-submit-wrap {
+    margin-top: 20px;
+  }
+
+
+  .historial-submit-btn {
+    width: 100%;
+  }
+
+
+  .historial-results {
+    margin-top: 18px;
+  }
+
+
+  .historial-export-actions {
+    width: 100%;
+
+    flex-direction: column;
+
+    align-items: stretch;
+  }
+
+
+  .historial-export-actions .app-btn {
+    width: 100%;
+  }
+
+
+  .historial-result-section
+  + .historial-result-section {
+    margin-top: 24px;
   }
 
 }
 
 
 /* =========================================================
-   ACCESIBILIDAD
+   CELULARES MUY PEQUEÑOS
    ========================================================= */
 
-@media (prefers-reduced-motion: reduce) {
+@media (max-width: 380px) {
 
-  .app-btn,
-  .app-control {
-    transition: none;
+  .historial-search-title > svg {
+    font-size: 1.15rem;
+  }
+
+
+  .historial-search-icon {
+    width: 40px;
+  }
+
+
+  .historial-search-input {
+    padding-left: 50px;
+  }
+
+
+  .historial-date-trigger {
+    width: 42px;
+  }
+
+
+  .historial-date-input {
+    padding-right: 49px;
   }
 
 }

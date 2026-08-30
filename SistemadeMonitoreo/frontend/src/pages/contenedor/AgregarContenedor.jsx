@@ -1,182 +1,611 @@
-import React, { useState, useEffect } from "react";
-import { FaPlus, FaEdit } from "react-icons/fa";
-import RegistrarNuevoContenedor from "../../components/RegistrarNuevoContenedor";
+import React, {
+  useState,
+  useEffect,
+} from "react";
+
+import {
+  FaPlus,
+  FaEdit,
+  FaCalendarAlt,
+} from "react-icons/fa";
+
 import axios from "axios";
-import { showErrorAlert } from "../../utils/alerts";
+
+import RegistrarNuevoContenedor
+  from "../../components/RegistrarNuevoContenedor";
+
+import {
+  showErrorAlert,
+} from "../../utils/alerts";
+
+import "../../styles/tables.css";
+
+
+/**
+ * =====================================================
+ * CONFIGURACIÓN DE ENTORNO
+ * =====================================================
+ *
+ * La URL del backend viene del .env del FRONTEND:
+ *
+ * VITE_API_URL
+ */
+const API_URL = import.meta.env.VITE_API_URL;
+
 
 const AgregarContenedor = () => {
-  const [contenedores, setContenedores] = useState([]);
-  const [busqueda, setBusqueda] = useState("");
-  const [showModal, setShowModal] = useState(false);
-  const [modoEdicion, setModoEdicion] = useState(false);
-  const [contenedorEditar, setContenedorEditar] = useState(null);
 
-  const [paginaActual, setPaginaActual] = useState(1);
-  const [itemsPorPagina] = useState(8);
+  const [
+    contenedores,
+    setContenedores,
+  ] = useState([]);
 
-  const fetchContenedores = async (termino = "") => {
+  const [
+    busqueda,
+    setBusqueda,
+  ] = useState("");
+
+  const [
+    showModal,
+    setShowModal,
+  ] = useState(false);
+
+  const [
+    modoEdicion,
+    setModoEdicion,
+  ] = useState(false);
+
+  const [
+    contenedorEditar,
+    setContenedorEditar,
+  ] = useState(null);
+
+
+  const [
+    paginaActual,
+    setPaginaActual,
+  ] = useState(1);
+
+  const [itemsPorPagina] =
+    useState(8);
+
+
+  /**
+   * =====================================================
+   * CARGAR CONTENEDORES
+   * =====================================================
+   */
+  const fetchContenedores = async (
+    termino = ""
+  ) => {
+
     try {
-      const token = localStorage.getItem("token");
-      const headers = { Authorization: `Bearer ${token}` };
 
-      const url = termino.trim()
-        ? `/api/contenedores/buscar?termino=${encodeURIComponent(termino)}`
-        : `/api/contenedores`;
+      const token =
+        localStorage.getItem("token");
 
-      const res = await axios.get(url, { headers });
-      setContenedores(res.data);
+      const headers = {
+        Authorization:
+          `Bearer ${token}`,
+      };
+
+
+      const url =
+        termino.trim()
+          ? `${API_URL}/api/contenedores/buscar?termino=${encodeURIComponent(
+              termino
+            )}`
+          : `${API_URL}/api/contenedores`;
+
+
+      const res =
+        await axios.get(
+          url,
+          {
+            headers,
+          }
+        );
+
+
+      setContenedores(
+        res.data
+      );
+
       setPaginaActual(1);
+
     } catch (error) {
-      console.error("Error cargando contenedores:", error);
-      showErrorAlert("No se pudieron cargar los contenedores.");
+
+      console.error(
+        "Error cargando contenedores:",
+        error
+      );
+
+
+      showErrorAlert(
+        "No se pudieron cargar los contenedores."
+      );
     }
   };
 
+
+  /**
+   * =====================================================
+   * CARGA INICIAL
+   * =====================================================
+   */
   useEffect(() => {
     fetchContenedores();
   }, []);
 
+
+  /**
+   * =====================================================
+   * BÚSQUEDA
+   * =====================================================
+   */
   useEffect(() => {
-    fetchContenedores(busqueda);
+    fetchContenedores(
+      busqueda
+    );
   }, [busqueda]);
 
-  const indexOfLastItem = paginaActual * itemsPorPagina;
-  const indexOfFirstItem = indexOfLastItem - itemsPorPagina;
-  const contenedoresActuales = contenedores.slice(
-    indexOfFirstItem,
-    indexOfLastItem
-  );
 
-  const totalPaginas = Math.ceil(contenedores.length / itemsPorPagina);
+  /**
+   * =====================================================
+   * PAGINACIÓN
+   * =====================================================
+   */
 
+  const indexOfLastItem =
+    paginaActual *
+    itemsPorPagina;
+
+
+  const indexOfFirstItem =
+    indexOfLastItem -
+    itemsPorPagina;
+
+
+  const contenedoresActuales =
+    contenedores.slice(
+      indexOfFirstItem,
+      indexOfLastItem
+    );
+
+
+  const totalPaginas =
+    Math.ceil(
+      contenedores.length /
+        itemsPorPagina
+    );
+
+
+  /**
+   * =====================================================
+   * ABRIR NUEVO CONTENEDOR
+   * =====================================================
+   */
+  const handleNuevo = () => {
+
+    setModoEdicion(false);
+
+    setContenedorEditar(null);
+
+    setShowModal(true);
+  };
+
+
+  /**
+   * =====================================================
+   * ABRIR EDICIÓN
+   * =====================================================
+   */
+  const handleEditar = (contenedor) => {
+
+    setModoEdicion(true);
+
+
+    setContenedorEditar({
+      ...contenedor,
+
+      id_estado_contenedor:
+        contenedor.id_estado_contenedor ||
+        contenedor.estado_id ||
+        "",
+
+      id_tipo_residuo:
+        contenedor.id_tipo_residuo ||
+        "",
+
+      id_ubicacion:
+        contenedor.id_ubicacion ||
+        "",
+
+      capacidad_max_litros:
+        contenedor.capacidad_max_litros ||
+        "",
+
+      capacidad_max_lb:
+        contenedor.capacidad_max_lb ||
+        "",
+    });
+
+
+    setShowModal(true);
+  };
+
+
+  /**
+   * =====================================================
+   * VISTA
+   * =====================================================
+   */
   return (
-    <div className="container mt-4">
-      <h4>
-        <i className="bi bi-calendar3 me-2"></i> Gestión de Contenedores
-      </h4>
-      <hr />
 
-      <div className="d-flex justify-content-between align-items-center mb-3">
-        <button
-          className="btn btn-primary"
-          onClick={() => {
-            setModoEdicion(false);
-            setContenedorEditar(null);
-            setShowModal(true);
-          }}
-        >
-          <FaPlus className="me-2" /> Nuevo
-        </button>
+    <section className="system-page">
 
-        <div className="d-flex" style={{ maxWidth: "300px" }}>
-          <input
-            type="text"
-            className="form-control form-control-sm"
-            placeholder="Buscar por código, ubicación o residuo..."
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-          />
+      <div className="system-container">
+
+        {/* ===============================================
+            CABECERA
+        =============================================== */}
+
+        <header className="system-page-header">
+
+          <div>
+
+            <h1 className="system-title">
+
+              <FaCalendarAlt />
+
+              <span>
+                Gestión de Contenedores
+              </span>
+
+            </h1>
+
+
+            <p className="system-subtitle">
+              Administra, consulta y actualiza
+              los contenedores registrados.
+            </p>
+
+          </div>
+
+        </header>
+
+
+        {/* ===============================================
+            CONTENIDO
+        =============================================== */}
+
+        <div className="system-card">
+
+          {/* =============================================
+              ACCIONES / BÚSQUEDA
+          ============================================= */}
+
+          <div className="system-toolbar">
+
+            <div className="system-toolbar-actions">
+
+              <button
+                type="button"
+                className="
+                  app-btn
+                  app-btn-primary
+                "
+                onClick={handleNuevo}
+              >
+                <FaPlus />
+
+                <span>
+                  Nuevo
+                </span>
+              </button>
+
+            </div>
+
+
+            <div className="system-search">
+
+              <input
+                type="search"
+                className="system-form-control"
+                placeholder="Buscar por código, ubicación o residuo..."
+                value={busqueda}
+                onChange={(e) =>
+                  setBusqueda(
+                    e.target.value
+                  )
+                }
+                aria-label="Buscar contenedor"
+              />
+
+            </div>
+
+          </div>
+
+
+          {/* =============================================
+              TABLA
+          ============================================= */}
+
+          <div className="system-table-wrapper">
+
+            <table className="system-table">
+
+              <thead>
+
+                <tr>
+                  <th>Código</th>
+
+                  <th>
+                    Ubicación
+                  </th>
+
+                  <th>
+                    Tipo de Residuo
+                  </th>
+
+                  <th>
+                    Cap. Máx. Litros
+                  </th>
+
+                  <th>
+                    Cap. Máx. Libras
+                  </th>
+
+                  <th>
+                    Fecha de Registro
+                  </th>
+
+                  <th>
+                    Estado
+                  </th>
+
+                  <th className="system-text-center">
+                    Opciones
+                  </th>
+                </tr>
+
+              </thead>
+
+
+              <tbody>
+
+                {contenedoresActuales.length >
+                0 ? (
+
+                  contenedoresActuales.map(
+                    (c) => (
+
+                      <tr
+                        key={
+                          c.id_contenedor
+                        }
+                      >
+
+                        {/* Código */}
+
+                        <td>
+
+                          <span
+                            className="
+                              system-badge
+                              system-badge-info
+                            "
+                          >
+                            {c.codigo}
+                          </span>
+
+                        </td>
+
+
+                        {/* Ubicación */}
+
+                        <td>
+                          {c.ubicacion}
+                        </td>
+
+
+                        {/* Residuo */}
+
+                        <td>
+                          {c.tipo_residuo}
+                        </td>
+
+
+                        {/* Litros */}
+
+                        <td>
+                          {c.capacidad_max_litros ??
+                            0}
+                        </td>
+
+
+                        {/* Libras */}
+
+                        <td>
+                          {c.capacidad_max_lb ??
+                            0}
+                        </td>
+
+
+                        {/* Fecha */}
+
+                        <td>
+                          {c.fecha_registro}
+                        </td>
+
+
+                        {/* Estado */}
+
+                        <td>
+
+                          <span
+                            className={`system-badge ${
+                              c.estado ===
+                              "Activo"
+                                ? "system-badge-success"
+                                : "system-badge-neutral"
+                            }`}
+                          >
+                            {c.estado}
+                          </span>
+
+                        </td>
+
+
+                        {/* Opciones */}
+
+                        <td className="system-text-center">
+
+                          <button
+                            type="button"
+                            className="
+                              app-btn
+                              app-btn-secondary
+                              app-btn-icon
+                            "
+                            onClick={() =>
+                              handleEditar(c)
+                            }
+                            aria-label={`Editar contenedor ${c.codigo}`}
+                            title="Editar"
+                          >
+                            <FaEdit />
+                          </button>
+
+                        </td>
+
+                      </tr>
+
+                    )
+                  )
+
+                ) : (
+
+                  <tr>
+
+                    <td
+                      colSpan="8"
+                      className="system-table-empty"
+                    >
+                      No se encontraron resultados
+                    </td>
+
+                  </tr>
+
+                )}
+
+              </tbody>
+
+            </table>
+
+          </div>
+
+
+          {/* =============================================
+              PAGINACIÓN
+          ============================================= */}
+
+          {totalPaginas > 1 && (
+
+            <nav
+              className="system-pagination-container"
+              aria-label="Paginación de contenedores"
+            >
+
+              <div className="system-pagination">
+
+                {Array.from(
+                  {
+                    length:
+                      totalPaginas,
+                  },
+                  (_, i) => {
+
+                    const pagina =
+                      i + 1;
+
+                    return (
+
+                      <button
+                        key={pagina}
+                        type="button"
+                        className={`system-page-button ${
+                          paginaActual ===
+                          pagina
+                            ? "active"
+                            : ""
+                        }`}
+                        onClick={() =>
+                          setPaginaActual(
+                            pagina
+                          )
+                        }
+                        aria-label={`Ir a página ${pagina}`}
+                        aria-current={
+                          paginaActual ===
+                          pagina
+                            ? "page"
+                            : undefined
+                        }
+                      >
+                        {pagina}
+                      </button>
+
+                    );
+                  }
+                )}
+
+              </div>
+
+            </nav>
+
+          )}
+
         </div>
+
+
+        {/* ===============================================
+            MODAL
+        =============================================== */}
+
+        <RegistrarNuevoContenedor
+
+          show={showModal}
+
+          handleClose={() => {
+
+            setShowModal(false);
+
+            fetchContenedores();
+          }}
+
+          handleSave={() =>
+            fetchContenedores(
+              busqueda
+            )
+          }
+
+          modoEdicion={
+            modoEdicion
+          }
+
+          contenedorEditar={
+            contenedorEditar
+          }
+
+        />
+
       </div>
 
-      <table className="table table-bordered align-middle">
-        <thead className="table-dark">
-          <tr>
-            <th>Código</th>
-            <th>Ubicación</th>
-            <th>Tipo de Residuo</th>
-            <th>Cap. Máx. Litros</th>
-            <th>Cap. Máx. Libras</th>
-            <th>Fecha de Registro</th>
-            <th>Estado</th>
-            <th>Opciones</th>
-          </tr>
-        </thead>
-        <tbody>
-          {contenedoresActuales.length > 0 ? (
-            contenedoresActuales.map((c) => (
-              <tr key={c.id_contenedor} className="shadow-sm">
-                <td>
-                  <span className="badge bg-secondary">{c.codigo}</span>
-                </td>
-                <td>{c.ubicacion}</td>
-                <td>{c.tipo_residuo}</td>
-                <td>{c.capacidad_max_litros ?? 0}</td>
-                <td>{c.capacidad_max_lb ?? 0}</td>
-                <td>{c.fecha_registro}</td>
-                <td>
-                  <span
-                    className={`badge ${
-                      c.estado === "Activo" ? "bg-success" : "bg-secondary"
-                    }`}
-                  >
-                    {c.estado}
-                  </span>
-                </td>
-                <td>
-                  <button
-                    className="btn btn-warning btn-sm me-2"
-                    onClick={() => {
-                      setModoEdicion(true);
-                      setContenedorEditar({
-                        ...c,
-                        id_estado_contenedor:
-                          c.id_estado_contenedor || c.estado_id || "",
-                        id_tipo_residuo: c.id_tipo_residuo || "",
-                        id_ubicacion: c.id_ubicacion || "",
-                        capacidad_max_litros: c.capacidad_max_litros || "",
-                        capacidad_max_lb: c.capacidad_max_lb || "",
-                      });
-                      setShowModal(true);
-                    }}
-                  >
-                    <FaEdit />
-                  </button>
-                </td>
-              </tr>
-            ))
-          ) : (
-            <tr>
-              <td colSpan="8" className="text-center">
-                No se encontraron resultados
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+    </section>
 
-      {totalPaginas > 1 && (
-        <nav className="d-flex justify-content-end">
-          <ul className="pagination pagination-sm">
-            {Array.from({ length: totalPaginas }, (_, i) => (
-              <li
-                key={i + 1}
-                className={`page-item ${paginaActual === i + 1 ? "active" : ""}`}
-              >
-                <button
-                  className="page-link"
-                  onClick={() => setPaginaActual(i + 1)}
-                >
-                  {i + 1}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </nav>
-      )}
-
-      <RegistrarNuevoContenedor
-        show={showModal}
-        handleClose={() => {
-          setShowModal(false);
-          fetchContenedores();
-        }}
-        handleSave={() => fetchContenedores(busqueda)}
-        modoEdicion={modoEdicion}
-        contenedorEditar={contenedorEditar}
-      />
-    </div>
   );
 };
+
 
 export default AgregarContenedor;

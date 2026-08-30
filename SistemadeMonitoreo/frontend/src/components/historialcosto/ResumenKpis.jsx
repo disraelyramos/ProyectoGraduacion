@@ -1,12 +1,6 @@
 import React from "react";
 
 import {
-  Card,
-  Col,
-  Row,
-} from "react-bootstrap";
-
-import {
   FaCoins,
   FaWeight,
   FaDollarSign,
@@ -21,11 +15,8 @@ const fmtQ =
     ).toLocaleString(
       "es-GT",
       {
-        minimumFractionDigits:
-          2,
-
-        maximumFractionDigits:
-          2,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
       }
     )}`;
 
@@ -37,11 +28,8 @@ const fmtLb =
     ).toLocaleString(
       "es-GT",
       {
-        minimumFractionDigits:
-          0,
-
-        maximumFractionDigits:
-          2,
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
       }
     )} lbs`;
 
@@ -53,11 +41,8 @@ const fmtQlb =
     ).toLocaleString(
       "es-GT",
       {
-        minimumFractionDigits:
-          4,
-
-        maximumFractionDigits:
-          4,
+        minimumFractionDigits: 4,
+        maximumFractionDigits: 4,
       }
     )}/lb`;
 
@@ -66,80 +51,43 @@ const fmtQlb =
    KPI
    ========================================================= */
 
-const KpiCard =
-  ({
-    icon,
-    value,
-    label,
-  }) => (
+const KpiCard = ({
+  icon,
+  value,
+  label,
+  badgeClass,
+}) => (
 
-    <Card className="shadow-sm border-0 h-100">
+  <article className="system-card">
 
-      <Card.Body className="d-flex align-items-center gap-3">
+    <div className="system-card-header">
 
-        <div
-          style={{
-            width:
-              44,
+      <span
+        className={`system-badge ${badgeClass}`}
+        aria-hidden="true"
+      >
+        {icon}
+      </span>
 
-            height:
-              44,
-
-            borderRadius:
-              10,
-
-            background:
-              "#f1f5f9",
-
-            display:
-              "flex",
-
-            alignItems:
-              "center",
-
-            justifyContent:
-              "center",
-
-            fontSize:
-              18,
-          }}
-        >
-          {icon}
-        </div>
+    </div>
 
 
-        <div>
+    <div>
 
-          <div
-            style={{
-              fontSize:
-                18,
-
-              fontWeight:
-                700,
-            }}
-          >
-            {value}
-          </div>
+      <div className="system-section-title">
+        {value}
+      </div>
 
 
-          <div
-            className="text-muted"
+      <div className="system-text-muted">
+        {label}
+      </div>
 
-            style={{
-              fontSize:
-                13,
-            }}
-          >
-            {label}
-          </div>
+    </div>
 
-        </div>
+  </article>
 
-      </Card.Body>
-
-    </Card>
-  );
+);
 
 
 /* =========================================================
@@ -150,84 +98,76 @@ export default function ResumenKpis({
   kpis,
 }) {
 
-  if (!kpis) {
+  if (
+    !kpis
+  ) {
     return null;
   }
 
 
   return (
-    <Row className="g-3 mt-3">
 
-      <Col md={3}>
-        <KpiCard
-          icon={
-            <FaCoins className="text-primary" />
-          }
+    <section className="system-form-grid">
 
-          value={
-            fmtQ(
-              kpis.total_q
-            )
-          }
-
-          label="Total Gastado (Q)"
-        />
-      </Col>
+      <KpiCard
+        icon={
+          <FaCoins />
+        }
+        value={
+          fmtQ(
+            kpis.total_q
+          )
+        }
+        label="Total Gastado (Q)"
+        badgeClass="system-badge-info"
+      />
 
 
-      <Col md={3}>
-        <KpiCard
-          icon={
-            <FaWeight className="text-warning" />
-          }
-
-          value={
-            fmtLb(
-              kpis.total_lbs
-            )
-          }
-
-          label="Total Libras Recolectadas"
-        />
-      </Col>
+      <KpiCard
+        icon={
+          <FaWeight />
+        }
+        value={
+          fmtLb(
+            kpis.total_lbs
+          )
+        }
+        label="Total Libras Recolectadas"
+        badgeClass="system-badge-warning"
+      />
 
 
-      <Col md={3}>
-        <KpiCard
-          icon={
-            <FaDollarSign className="text-success" />
-          }
-
-          value={
-            fmtQlb(
-              kpis.q_por_lb
-            )
-          }
-
-          label="Costo Promedio por Libra"
-        />
-      </Col>
+      <KpiCard
+        icon={
+          <FaDollarSign />
+        }
+        value={
+          fmtQlb(
+            kpis.q_por_lb
+          )
+        }
+        label="Costo Promedio por Libra"
+        badgeClass="system-badge-success"
+      />
 
 
-      <Col md={3}>
-        <KpiCard
-          icon={
-            <FaClipboardList className="text-danger" />
-          }
+      <KpiCard
+        icon={
+          <FaClipboardList />
+        }
+        value={
+          Number(
+            kpis.recolecciones ||
+            0
+          ).toLocaleString(
+            "es-GT"
+          )
+        }
+        label="Recolecciones Contadas"
+        badgeClass="system-badge-danger"
+      />
 
-          value={
-            Number(
-              kpis.recolecciones ||
-              0
-            ).toLocaleString(
-              "es-GT"
-            )
-          }
+    </section>
 
-          label="Recolecciones Contadas"
-        />
-      </Col>
-
-    </Row>
   );
 }

@@ -7,13 +7,6 @@ import React, {
 } from "react";
 
 import {
-  Form,
-  Button,
-  Card,
-  InputGroup,
-} from "react-bootstrap";
-
-import {
   FaHistory,
   FaSearch,
   FaCalendarAlt,
@@ -21,8 +14,11 @@ import {
 
 import "../../styles/historial-recoleccion.css";
 
-import HistorialEnTablas from "./HistorialEnTablas";
-import apiClient from "../../utils/apiClient";
+import HistorialEnTablas
+  from "./HistorialEnTablas";
+
+import apiClient
+  from "../../utils/apiClient";
 
 import {
   showBackendAlert,
@@ -30,7 +26,7 @@ import {
 
 
 /* =========================================================
-   CONFIGURACIÓN VISUAL
+   CONFIGURACIÓN
    ========================================================= */
 
 const DEFAULT_PAGE_SIZE = 10;
@@ -38,10 +34,6 @@ const DEFAULT_PAGE_SIZE = 10;
 
 /* =========================================================
    MENSAJE EXPORTACIÓN VENCIDA
-
-   Solo UX.
-
-   Backend sigue siendo la fuente de verdad.
    ========================================================= */
 
 const MENSAJE_EXPORTACION_EXPIRADA =
@@ -58,10 +50,12 @@ function validarFormulario({
   fechaInicio,
   fechaFin,
 }) {
+
   const errors = {};
 
 
   if (!buscarPor) {
+
     errors.buscarPor =
       "Este campo es obligatorio";
   }
@@ -74,24 +68,28 @@ function validarFormulario({
 
 
   if (!busqueda) {
+
     errors.valorBusqueda =
       "Este campo es obligatorio";
 
   } else if (
     busqueda.length < 2
   ) {
+
     errors.valorBusqueda =
       "Ingrese al menos 2 caracteres";
   }
 
 
   if (!fechaInicio) {
+
     errors.fechaInicio =
       "Este campo es obligatorio";
   }
 
 
   if (!fechaFin) {
+
     errors.fechaFin =
       "Este campo es obligatorio";
   }
@@ -102,6 +100,7 @@ function validarFormulario({
     fechaFin &&
     fechaInicio > fechaFin
   ) {
+
     errors.fechaFin =
       "La fecha final no puede ser menor a la inicial";
   }
@@ -115,17 +114,25 @@ function validarFormulario({
    ERROR HTTP
    ========================================================= */
 
-function obtenerErrorHttp(err) {
+function obtenerErrorHttp(
+  err
+) {
+
   return {
+
     status:
       Number(
         err?.response?.status
       ) || 500,
 
+
     data:
       err?.response?.data &&
-      typeof err.response.data === "object"
+      typeof err.response.data ===
+        "object"
+
         ? err.response.data
+
         : {
             message:
               err?.message ||
@@ -136,12 +143,13 @@ function obtenerErrorHttp(err) {
 
 
 /* =========================================================
-   ERROR BLOB PDF / EXCEL
+   ERROR BLOB
    ========================================================= */
 
 async function obtenerErrorBlob(
   err
 ) {
+
   const status =
     Number(
       err?.response?.status
@@ -155,6 +163,7 @@ async function obtenerErrorBlob(
   if (
     responseData instanceof Blob
   ) {
+
     try {
 
       const text =
@@ -168,17 +177,21 @@ async function obtenerErrorBlob(
 
 
       return {
+
         status,
 
         data: {
+
           message:
             json?.message ||
             "No fue posible realizar la exportación.",
+
 
           code:
             json?.code ||
             json?.codigo ||
             null,
+
 
           type:
             json?.type ||
@@ -190,6 +203,7 @@ async function obtenerErrorBlob(
     } catch {
 
       return {
+
         status,
 
         data: {
@@ -214,6 +228,7 @@ async function obtenerErrorBlob(
 function abrirCalendario(
   inputEl
 ) {
+
   if (!inputEl) {
     return;
   }
@@ -223,6 +238,7 @@ function abrirCalendario(
     typeof inputEl.showPicker ===
     "function"
   ) {
+
     inputEl.showPicker();
 
     return;
@@ -236,13 +252,14 @@ function abrirCalendario(
 
 
 /* =========================================================
-   PDF
+   ABRIR PDF
    ========================================================= */
 
 function abrirBlobEnPestana(
   blob,
   ventana
 ) {
+
   const url =
     URL.createObjectURL(
       blob
@@ -287,13 +304,14 @@ function abrirBlobEnPestana(
 
 
 /* =========================================================
-   EXCEL
+   DESCARGAR EXCEL
    ========================================================= */
 
 function descargarBlob(
   blob,
   filename
 ) {
+
   const url =
     URL.createObjectURL(
       blob
@@ -354,7 +372,6 @@ const DateField = ({
       abrirCalendario(
         inputRef?.current
       );
-
     };
 
 
@@ -362,9 +379,9 @@ const DateField = ({
 
     <div className="historial-date-field">
 
-      <InputGroup className="historial-date-input-group">
+      <div className="historial-date-input-group">
 
-        <Form.Control
+        <input
           ref={inputRef}
 
           type="date"
@@ -375,56 +392,57 @@ const DateField = ({
 
           onChange={onChange}
 
-          className={`
-            app-control
-            ${
-              error
-                ? "is-invalid"
-                : ""
-            }
-          `}
+          className={`system-form-control historial-field historial-date-input ${
+            error
+              ? "is-invalid"
+              : ""
+          }`}
         />
 
 
-        <InputGroup.Text
-          role="button"
+        <button
+          type="button"
 
-          tabIndex={0}
+          className="historial-date-trigger"
 
           title="Abrir calendario"
 
-          className="historial-date-trigger"
+          aria-label="Abrir calendario"
 
           onClick={
             handleCalendar
           }
 
-          onKeyDown={(e) => {
+          onKeyDown={(event) => {
 
             if (
-              e.key === "Enter" ||
-              e.key === " "
+              event.key ===
+                "Enter" ||
+              event.key ===
+                " "
             ) {
+
+              event.preventDefault();
+
               handleCalendar();
             }
-
           }}
         >
 
           <FaCalendarAlt />
 
-        </InputGroup.Text>
+        </button>
 
-      </InputGroup>
+      </div>
 
 
       {error && (
 
-        <div className="invalid-feedback d-block historial-error">
+        <small className="system-form-error historial-error">
 
           {error}
 
-        </div>
+        </small>
 
       )}
 
@@ -471,17 +489,6 @@ const HistorialRecoleccion =
     setLoading,
   ] = useState(false);
 
-
-  /*
-    IMPORTANTE:
-
-    false:
-    no renderizar tablas.
-
-    true:
-    backend confirmó una búsqueda válida
-    con resultados.
-  */
 
   const [
     hasSearched,
@@ -570,12 +577,14 @@ const HistorialRecoleccion =
         total <= 0 ||
         pageSize <= 0
       ) {
+
         return 1;
       }
 
 
       return Math.max(
         1,
+
         Math.ceil(
           total /
           pageSize
@@ -610,8 +619,6 @@ const HistorialRecoleccion =
 
   /* =======================================================
      LIMPIAR RESULTADOS
-
-     Oculta completamente la tabla anterior.
      ======================================================= */
 
   const limpiarResultados =
@@ -639,10 +646,6 @@ const HistorialRecoleccion =
 
   /* =======================================================
      BLOQUEAR EXPORTACIÓN
-
-     No elimina resultados.
-
-     Solo bloquea PDF / Excel y muestra Modal.
      ======================================================= */
 
   const bloquearExportacion =
@@ -667,9 +670,12 @@ const HistorialRecoleccion =
 
 
         void showBackendAlert({
+
           status: 410,
 
+
           data: {
+
             message,
 
             code,
@@ -685,7 +691,7 @@ const HistorialRecoleccion =
 
 
   /* =======================================================
-     TEMPORIZADOR DEL SNAPSHOT
+     TEMPORIZADOR SNAPSHOT
      ======================================================= */
 
   useEffect(() => {
@@ -696,6 +702,7 @@ const HistorialRecoleccion =
         exportExpiresAtMs
       )
     ) {
+
       return undefined;
     }
 
@@ -722,6 +729,7 @@ const HistorialRecoleccion =
           bloquearExportacion();
 
         },
+
         tiempoRestante
       );
 
@@ -731,7 +739,6 @@ const HistorialRecoleccion =
       window.clearTimeout(
         timer
       );
-
     };
 
   }, [
@@ -742,7 +749,7 @@ const HistorialRecoleccion =
 
 
   /* =======================================================
-     LIMPIAR ERROR DE CAMPO
+     LIMPIAR ERROR
      ======================================================= */
 
   const limpiarErrorCampo =
@@ -762,12 +769,10 @@ const HistorialRecoleccion =
             return {
               ...prev,
 
-              [name]:
-                "",
+              [name]: "",
             };
           }
         );
-
       },
       []
     );
@@ -775,20 +780,17 @@ const HistorialRecoleccion =
 
   /* =======================================================
      CAMBIO DE FILTROS
-
-     Cualquier cambio invalida visualmente
-     la búsqueda anterior.
      ======================================================= */
 
   const handleChange =
     useCallback(
-      (e) => {
+      (event) => {
 
         const {
           name,
           value,
         } =
-          e.target;
+          event.target;
 
 
         setFormData(
@@ -805,11 +807,6 @@ const HistorialRecoleccion =
           name
         );
 
-
-        /*
-          Ocultamos inmediatamente
-          resultados anteriores.
-        */
 
         setHasSearched(
           false
@@ -837,7 +834,9 @@ const HistorialRecoleccion =
         const nuevoExportId =
           typeof data?.export_id ===
             "string"
+
             ? data.export_id.trim()
+
             : "";
 
 
@@ -881,6 +880,7 @@ const HistorialRecoleccion =
 
         limpiarExportacion();
 
+
         return false;
 
       },
@@ -892,13 +892,6 @@ const HistorialRecoleccion =
 
   /* =======================================================
      CONSULTA
-
-     REGLA IMPORTANTE:
-
-     Los datos NO se guardan en el estado visual hasta
-     comprobar que toda la respuesta es válida.
-
-     Esto evita que una tabla aparezca por un instante.
      ======================================================= */
 
   const consultar =
@@ -918,33 +911,36 @@ const HistorialRecoleccion =
           const response =
             await apiClient.get(
               "/historial-recoleccion",
+
               {
                 params: {
 
                   buscarPor:
-                    formData
-                      .buscarPor,
+                    formData.buscarPor,
+
 
                   valorBusqueda:
                     String(
-                      formData
-                        .valorBusqueda ||
+                      formData.valorBusqueda ||
                       ""
                     ).trim(),
 
+
                   fechaInicio:
-                    formData
-                      .fechaInicio,
+                    formData.fechaInicio,
+
 
                   fechaFin:
-                    formData
-                      .fechaFin,
+                    formData.fechaFin,
+
 
                   order:
                     formData.order,
 
+
                   page:
                     targetPage,
+
 
                   prepararExportacion,
                 },
@@ -957,11 +953,9 @@ const HistorialRecoleccion =
             {};
 
 
-          /* =================================================
-             PREPARAR DATOS
-
-             Todavía NO hacemos setDetalle ni setPesaje.
-             ================================================= */
+          /* ===============================================
+             PREPARAR RESPUESTA
+          =============================================== */
 
           const totalBackend =
             Number(
@@ -974,7 +968,9 @@ const HistorialRecoleccion =
               totalBackend
             ) &&
             totalBackend >= 0
+
               ? totalBackend
+
               : 0;
 
 
@@ -989,7 +985,9 @@ const HistorialRecoleccion =
               pageBackend
             ) &&
             pageBackend >= 1
+
               ? pageBackend
+
               : targetPage;
 
 
@@ -1004,7 +1002,9 @@ const HistorialRecoleccion =
               limitBackend
             ) &&
             limitBackend > 0
+
               ? limitBackend
+
               : DEFAULT_PAGE_SIZE;
 
 
@@ -1012,7 +1012,9 @@ const HistorialRecoleccion =
             Array.isArray(
               data?.data?.detalle
             )
+
               ? data.data.detalle
+
               : [];
 
 
@@ -1020,17 +1022,15 @@ const HistorialRecoleccion =
             Array.isArray(
               data?.data?.pesaje
             )
+
               ? data.data.pesaje
+
               : [];
 
 
-          /* =================================================
+          /* ===============================================
              SIN RESULTADOS
-
-             No guardamos ningún dato.
-
-             Las tablas continúan ocultas.
-             ================================================= */
+          =============================================== */
 
           if (
             totalSeguro === 0
@@ -1045,13 +1045,18 @@ const HistorialRecoleccion =
 
 
             await showBackendAlert({
+
               status: 404,
 
+
               data: {
+
                 message:
                   typeof data.message ===
                     "string"
+
                     ? data.message
+
                     : "No se encontraron registros con los criterios seleccionados.",
               },
             });
@@ -1061,14 +1066,9 @@ const HistorialRecoleccion =
           }
 
 
-          /* =================================================
-             VERIFICAR QUE HAYA FILAS
-
-             Protección adicional.
-
-             total > 0 pero detalle vacío en página 1
-             no debe mostrar una tabla vacía.
-             ================================================= */
+          /* ===============================================
+             PROTECCIÓN ADICIONAL
+          =============================================== */
 
           if (
             prepararExportacion &&
@@ -1084,9 +1084,12 @@ const HistorialRecoleccion =
 
 
             await showBackendAlert({
+
               status: 500,
 
+
               data: {
+
                 message:
                   "El servidor indicó que existen registros, pero no devolvió información para mostrar.",
               },
@@ -1097,11 +1100,9 @@ const HistorialRecoleccion =
           }
 
 
-          /* =================================================
+          /* ===============================================
              SNAPSHOT
-
-             Solo en nueva búsqueda con Ver.
-             ================================================= */
+          =============================================== */
 
           if (
             prepararExportacion
@@ -1126,9 +1127,12 @@ const HistorialRecoleccion =
 
 
               await showBackendAlert({
+
                 status: 500,
 
+
                 data: {
+
                   message:
                     "La consulta se realizó correctamente, pero no fue posible habilitar temporalmente la exportación. Presione 'Ver' nuevamente.",
                 },
@@ -1140,11 +1144,9 @@ const HistorialRecoleccion =
           }
 
 
-          /* =================================================
+          /* ===============================================
              RESPUESTA CONFIRMADA
-
-             RECIÉN AQUÍ actualizamos la pantalla.
-             ================================================= */
+          =============================================== */
 
           setTotal(
             totalSeguro
@@ -1171,14 +1173,6 @@ const HistorialRecoleccion =
           );
 
 
-          /* =================================================
-             MOSTRAR TABLAS
-
-             Solo nueva búsqueda válida.
-
-             Durante paginación ya estaba en true.
-             ================================================= */
-
           if (
             prepararExportacion
           ) {
@@ -1186,7 +1180,6 @@ const HistorialRecoleccion =
             setHasSearched(
               true
             );
-
           }
 
 
@@ -1198,11 +1191,6 @@ const HistorialRecoleccion =
             );
 
 
-          /*
-            Si esta petición viene del botón Ver,
-            jamás dejamos visible información anterior.
-          */
-
           if (
             prepararExportacion
           ) {
@@ -1213,13 +1201,14 @@ const HistorialRecoleccion =
 
 
             limpiarResultados();
-
           }
 
 
           await showBackendAlert({
+
             status:
               errorHttp.status,
+
 
             data:
               errorHttp.data,
@@ -1231,7 +1220,6 @@ const HistorialRecoleccion =
           setLoading(
             false
           );
-
         }
 
       },
@@ -1245,17 +1233,13 @@ const HistorialRecoleccion =
 
   /* =======================================================
      BOTÓN VER
-
-     CORRECCIÓN DEL BUG:
-
-     NO hacemos setHasSearched(true) aquí.
      ======================================================= */
 
   const handleSubmit =
     useCallback(
-      async (e) => {
+      async (event) => {
 
-        e.preventDefault();
+        event.preventDefault();
 
 
         const validationErrors =
@@ -1268,10 +1252,6 @@ const HistorialRecoleccion =
           validationErrors
         );
 
-
-        /* =================================================
-           CAMPOS INVÁLIDOS
-           ================================================= */
 
         if (
           Object.keys(
@@ -1290,19 +1270,6 @@ const HistorialRecoleccion =
           return;
         }
 
-
-        /* =================================================
-           NUEVA BÚSQUEDA
-
-           PRIMERO:
-           ocultamos tabla anterior.
-
-           DESPUÉS:
-           consultamos backend.
-
-           Solo consultar() puede volver a poner
-           hasSearched=true cuando todo sea correcto.
-           ================================================= */
 
         setHasSearched(
           false
@@ -1328,9 +1295,6 @@ const HistorialRecoleccion =
 
   /* =======================================================
      PAGINACIÓN
-
-     No borra la tabla mientras cambia página.
-     No crea snapshot nuevo.
      ======================================================= */
 
   const handlePageChange =
@@ -1359,6 +1323,7 @@ const HistorialRecoleccion =
             totalPages ||
           pagina === page
         ) {
+
           return;
         }
 
@@ -1419,6 +1384,7 @@ const HistorialRecoleccion =
           const response =
             await apiClient.get(
               "/historial-recoleccion/export/pdf",
+
               {
                 params: {
                   exportId,
@@ -1433,11 +1399,14 @@ const HistorialRecoleccion =
           const blob =
             response.data
               instanceof Blob
+
               ? response.data
+
               : new Blob(
                   [
                     response.data,
                   ],
+
                   {
                     type:
                       "application/pdf",
@@ -1457,6 +1426,7 @@ const HistorialRecoleccion =
             newTab &&
             !newTab.closed
           ) {
+
             newTab.close();
           }
 
@@ -1484,9 +1454,11 @@ const HistorialRecoleccion =
 
             setExportId("");
 
+
             setExportExpiresAtMs(
               null
             );
+
 
             setExportExpired(
               true
@@ -1494,8 +1466,10 @@ const HistorialRecoleccion =
 
 
             await showBackendAlert({
+
               status:
                 errorHttp.status,
+
 
               data:
                 errorHttp.data,
@@ -1507,13 +1481,14 @@ const HistorialRecoleccion =
 
 
           await showBackendAlert({
+
             status:
               errorHttp.status,
+
 
             data:
               errorHttp.data,
           });
-
         }
 
       },
@@ -1544,6 +1519,7 @@ const HistorialRecoleccion =
           const response =
             await apiClient.get(
               "/historial-recoleccion/export/excel",
+
               {
                 params: {
                   exportId,
@@ -1558,11 +1534,14 @@ const HistorialRecoleccion =
           const blob =
             response.data
               instanceof Blob
+
               ? response.data
+
               : new Blob(
                   [
                     response.data,
                   ],
+
                   {
                     type:
                       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1601,9 +1580,11 @@ const HistorialRecoleccion =
 
             setExportId("");
 
+
             setExportExpiresAtMs(
               null
             );
+
 
             setExportExpired(
               true
@@ -1611,8 +1592,10 @@ const HistorialRecoleccion =
 
 
             await showBackendAlert({
+
               status:
                 errorHttp.status,
+
 
               data:
                 errorHttp.data,
@@ -1624,13 +1607,14 @@ const HistorialRecoleccion =
 
 
           await showBackendAlert({
+
             status:
               errorHttp.status,
+
 
             data:
               errorHttp.data,
           });
-
         }
 
       },
@@ -1647,65 +1631,75 @@ const HistorialRecoleccion =
 
   return (
 
-    <main className="historial-recoleccion-container app-page">
+    <main className="system-page historial-recoleccion-page">
 
+      <div className="system-container">
 
-      {/* ===================================================
-          BÚSQUEDA
-          =================================================== */}
+        {/* =================================================
+            BÚSQUEDA
+        ================================================= */}
 
-      <Card className="app-card historial-search-card">
+        <section className="system-card historial-search-card">
 
-        <Card.Body className="app-card-body">
+          <header className="historial-search-header">
 
-
-          <div className="app-section-heading">
-
-            <h1 className="app-page-title">
+            <div className="historial-search-title">
 
               <FaHistory
-                className="app-page-title-icon"
                 aria-hidden="true"
               />
 
-              Historial de Recolección
 
-            </h1>
+              <div>
 
-          </div>
+                <h1 className="system-title">
+                  Historial de Recolección
+                </h1>
+
+                <p className="system-subtitle">
+                  Consulte los registros históricos
+                  por código o tipo de residuo.
+                </p>
+
+              </div>
+
+            </div>
+
+          </header>
 
 
-          <div className="app-divider" />
+          <div className="system-divider" />
 
 
-          <Form
+          <form
             onSubmit={
               handleSubmit
             }
 
-            className="historial-search-form"
+            className="system-form historial-search-form"
           >
 
-
-            {/* =============================================
-                FILTROS PRINCIPALES
-                ============================================= */}
+            {/* ===========================================
+                FILTROS
+            =========================================== */}
 
             <div className="historial-filter-grid">
 
-
               {/* BUSCAR POR */}
 
-              <div className="historial-filter-group">
+              <div className="system-form-group historial-filter-group">
 
-                <Form.Label className="app-label">
-
+                <label
+                  htmlFor="historial-buscar-por"
+                  className="system-form-label"
+                >
                   Buscar por
+                </label>
 
-                </Form.Label>
 
+                <select
+                  id="historial-buscar-por"
 
-                <Form.Select
                   name="buscarPor"
 
                   value={
@@ -1716,15 +1710,11 @@ const HistorialRecoleccion =
                     handleChange
                   }
 
-                  className={`
-                    app-control
-                    historial-field
-                    ${
-                      errors.buscarPor
-                        ? "is-invalid"
-                        : ""
-                    }
-                  `}
+                  className={`system-form-select historial-field ${
+                    errors.buscarPor
+                      ? "is-invalid"
+                      : ""
+                  }`}
                 >
 
                   <option value="">
@@ -1739,16 +1729,14 @@ const HistorialRecoleccion =
                     Tipo Residuo
                   </option>
 
-                </Form.Select>
+                </select>
 
 
                 {errors.buscarPor && (
 
-                  <div className="invalid-feedback d-block historial-error">
-
+                  <small className="system-form-error historial-error">
                     {errors.buscarPor}
-
-                  </div>
+                  </small>
 
                 )}
 
@@ -1757,25 +1745,29 @@ const HistorialRecoleccion =
 
               {/* BÚSQUEDA */}
 
-              <div className="historial-filter-group">
+              <div className="system-form-group historial-filter-group">
 
-                <Form.Label className="app-label">
-
+                <label
+                  htmlFor="historial-busqueda"
+                  className="system-form-label"
+                >
                   Búsqueda
+                </label>
 
-                </Form.Label>
 
+                <div className="historial-search-input-group">
 
-                <InputGroup className="historial-search-input-group">
-
-                  <InputGroup.Text className="historial-search-icon">
-
+                  <span
+                    className="historial-search-icon"
+                    aria-hidden="true"
+                  >
                     <FaSearch />
+                  </span>
 
-                  </InputGroup.Text>
 
+                  <input
+                    id="historial-busqueda"
 
-                  <Form.Control
                     type="text"
 
                     name="valorBusqueda"
@@ -1790,28 +1782,21 @@ const HistorialRecoleccion =
                       handleChange
                     }
 
-                    className={`
-                      app-control
-                      historial-field
-                      historial-search-input
-                      ${
-                        errors.valorBusqueda
-                          ? "is-invalid"
-                          : ""
-                      }
-                    `}
+                    className={`system-form-control historial-field historial-search-input ${
+                      errors.valorBusqueda
+                        ? "is-invalid"
+                        : ""
+                    }`}
                   />
 
-                </InputGroup>
+                </div>
 
 
                 {errors.valorBusqueda && (
 
-                  <div className="invalid-feedback d-block historial-error">
-
+                  <small className="system-form-error historial-error">
                     {errors.valorBusqueda}
-
-                  </div>
+                  </small>
 
                 )}
 
@@ -1820,16 +1805,19 @@ const HistorialRecoleccion =
 
               {/* ORDEN */}
 
-              <div className="historial-filter-group">
+              <div className="system-form-group historial-filter-group">
 
-                <Form.Label className="app-label">
-
+                <label
+                  htmlFor="historial-order"
+                  className="system-form-label"
+                >
                   Orden
+                </label>
 
-                </Form.Label>
 
+                <select
+                  id="historial-order"
 
-                <Form.Select
                   name="order"
 
                   value={
@@ -1840,7 +1828,7 @@ const HistorialRecoleccion =
                     handleChange
                   }
 
-                  className="app-control historial-field"
+                  className="system-form-select historial-field"
                 >
 
                   <option value="desc">
@@ -1851,24 +1839,22 @@ const HistorialRecoleccion =
                     Fecha (Más antigua)
                   </option>
 
-                </Form.Select>
+                </select>
 
               </div>
 
             </div>
 
 
-            {/* =============================================
+            {/* ===========================================
                 FECHAS
-                ============================================= */}
+            =========================================== */}
 
-            <div className="historial-date-group">
+            <div className="system-form-group historial-date-group">
 
-              <Form.Label className="app-label">
-
+              <span className="system-form-label">
                 Rango de Fechas
-
-              </Form.Label>
+              </span>
 
 
               <div className="historial-date-range">
@@ -1927,106 +1913,121 @@ const HistorialRecoleccion =
             </div>
 
 
-            {/* =============================================
+            {/* ===========================================
                 VER
-                ============================================= */}
+            =========================================== */}
 
             <div className="historial-submit-wrap">
 
-              <Button
+              <button
                 type="submit"
 
-                variant="primary"
-
-                className="app-btn historial-submit-btn"
+                className="app-btn app-btn-primary historial-submit-btn"
 
                 disabled={
                   loading
                 }
               >
 
-                <FaSearch
-                  aria-hidden="true"
-                />
+                {loading ? (
 
+                  <>
 
-                {
-                  loading
-                    ? "Consultando..."
-                    : "Ver"
-                }
+                    <span
+                      className="system-spinner system-spinner-small"
+                      aria-hidden="true"
+                    />
 
-              </Button>
+                    <span>
+                      Consultando...
+                    </span>
+
+                  </>
+
+                ) : (
+
+                  <>
+
+                    <FaSearch
+                      aria-hidden="true"
+                    />
+
+                    <span>
+                      Ver
+                    </span>
+
+                  </>
+
+                )}
+
+              </button>
 
             </div>
 
-          </Form>
-
-        </Card.Body>
-
-      </Card>
-
-
-      {/* ===================================================
-          RESULTADOS
-
-          Solo existen después de una respuesta
-          completamente válida.
-          =================================================== */}
-
-      {hasSearched && (
-
-        <section className="historial-results">
-
-          <HistorialEnTablas
-            loading={
-              loading
-            }
-
-            detalle={
-              detalle
-            }
-
-            pesaje={
-              pesaje
-            }
-
-            page={
-              page
-            }
-
-            total={
-              total
-            }
-
-            pageSize={
-              pageSize
-            }
-
-            onPageChange={
-              handlePageChange
-            }
-
-            canExport={
-              canExport
-            }
-
-            exportExpired={
-              exportExpired
-            }
-
-            onExportPdf={
-              handleExportPdf
-            }
-
-            onExportExcel={
-              handleExportExcel
-            }
-          />
+          </form>
 
         </section>
 
-      )}
+
+        {/* =================================================
+            RESULTADOS
+        ================================================= */}
+
+        {hasSearched && (
+
+          <section className="historial-results">
+
+            <HistorialEnTablas
+              loading={
+                loading
+              }
+
+              detalle={
+                detalle
+              }
+
+              pesaje={
+                pesaje
+              }
+
+              page={
+                page
+              }
+
+              total={
+                total
+              }
+
+              pageSize={
+                pageSize
+              }
+
+              onPageChange={
+                handlePageChange
+              }
+
+              canExport={
+                canExport
+              }
+
+              exportExpired={
+                exportExpired
+              }
+
+              onExportPdf={
+                handleExportPdf
+              }
+
+              onExportExcel={
+                handleExportExcel
+              }
+            />
+
+          </section>
+
+        )}
+
+      </div>
 
     </main>
   );

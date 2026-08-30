@@ -3,9 +3,8 @@ import React, {
 } from "react";
 
 import {
-  Card,
-  Table,
-} from "react-bootstrap";
+  FaChartBar,
+} from "react-icons/fa";
 
 
 const fmtQ =
@@ -15,11 +14,8 @@ const fmtQ =
     ).toLocaleString(
       "es-GT",
       {
-        minimumFractionDigits:
-          2,
-
-        maximumFractionDigits:
-          2,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
       }
     )}`;
 
@@ -31,11 +27,8 @@ const fmtLb =
     ).toLocaleString(
       "es-GT",
       {
-        minimumFractionDigits:
-          0,
-
-        maximumFractionDigits:
-          2,
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
       }
     )} lbs`;
 
@@ -47,18 +40,20 @@ const fmtQlb =
     ).toLocaleString(
       "es-GT",
       {
-        minimumFractionDigits:
-          4,
-
-        maximumFractionDigits:
-          4,
+        minimumFractionDigits: 4,
+        maximumFractionDigits: 4,
       }
     )}/lb`;
 
 
+/* =========================================================
+   TEXTO DE AGRUPACIÓN
+   ========================================================= */
+
 function prettyAgrupar(
   value
 ) {
+
   const normalized =
     String(
       value ||
@@ -77,10 +72,8 @@ function prettyAgrupar(
 
 
   if (
-    normalized ===
-      "anio" ||
-    normalized ===
-      "año"
+    normalized === "anio" ||
+    normalized === "año"
   ) {
     return "Año";
   }
@@ -89,6 +82,10 @@ function prettyAgrupar(
   return "Mes";
 }
 
+
+/* =========================================================
+   COMPONENTE
+   ========================================================= */
 
 export default function TablaResumen({
   agruparPor,
@@ -108,45 +105,65 @@ export default function TablaResumen({
 
 
   return (
-    <Card className="shadow-sm border-0">
 
-      <Card.Body>
+    <section className="system-card">
 
-        <div className="fw-bold mb-2">
-          Resumen de Costos (por {label})
+      {/* =================================================
+          ENCABEZADO
+      ================================================= */}
+
+      <div className="system-card-header">
+
+        <div>
+
+          <h3 className="system-card-title">
+
+            <FaChartBar />
+
+            {" "}
+            Resumen de Costos por {label}
+
+          </h3>
+
         </div>
 
+      </div>
 
-        <Table
-          responsive
-          bordered
-          hover
-          size="sm"
-          className="mb-0"
-        >
 
-          <thead className="table-dark">
+      {/* =================================================
+          TABLA
+      ================================================= */}
+
+      <div className="system-table-wrapper">
+
+        <table className="system-table">
+
+          <thead>
+
             <tr>
+
               <th>
                 Periodo
               </th>
 
-              <th className="text-end">
+              <th className="system-text-right">
                 Total Gastado (Q)
               </th>
 
-              <th className="text-end">
+              <th className="system-text-right">
                 Total lbs
               </th>
 
-              <th className="text-end">
+              <th className="system-text-right">
                 Promedio Q/lb
               </th>
 
-              <th className="text-end">
+              <th className="system-text-right">
                 # Recolecciones
               </th>
+
             </tr>
+
           </thead>
 
 
@@ -162,58 +179,78 @@ export default function TablaResumen({
                     )
                   }
                 >
+
                   <td>
                     {row.periodo}
                   </td>
 
-                  <td className="text-end">
+
+                  <td className="system-table-number">
+
                     {fmtQ(
                       row.total_q
                     )}
+
                   </td>
 
-                  <td className="text-end">
+
+                  <td className="system-table-number">
+
                     {fmtLb(
                       row.total_lbs
                     )}
+
                   </td>
 
-                  <td className="text-end">
+
+                  <td className="system-table-number">
+
                     {fmtQlb(
                       row.q_por_lb
                     )}
+
                   </td>
 
-                  <td className="text-end">
+
+                  <td className="system-table-number">
+
                     {Number(
                       row.recolecciones ||
                       0
                     ).toLocaleString(
                       "es-GT"
                     )}
+
                   </td>
+
                 </tr>
+
               )
             )}
 
 
-            {rows.length === 0 ? (
+            {rows.length === 0 && (
+
               <tr>
+
                 <td
                   colSpan={5}
-                  className="text-center text-muted py-3"
+                  className="system-table-empty"
                 >
                   Sin datos para mostrar.
                 </td>
+
               </tr>
-            ) : null}
+
+            )}
 
           </tbody>
 
-        </Table>
+        </table>
 
-      </Card.Body>
+      </div>
 
-    </Card>
+    </section>
+
   );
 }

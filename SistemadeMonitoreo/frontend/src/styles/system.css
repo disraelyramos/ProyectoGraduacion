@@ -1,0 +1,1675 @@
+/* =========================================================
+   SYSTEM.CSS
+   SISTEMA GLOBAL DE DISEÑO
+   =========================================================
+
+   ESTE ARCHIVO CONTROLA:
+   - Variables globales
+   - Reset
+   - Tipografía
+   - Contenedores
+   - Cards
+   - Formularios
+   - Inputs
+   - Selects
+   - Textarea
+   - Validaciones
+   - Botones
+   - Badges
+   - Alertas
+   - Toolbars
+   - Buscadores
+   - Estados vacíos
+   - Utilidades
+   - Responsive general
+
+   NO CONTROLA:
+   - Tablas
+   - Dashboard
+   - Login
+   - Perfil
+   - Diseños específicos de una pantalla
+   ========================================================= */
+
+
+/* =========================================================
+   1. VARIABLES GLOBALES
+   ========================================================= */
+
+:root {
+
+  /* =========================
+     FONDOS
+     ========================= */
+
+  --color-fondo: #f5f7fa;
+
+  --color-superficie: #ffffff;
+
+  --color-superficie-secundaria: #f1f4f7;
+
+  --color-superficie-hover: #e9eef2;
+
+
+  /* =========================
+     TEXTO
+     ========================= */
+
+  --color-texto: #24313d;
+
+  --color-texto-secundario: #66717c;
+
+  --color-texto-suave: #8a959d;
+
+  --color-texto-invertido: #ffffff;
+
+
+  /* =========================
+     COLOR PRINCIPAL
+     ========================= */
+
+  --color-primario: #007f88;
+
+  --color-primario-hover: #006c74;
+
+  --color-primario-activo: #005b62;
+
+  --color-primario-oscuro: #00587a;
+
+  --color-primario-suave:
+    rgba(0, 136, 145, 0.12);
+
+
+  /* =========================
+     ÉXITO
+     ========================= */
+
+  --color-exito: #28a66a;
+
+  --color-exito-hover: #208855;
+
+  --color-exito-suave:
+    rgba(40, 166, 106, 0.12);
+
+
+  /* =========================
+     ADVERTENCIA
+     ========================= */
+
+  --color-advertencia: #e4a11b;
+
+  --color-advertencia-hover: #c98b13;
+
+  --color-advertencia-suave:
+    rgba(228, 161, 27, 0.14);
+
+
+  /* =========================
+     PELIGRO
+     ========================= */
+
+  --color-peligro: #dc3545;
+
+  --color-peligro-hover: #b92c3a;
+
+  --color-peligro-activo: #9f2531;
+
+  --color-peligro-suave:
+    rgba(220, 53, 69, 0.12);
+
+
+  /* =========================
+     INFORMACIÓN
+     ========================= */
+
+  --color-info: #2878b5;
+
+  --color-info-suave:
+    rgba(40, 120, 181, 0.12);
+
+
+  /* =========================
+     BORDES
+     ========================= */
+
+  --color-borde: #d9e0e6;
+
+  --color-borde-input: #cfd8df;
+
+  --color-borde-hover: #aebbc4;
+
+
+  /* =========================
+     RADIOS
+     ========================= */
+
+  --radio-pequeno: 6px;
+
+  --radio-medio: 10px;
+
+  --radio-grande: 14px;
+
+  --radio-card: 16px;
+
+
+  /* =========================
+     SOMBRAS
+     ========================= */
+
+  --sombra-suave:
+    0 4px 14px
+    rgba(0, 0, 0, 0.08);
+
+  --sombra-card:
+    0 8px 24px
+    rgba(0, 0, 0, 0.08);
+
+  --sombra-modal:
+    0 20px 50px
+    rgba(0, 0, 0, 0.16);
+
+
+  /* =========================
+     FORMULARIOS
+     ========================= */
+
+  --input-altura: 46px;
+
+  --input-padding-horizontal: 14px;
+
+
+  /* =========================
+     BOTONES
+     ========================= */
+
+  --boton-altura: 42px;
+
+
+  /* =========================
+     CONTENIDO
+     ========================= */
+
+  --contenido-maximo: 1600px;
+
+}
+
+
+/* =========================================================
+   2. RESET GLOBAL
+   ========================================================= */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+
+html {
+  width: 100%;
+
+  min-height: 100%;
+
+  margin: 0;
+
+  padding: 0;
+}
+
+
+body {
+  width: 100%;
+
+  min-width: 320px;
+
+  min-height: 100%;
+
+  margin: 0;
+
+  padding: 0;
+
+  color:
+    var(--color-texto);
+
+  background:
+    var(--color-fondo);
+
+  font-family:
+    "Segoe UI",
+    "Poppins",
+    Tahoma,
+    Geneva,
+    Verdana,
+    sans-serif;
+
+  line-height: 1.5;
+
+  -webkit-font-smoothing:
+    antialiased;
+
+  -moz-osx-font-smoothing:
+    grayscale;
+}
+
+
+#root {
+  width: 100%;
+
+  min-width: 0;
+
+  min-height: 100dvh;
+}
+
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+
+button {
+  margin: 0;
+}
+
+
+img {
+  max-width: 100%;
+
+  height: auto;
+}
+
+
+/* =========================================================
+   3. TIPOGRAFÍA
+   ========================================================= */
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p {
+  margin-top: 0;
+}
+
+
+.system-title {
+  margin:
+    0
+    0
+    8px;
+
+  color:
+    var(--color-texto);
+
+  font-size:
+    clamp(
+      1.35rem,
+      2vw,
+      1.8rem
+    );
+
+  font-weight: 700;
+
+  line-height: 1.25;
+}
+
+
+.system-subtitle {
+  margin:
+    0
+    0
+    20px;
+
+  color:
+    var(--color-texto-secundario);
+
+  font-size: 0.95rem;
+
+  font-weight: 400;
+
+  line-height: 1.5;
+}
+
+
+.system-section-title {
+  margin:
+    0
+    0
+    14px;
+
+  color:
+    var(--color-texto);
+
+  font-size: 1.1rem;
+
+  font-weight: 700;
+}
+
+
+.system-text-muted {
+  color:
+    var(--color-texto-secundario);
+}
+
+
+/* =========================================================
+   4. PÁGINAS / CONTENEDORES
+   ========================================================= */
+
+.system-page {
+  width: 100%;
+
+  min-width: 0;
+
+  padding: 24px;
+
+  box-sizing: border-box;
+}
+
+
+.system-container {
+  width: 100%;
+
+  max-width:
+    var(--contenido-maximo);
+
+  min-width: 0;
+
+  margin:
+    0
+    auto;
+}
+
+
+.system-container-medium {
+  width: 100%;
+
+  max-width: 1100px;
+
+  min-width: 0;
+
+  margin:
+    0
+    auto;
+}
+
+
+.system-container-small {
+  width: 100%;
+
+  max-width: 720px;
+
+  min-width: 0;
+
+  margin:
+    0
+    auto;
+}
+
+
+/* =========================================================
+   5. CABECERA DE PÁGINAS
+   ========================================================= */
+
+.system-page-header {
+  width: 100%;
+
+  min-width: 0;
+
+  display: flex;
+
+  align-items: flex-start;
+  justify-content: space-between;
+
+  gap: 20px;
+
+  margin-bottom: 24px;
+}
+
+
+.system-page-header .system-title {
+  display: flex;
+
+  align-items: center;
+
+  gap: 9px;
+}
+
+
+.system-page-header .system-title svg {
+  flex-shrink: 0;
+
+  color:
+    var(--color-primario);
+
+  font-size: 1.05em;
+}
+
+
+/* =========================================================
+   6. CARDS
+   ========================================================= */
+
+.system-card {
+  width: 100%;
+
+  min-width: 0;
+
+  padding: 24px;
+
+  background:
+    var(--color-superficie);
+
+  border:
+    1px solid
+    var(--color-borde);
+
+  border-radius:
+    var(--radio-card);
+
+  box-shadow:
+    var(--sombra-suave);
+}
+
+
+.system-card-header {
+  margin-bottom: 20px;
+}
+
+
+.system-card-title {
+  margin:
+    0
+    0
+    5px;
+
+  color:
+    var(--color-texto);
+
+  font-size: 1.2rem;
+
+  font-weight: 700;
+}
+
+
+.system-card-description {
+  margin: 0;
+
+  color:
+    var(--color-texto-secundario);
+
+  font-size: 0.9rem;
+
+  line-height: 1.5;
+}
+
+
+/* =========================================================
+   7. FORMULARIOS
+   ========================================================= */
+
+.system-form {
+  width: 100%;
+
+  min-width: 0;
+}
+
+
+.system-form-group {
+  width: 100%;
+
+  min-width: 0;
+
+  margin-bottom: 18px;
+}
+
+
+.system-form-label {
+  display: block;
+
+  margin-bottom: 7px;
+
+  color:
+    var(--color-texto);
+
+  font-size: 0.9rem;
+
+  font-weight: 600;
+}
+
+
+.system-form-required {
+  margin-left: 3px;
+
+  color:
+    var(--color-peligro);
+}
+
+
+/* =========================================================
+   8. INPUTS / SELECT / TEXTAREA
+   ========================================================= */
+
+.system-form-control,
+.system-form-select,
+.system-form-textarea {
+  width: 100%;
+
+  min-width: 0;
+
+  color:
+    var(--color-texto);
+
+  background:
+    var(--color-superficie);
+
+  border:
+    1px solid
+    var(--color-borde-input);
+
+  border-radius:
+    var(--radio-medio);
+
+  outline: none;
+
+  font-family: inherit;
+
+  font-size: 0.95rem;
+
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    background-color 0.2s ease;
+}
+
+
+/* INPUT */
+
+.system-form-control {
+  min-height:
+    var(--input-altura);
+
+  padding:
+    0
+    var(--input-padding-horizontal);
+}
+
+
+/* SELECT */
+
+.system-form-select {
+  min-height:
+    var(--input-altura);
+
+  padding:
+    0
+    40px
+    0
+    var(--input-padding-horizontal);
+
+  cursor: pointer;
+}
+
+
+/* TEXTAREA */
+
+.system-form-textarea {
+  min-height: 110px;
+
+  padding:
+    12px
+    var(--input-padding-horizontal);
+
+  resize: vertical;
+}
+
+
+/* PLACEHOLDER */
+
+.system-form-control::placeholder,
+.system-form-textarea::placeholder {
+  color:
+    var(--color-texto-suave);
+}
+
+
+/* HOVER */
+
+.system-form-control:hover,
+.system-form-select:hover,
+.system-form-textarea:hover {
+  border-color:
+    var(--color-borde-hover);
+}
+
+
+/* FOCUS */
+
+.system-form-control:focus,
+.system-form-select:focus,
+.system-form-textarea:focus {
+  border-color:
+    var(--color-primario);
+
+  box-shadow:
+    0 0 0 3px
+    var(--color-primario-suave);
+}
+
+
+/* DISABLED */
+
+.system-form-control:disabled,
+.system-form-select:disabled,
+.system-form-textarea:disabled {
+  color:
+    var(--color-texto-suave);
+
+  background: #eef1f3;
+
+  cursor: not-allowed;
+
+  opacity: 1;
+}
+
+
+/* READONLY */
+
+.system-form-control[readonly],
+.system-form-textarea[readonly] {
+  background: #f5f7f8;
+
+  cursor: default;
+}
+
+
+/* =========================================================
+   9. MENSAJES DE FORMULARIO
+   ========================================================= */
+
+.system-form-help {
+  display: block;
+
+  margin-top: 5px;
+
+  color:
+    var(--color-texto-secundario);
+
+  font-size: 0.8rem;
+
+  line-height: 1.4;
+}
+
+
+.system-form-error {
+  display: block;
+
+  margin-top: 5px;
+
+  color:
+    var(--color-peligro);
+
+  font-size: 0.8rem;
+
+  font-weight: 500;
+
+  line-height: 1.4;
+}
+
+
+.system-form-success {
+  display: block;
+
+  margin-top: 5px;
+
+  color:
+    var(--color-exito);
+
+  font-size: 0.8rem;
+
+  font-weight: 500;
+
+  line-height: 1.4;
+}
+
+
+/* =========================================================
+   10. VALIDACIÓN
+   ========================================================= */
+
+.system-form-control.is-valid,
+.system-form-select.is-valid,
+.system-form-textarea.is-valid {
+  border-color:
+    var(--color-exito);
+}
+
+
+.system-form-control.is-valid:focus,
+.system-form-select.is-valid:focus,
+.system-form-textarea.is-valid:focus {
+  border-color:
+    var(--color-exito);
+
+  box-shadow:
+    0 0 0 3px
+    var(--color-exito-suave);
+}
+
+
+.system-form-control.is-invalid,
+.system-form-select.is-invalid,
+.system-form-textarea.is-invalid {
+  border-color:
+    var(--color-peligro);
+}
+
+
+.system-form-control.is-invalid:focus,
+.system-form-select.is-invalid:focus,
+.system-form-textarea.is-invalid:focus {
+  border-color:
+    var(--color-peligro);
+
+  box-shadow:
+    0 0 0 3px
+    var(--color-peligro-suave);
+}
+
+
+/* =========================================================
+   11. DISTRIBUCIÓN DE FORMULARIOS
+   ========================================================= */
+
+.system-form-grid {
+  display: grid;
+
+  grid-template-columns:
+    repeat(
+      2,
+      minmax(0, 1fr)
+    );
+
+  gap:
+    18px
+    20px;
+}
+
+
+.system-form-grid-3 {
+  display: grid;
+
+  grid-template-columns:
+    repeat(
+      3,
+      minmax(0, 1fr)
+    );
+
+  gap:
+    18px
+    20px;
+}
+
+
+.system-form-full {
+  grid-column:
+    1 / -1;
+}
+
+
+/* =========================================================
+   12. BOTONES BASE
+   ========================================================= */
+
+.app-btn {
+  min-height:
+    var(--boton-altura);
+
+  min-width: 0;
+
+  display: inline-flex;
+
+  align-items: center;
+  justify-content: center;
+
+  gap: 8px;
+
+  padding:
+    0.6rem
+    1rem;
+
+  border:
+    1px solid transparent;
+
+  border-radius:
+    var(--radio-medio);
+
+  font-family: inherit;
+
+  font-size: 0.9rem;
+
+  font-weight: 600;
+
+  line-height: 1;
+
+  text-decoration: none;
+
+  white-space: nowrap;
+
+  cursor: pointer;
+
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.15s ease;
+}
+
+
+.app-btn:hover:not(:disabled) {
+  transform:
+    translateY(-1px);
+}
+
+
+.app-btn:active:not(:disabled) {
+  transform:
+    translateY(0);
+}
+
+
+.app-btn:focus-visible {
+  outline:
+    3px solid
+    var(--color-primario-suave);
+
+  outline-offset: 2px;
+}
+
+
+.app-btn:disabled {
+  color: #879199;
+
+  background: #dfe4e7;
+
+  border-color: #dfe4e7;
+
+  cursor: not-allowed;
+
+  transform: none;
+
+  opacity: 1;
+}
+
+
+/* =========================================================
+   13. BOTÓN PRINCIPAL
+   Guardar / Nuevo / Confirmar / Continuar
+   ========================================================= */
+
+.app-btn-primary {
+  color:
+    var(--color-texto-invertido);
+
+  background:
+    var(--color-primario);
+
+  border-color:
+    var(--color-primario);
+}
+
+
+.app-btn-primary:hover:not(:disabled) {
+  background:
+    var(--color-primario-hover);
+
+  border-color:
+    var(--color-primario-hover);
+}
+
+
+.app-btn-primary:active:not(:disabled) {
+  background:
+    var(--color-primario-activo);
+}
+
+
+/* =========================================================
+   14. BOTÓN SECUNDARIO
+   Editar / Volver / Opciones secundarias
+   ========================================================= */
+
+.app-btn-secondary {
+  color:
+    var(--color-texto);
+
+  background:
+    var(--color-superficie-secundaria);
+
+  border-color:
+    var(--color-borde);
+}
+
+
+.app-btn-secondary:hover:not(:disabled) {
+  background:
+    var(--color-superficie-hover);
+
+  border-color:
+    var(--color-borde-hover);
+}
+
+
+/* =========================================================
+   15. BOTÓN CANCELAR
+   ========================================================= */
+
+.app-btn-cancel {
+  color:
+    var(--color-texto-secundario);
+
+  background:
+    var(--color-superficie);
+
+  border-color:
+    var(--color-borde);
+}
+
+
+.app-btn-cancel:hover:not(:disabled) {
+  color:
+    var(--color-texto);
+
+  background:
+    var(--color-superficie-secundaria);
+
+  border-color:
+    var(--color-borde-hover);
+}
+
+
+/* =========================================================
+   16. BOTÓN PELIGRO
+   ========================================================= */
+
+.app-btn-danger {
+  color: #ffffff;
+
+  background:
+    var(--color-peligro);
+
+  border-color:
+    var(--color-peligro);
+}
+
+
+.app-btn-danger:hover:not(:disabled) {
+  background:
+    var(--color-peligro-hover);
+
+  border-color:
+    var(--color-peligro-hover);
+}
+
+
+.app-btn-danger:active:not(:disabled) {
+  background:
+    var(--color-peligro-activo);
+}
+
+
+/* =========================================================
+   17. BOTÓN ÉXITO
+   ========================================================= */
+
+.app-btn-success {
+  color: #ffffff;
+
+  background:
+    var(--color-exito);
+
+  border-color:
+    var(--color-exito);
+}
+
+
+.app-btn-success:hover:not(:disabled) {
+  background:
+    var(--color-exito-hover);
+
+  border-color:
+    var(--color-exito-hover);
+}
+
+
+/* =========================================================
+   18. BOTÓN DE ANCHO COMPLETO
+   ========================================================= */
+
+.app-btn-block {
+  width: 100%;
+}
+
+
+/* =========================================================
+   19. BOTÓN SOLO ICONO
+   ========================================================= */
+
+.app-btn-icon {
+  width: 40px;
+
+  min-width: 40px;
+
+  height: 40px;
+
+  min-height: 40px;
+
+  padding: 0;
+
+  flex-shrink: 0;
+}
+
+
+/* =========================================================
+   20. GRUPO DE BOTONES
+   ========================================================= */
+
+.system-actions {
+  width: 100%;
+
+  display: flex;
+
+  align-items: center;
+  justify-content: flex-end;
+
+  flex-wrap: wrap;
+
+  gap: 10px;
+
+  margin-top: 24px;
+}
+
+
+/* =========================================================
+   21. TOOLBAR GLOBAL
+   ========================================================= */
+
+.system-toolbar {
+  width: 100%;
+
+  min-width: 0;
+
+  display: flex;
+
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 24px;
+
+  margin-bottom: 24px;
+}
+
+
+.system-toolbar-actions {
+  display: flex;
+
+  align-items: center;
+
+  flex-wrap: wrap;
+
+  gap: 12px;
+
+  flex-shrink: 0;
+}
+
+
+/* =========================================================
+   22. BUSCADOR GLOBAL
+   ========================================================= */
+
+.system-search {
+  width: 100%;
+
+  max-width: 420px;
+
+  min-width: 260px;
+
+  margin-left: auto;
+}
+
+
+/* =========================================================
+   23. BADGES / ESTADOS
+   ========================================================= */
+
+.system-badge {
+  display: inline-flex;
+
+  align-items: center;
+  justify-content: center;
+
+  gap: 5px;
+
+  padding:
+    5px
+    9px;
+
+  border-radius:
+    999px;
+
+  font-size: 0.78rem;
+
+  font-weight: 600;
+
+  line-height: 1;
+}
+
+
+.system-badge-success {
+  color: #1e754b;
+
+  background:
+    var(--color-exito-suave);
+}
+
+
+.system-badge-danger {
+  color: #aa2837;
+
+  background:
+    var(--color-peligro-suave);
+}
+
+
+.system-badge-warning {
+  color: #916409;
+
+  background:
+    var(--color-advertencia-suave);
+}
+
+
+.system-badge-info {
+  color: #22689c;
+
+  background:
+    var(--color-info-suave);
+}
+
+
+.system-badge-neutral {
+  color: #5f6b73;
+
+  background: #e9edf0;
+}
+
+
+/* =========================================================
+   24. ALERTAS
+   ========================================================= */
+
+.system-alert {
+  width: 100%;
+
+  padding:
+    12px
+    14px;
+
+  border:
+    1px solid transparent;
+
+  border-radius:
+    var(--radio-medio);
+
+  font-size: 0.88rem;
+
+  line-height: 1.45;
+}
+
+
+.system-alert-success {
+  color: #1f754c;
+
+  background:
+    var(--color-exito-suave);
+
+  border-color:
+    rgba(40, 166, 106, 0.25);
+}
+
+
+.system-alert-danger {
+  color: #a82735;
+
+  background:
+    var(--color-peligro-suave);
+
+  border-color:
+    rgba(220, 53, 69, 0.24);
+}
+
+
+.system-alert-warning {
+  color: #85600b;
+
+  background:
+    var(--color-advertencia-suave);
+
+  border-color:
+    rgba(228, 161, 27, 0.28);
+}
+
+
+.system-alert-info {
+  color: #22689c;
+
+  background:
+    var(--color-info-suave);
+
+  border-color:
+    rgba(40, 120, 181, 0.22);
+}
+
+
+/* =========================================================
+   25. ESTADOS VACÍOS
+   ========================================================= */
+
+.system-empty-state {
+  width: 100%;
+
+  padding:
+    40px
+    20px;
+
+  color:
+    var(--color-texto-secundario);
+
+  text-align: center;
+}
+
+
+.system-empty-state h3 {
+  margin:
+    0
+    0
+    6px;
+
+  color:
+    var(--color-texto);
+
+  font-size: 1.1rem;
+
+  font-weight: 700;
+}
+
+
+.system-empty-state p {
+  margin: 0;
+
+  font-size: 0.9rem;
+}
+
+
+/* =========================================================
+   26. DIVISORES
+   ========================================================= */
+
+.system-divider {
+  width: 100%;
+
+  height: 1px;
+
+  margin:
+    20px
+    0;
+
+  background:
+    var(--color-borde);
+
+  border: 0;
+}
+
+
+/* =========================================================
+   27. UTILIDADES
+   ========================================================= */
+
+.system-w-100 {
+  width: 100%;
+}
+
+
+.system-text-center {
+  text-align: center;
+}
+
+
+.system-text-left {
+  text-align: left;
+}
+
+
+.system-text-right {
+  text-align: right;
+}
+
+
+.system-flex {
+  display: flex;
+}
+
+
+.system-flex-center {
+  display: flex;
+
+  align-items: center;
+  justify-content: center;
+}
+
+
+.system-gap-1 {
+  gap: 8px;
+}
+
+
+.system-gap-2 {
+  gap: 12px;
+}
+
+
+.system-gap-3 {
+  gap: 16px;
+}
+
+
+/* =========================================================
+   28. TABLET
+   ========================================================= */
+
+@media (max-width: 900px) {
+
+  .system-page {
+    padding:
+      20px
+      16px;
+  }
+
+
+  .system-card {
+    padding: 20px;
+  }
+
+
+  .system-form-grid-3 {
+    grid-template-columns:
+      repeat(
+        2,
+        minmax(0, 1fr)
+      );
+  }
+
+}
+
+
+/* =========================================================
+   29. CELULARES
+   ========================================================= */
+
+@media (max-width: 600px) {
+
+  :root {
+    --input-altura: 44px;
+
+    --boton-altura: 44px;
+  }
+
+
+  .system-page {
+    padding:
+      16px
+      10px;
+  }
+
+
+  .system-card {
+    padding:
+      18px
+      14px;
+
+    border-radius:
+      var(--radio-grande);
+  }
+
+
+  .system-title {
+    font-size: 1.3rem;
+  }
+
+
+  .system-subtitle {
+    font-size: 0.88rem;
+  }
+
+
+  .system-page-header {
+    margin-bottom: 18px;
+  }
+
+
+  .system-form-grid,
+  .system-form-grid-3 {
+    grid-template-columns: 1fr;
+
+    gap: 0;
+  }
+
+
+  .system-form-group {
+    margin-bottom: 16px;
+  }
+
+
+  .system-actions {
+    align-items: stretch;
+
+    flex-direction: column-reverse;
+
+    gap: 8px;
+
+    margin-top: 20px;
+  }
+
+
+  .system-actions .app-btn {
+    width: 100%;
+  }
+
+
+  .system-toolbar {
+    flex-direction: column;
+
+    align-items: stretch;
+
+    gap: 14px;
+
+    margin-bottom: 20px;
+  }
+
+
+  .system-toolbar-actions {
+    width: 100%;
+  }
+
+
+  .system-toolbar-actions .app-btn {
+    width: 100%;
+  }
+
+
+  .system-search {
+    width: 100%;
+
+    max-width: none;
+
+    min-width: 0;
+
+    margin-left: 0;
+  }
+
+}
+
+
+/* =========================================================
+   30. CELULARES MUY PEQUEÑOS
+   ========================================================= */
+
+@media (max-width: 380px) {
+
+  .system-page {
+    padding:
+      12px
+      6px;
+  }
+
+
+  .system-card {
+    padding:
+      16px
+      12px;
+
+    border-radius:
+      var(--radio-medio);
+  }
+
+
+  .system-title {
+    font-size: 1.18rem;
+  }
+
+
+  .system-form-label {
+    font-size: 0.86rem;
+  }
+
+
+  .system-form-control,
+  .system-form-select,
+  .system-form-textarea {
+    font-size: 0.9rem;
+  }
+
+
+  .app-btn {
+    font-size: 0.88rem;
+  }
+
+}
+
+
+/* =========================================================
+   31. PANTALLAS GRANDES
+   ========================================================= */
+
+@media (min-width: 1600px) {
+
+  .system-page {
+    padding:
+      30px
+      36px;
+  }
+
+}
+
+
+/* =========================================================
+   32. ACCESIBILIDAD
+   ========================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+  }
+
+
+  .app-btn,
+  .system-form-control,
+  .system-form-select,
+  .system-form-textarea {
+    transition: none;
+  }
+
+
+  .app-btn:hover {
+    transform: none;
+  }
+
+}
+
+/* =========================================================
+   SPINNER GLOBAL
+   ========================================================= */
+
+.system-spinner {
+  width: 30px;
+  height: 30px;
+
+  display: inline-block;
+
+  flex-shrink: 0;
+
+  border:
+    3px solid
+    var(--color-borde);
+
+  border-top-color:
+    var(--color-primario);
+
+  border-radius: 50%;
+
+  animation:
+    system-spinner-rotate
+    0.75s
+    linear
+    infinite;
+}
+
+
+.system-spinner-small {
+  width: 16px;
+  height: 16px;
+
+  border-width: 2px;
+
+  border-color:
+    rgba(255, 255, 255, 0.45);
+
+  border-top-color:
+    #ffffff;
+}
+
+
+@keyframes system-spinner-rotate {
+
+  to {
+    transform:
+      rotate(360deg);
+  }
+
+}
+
+
+@media (prefers-reduced-motion: reduce) {
+
+  .system-spinner {
+    animation-duration: 1.5s;
+  }
+
+}

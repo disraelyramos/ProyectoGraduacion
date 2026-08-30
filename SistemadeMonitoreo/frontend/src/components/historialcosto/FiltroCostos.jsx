@@ -1,42 +1,18 @@
-import React, {
-  useRef,
-} from "react";
-
-import {
-  Row,
-  Col,
-  Form,
-  InputGroup,
-} from "react-bootstrap";
-
-import {
-  FaCalendarAlt,
-} from "react-icons/fa";
+import React from "react";
 
 
 const AGRUPAR_OPTIONS = [
   {
-    value:
-      "semana",
-
-    label:
-      "Semana",
+    value: "semana",
+    label: "Semana",
   },
-
   {
-    value:
-      "mes",
-
-    label:
-      "Mes",
+    value: "mes",
+    label: "Mes",
   },
-
   {
-    value:
-      "anio",
-
-    label:
-      "Año",
+    value: "anio",
+    label: "Año",
   },
 ];
 
@@ -52,71 +28,32 @@ export default function FiltroCostos({
   contenedores = [],
 }) {
 
-  const refIni =
-    useRef(null);
-
-
-  const refFin =
-    useRef(null);
-
-
   /* =======================================================
      CAMBIAR CAMPO
      ======================================================= */
 
-  const setField =
-    (
-      name,
-      fieldValue
-    ) => {
+  const setField = (
+    name,
+    fieldValue
+  ) => {
 
-      onChange(
-        (prev) => ({
-          ...prev,
+    onChange(
+      (prev) => ({
+        ...prev,
 
-          [name]:
-            String(
-              fieldValue ??
-              ""
-            ),
-        })
-      );
-    };
+        [name]:
+          String(
+            fieldValue ??
+            ""
+          ),
+      })
+    );
+  };
 
 
   /* =======================================================
-     ABRIR DATE PICKER
+     ESTADOS
      ======================================================= */
-
-  const openPicker =
-    (ref) => {
-
-      const element =
-        ref?.current;
-
-
-      if (
-        !element ||
-        disabled
-      ) {
-        return;
-      }
-
-
-      if (
-        typeof element.showPicker ===
-        "function"
-      ) {
-        element.showPicker();
-
-        return;
-      }
-
-
-      element.focus();
-      element.click();
-    };
-
 
   const disableCatalogSelects =
     disabled ||
@@ -128,385 +65,345 @@ export default function FiltroCostos({
     contenedoresLoading;
 
 
+  /* =======================================================
+     RENDER
+     ======================================================= */
+
   return (
-    <Form>
 
-      <Row className="g-3">
+    <form className="system-form">
 
-        {/* =============================================
+      <div className="system-form-grid-3">
+
+        {/* =================================================
             FECHA INICIO
-            ============================================= */}
+        ================================================= */}
 
-        <Col md={4}>
-          <Form.Group>
+        <div className="system-form-group">
 
-            <Form.Label>
-              Fecha inicio
-            </Form.Label>
-
-
-            <InputGroup>
-
-              <Form.Control
-                ref={
-                  refIni
-                }
-
-                type="date"
-
-                value={
-                  value.fechaInicio ||
-                  ""
-                }
-
-                onChange={
-                  (e) =>
-                    setField(
-                      "fechaInicio",
-                      e.target.value
-                    )
-                }
-
-                disabled={
-                  disabled
-                }
-              />
+          <label
+            htmlFor="fechaInicio"
+            className="system-form-label"
+          >
+            Fecha inicio
+          </label>
 
 
-              <InputGroup.Text
-                role="button"
+          <input
+            id="fechaInicio"
+            type="date"
+            className="system-form-control"
+            value={
+              value.fechaInicio ||
+              ""
+            }
+            onChange={
+              (event) =>
+                setField(
+                  "fechaInicio",
+                  event.target.value
+                )
+            }
+            disabled={
+              disabled
+            }
+          />
 
-                aria-label="Abrir calendario de fecha inicio"
-
-                onClick={
-                  () =>
-                    openPicker(
-                      refIni
-                    )
-                }
-
-                style={{
-                  cursor:
-                    disabled
-                      ? "not-allowed"
-                      : "pointer",
-                }}
-              >
-                <FaCalendarAlt />
-              </InputGroup.Text>
-
-            </InputGroup>
-
-          </Form.Group>
-        </Col>
+        </div>
 
 
-        {/* =============================================
+        {/* =================================================
             FECHA FIN
-            ============================================= */}
+        ================================================= */}
 
-        <Col md={4}>
-          <Form.Group>
+        <div className="system-form-group">
 
-            <Form.Label>
-              Fecha fin
-            </Form.Label>
-
-
-            <InputGroup>
-
-              <Form.Control
-                ref={
-                  refFin
-                }
-
-                type="date"
-
-                value={
-                  value.fechaFin ||
-                  ""
-                }
-
-                onChange={
-                  (e) =>
-                    setField(
-                      "fechaFin",
-                      e.target.value
-                    )
-                }
-
-                disabled={
-                  disabled
-                }
-              />
+          <label
+            htmlFor="fechaFin"
+            className="system-form-label"
+          >
+            Fecha fin
+          </label>
 
 
-              <InputGroup.Text
-                role="button"
-
-                aria-label="Abrir calendario de fecha fin"
-
-                onClick={
-                  () =>
-                    openPicker(
-                      refFin
-                    )
-                }
-
-                style={{
-                  cursor:
-                    disabled
-                      ? "not-allowed"
-                      : "pointer",
-                }}
-              >
-                <FaCalendarAlt />
-              </InputGroup.Text>
-
-            </InputGroup>
-
-          </Form.Group>
-        </Col>
-
-
-        {/* =============================================
-            AGRUPAR
-            ============================================= */}
-
-        <Col md={4}>
-          <Form.Group>
-
-            <Form.Label>
-              Agrupar por
-            </Form.Label>
-
-
-            <Form.Select
-              value={
-                value.agruparPor ||
-                "mes"
-              }
-
-              onChange={
-                (e) =>
-                  setField(
-                    "agruparPor",
-                    e.target.value
-                  )
-              }
-
-              disabled={
-                disabled
-              }
-            >
-              {AGRUPAR_OPTIONS.map(
-                (option) => (
-                  <option
-                    key={
-                      option.value
-                    }
-
-                    value={
-                      option.value
-                    }
-                  >
-                    {option.label}
-                  </option>
+          <input
+            id="fechaFin"
+            type="date"
+            className="system-form-control"
+            value={
+              value.fechaFin ||
+              ""
+            }
+            onChange={
+              (event) =>
+                setField(
+                  "fechaFin",
+                  event.target.value
                 )
-              )}
-            </Form.Select>
+            }
+            disabled={
+              disabled
+            }
+          />
 
-          </Form.Group>
-        </Col>
+        </div>
 
 
-        {/* =============================================
+        {/* =================================================
+            AGRUPAR POR
+        ================================================= */}
+
+        <div className="system-form-group">
+
+          <label
+            htmlFor="agruparPor"
+            className="system-form-label"
+          >
+            Agrupar por
+          </label>
+
+
+          <select
+            id="agruparPor"
+            className="system-form-select"
+            value={
+              value.agruparPor ||
+              "mes"
+            }
+            onChange={
+              (event) =>
+                setField(
+                  "agruparPor",
+                  event.target.value
+                )
+            }
+            disabled={
+              disabled
+            }
+          >
+
+            {AGRUPAR_OPTIONS.map(
+              (option) => (
+
+                <option
+                  key={
+                    option.value
+                  }
+                  value={
+                    option.value
+                  }
+                >
+                  {option.label}
+                </option>
+
+              )
+            )}
+
+          </select>
+
+        </div>
+
+
+        {/* =================================================
             DISTRITO
-            ============================================= */}
+        ================================================= */}
 
-        <Col md={4}>
-          <Form.Group>
+        <div className="system-form-group">
 
-            <Form.Label>
-              Distrito
-            </Form.Label>
-
-
-            <Form.Select
-              value={
-                value.distritoId ||
-                ""
-              }
-
-              onChange={
-                (e) =>
-                  setField(
-                    "distritoId",
-                    e.target.value
-                  )
-              }
-
-              disabled={
-                disableCatalogSelects
-              }
-            >
-
-              <option value="">
-                {catalogLoading
-                  ? "Cargando..."
-                  : "Seleccione un distrito"}
-              </option>
+          <label
+            htmlFor="distritoId"
+            className="system-form-label"
+          >
+            Distrito
+          </label>
 
 
-              {distritos.map(
-                (distrito) => (
-                  <option
-                    key={
+          <select
+            id="distritoId"
+            className="system-form-select"
+            value={
+              value.distritoId ||
+              ""
+            }
+            onChange={
+              (event) =>
+                setField(
+                  "distritoId",
+                  event.target.value
+                )
+            }
+            disabled={
+              disableCatalogSelects
+            }
+          >
+
+            <option value="">
+
+              {catalogLoading
+                ? "Cargando..."
+                : "Seleccione un distrito"}
+
+            </option>
+
+
+            {distritos.map(
+              (distrito) => (
+
+                <option
+                  key={
+                    distrito.id
+                  }
+                  value={
+                    String(
                       distrito.id
-                    }
+                    )
+                  }
+                >
+                  {distrito.nombre}
+                </option>
 
-                    value={
-                      String(
-                        distrito.id
-                      )
-                    }
-                  >
-                    {distrito.nombre}
-                  </option>
-                )
-              )}
+              )
+            )}
 
-            </Form.Select>
+          </select>
 
-          </Form.Group>
-        </Col>
+        </div>
 
 
-        {/* =============================================
+        {/* =================================================
             EMPRESA
-            ============================================= */}
+        ================================================= */}
 
-        <Col md={4}>
-          <Form.Group>
+        <div className="system-form-group">
 
-            <Form.Label>
-              Empresa
-            </Form.Label>
-
-
-            <Form.Select
-              value={
-                value.empresaId ||
-                ""
-              }
-
-              onChange={
-                (e) =>
-                  setField(
-                    "empresaId",
-                    e.target.value
-                  )
-              }
-
-              disabled={
-                disableCatalogSelects
-              }
-            >
-
-              <option value="">
-                {catalogLoading
-                  ? "Cargando..."
-                  : "Seleccione una empresa"}
-              </option>
+          <label
+            htmlFor="empresaId"
+            className="system-form-label"
+          >
+            Empresa
+          </label>
 
 
-              {empresas.map(
-                (empresa) => (
-                  <option
-                    key={
+          <select
+            id="empresaId"
+            className="system-form-select"
+            value={
+              value.empresaId ||
+              ""
+            }
+            onChange={
+              (event) =>
+                setField(
+                  "empresaId",
+                  event.target.value
+                )
+            }
+            disabled={
+              disableCatalogSelects
+            }
+          >
+
+            <option value="">
+
+              {catalogLoading
+                ? "Cargando..."
+                : "Seleccione una empresa"}
+
+            </option>
+
+
+            {empresas.map(
+              (empresa) => (
+
+                <option
+                  key={
+                    empresa.id
+                  }
+                  value={
+                    String(
                       empresa.id
-                    }
+                    )
+                  }
+                >
+                  {empresa.nombre}
+                </option>
 
-                    value={
-                      String(
-                        empresa.id
-                      )
-                    }
-                  >
-                    {empresa.nombre}
-                  </option>
-                )
-              )}
+              )
+            )}
 
-            </Form.Select>
+          </select>
 
-          </Form.Group>
-        </Col>
+        </div>
 
 
-        {/* =============================================
+        {/* =================================================
             CONTENEDOR
-            ============================================= */}
+        ================================================= */}
 
-        <Col md={4}>
-          <Form.Group>
+        <div className="system-form-group">
 
-            <Form.Label>
-              Contenedor
-            </Form.Label>
-
-
-            <Form.Select
-              value={
-                value.contenedorId ||
-                ""
-              }
-
-              onChange={
-                (e) =>
-                  setField(
-                    "contenedorId",
-                    e.target.value
-                  )
-              }
-
-              disabled={
-                disableContenedor
-              }
-            >
-
-              <option value="">
-                {contenedoresLoading
-                  ? "Cargando..."
-                  : "Seleccione un contenedor"}
-              </option>
+          <label
+            htmlFor="contenedorId"
+            className="system-form-label"
+          >
+            Contenedor
+          </label>
 
 
-              {contenedores.map(
-                (contenedor) => (
-                  <option
-                    key={
-                      contenedor.id
-                    }
-
-                    value={
-                      String(
-                        contenedor.id
-                      )
-                    }
-                  >
-                    {contenedor.codigo}
-                  </option>
+          <select
+            id="contenedorId"
+            className="system-form-select"
+            value={
+              value.contenedorId ||
+              ""
+            }
+            onChange={
+              (event) =>
+                setField(
+                  "contenedorId",
+                  event.target.value
                 )
-              )}
+            }
+            disabled={
+              disableContenedor
+            }
+          >
 
-            </Form.Select>
+            <option value="">
 
-          </Form.Group>
-        </Col>
+              {contenedoresLoading
+                ? "Cargando..."
+                : "Seleccione un contenedor"}
 
-      </Row>
+            </option>
 
-    </Form>
+
+            {contenedores.map(
+              (contenedor) => (
+
+                <option
+                  key={
+                    contenedor.id
+                  }
+                  value={
+                    String(
+                      contenedor.id
+                    )
+                  }
+                >
+                  {contenedor.codigo}
+                </option>
+
+              )
+            )}
+
+          </select>
+
+        </div>
+
+      </div>
+
+    </form>
+
   );
 }

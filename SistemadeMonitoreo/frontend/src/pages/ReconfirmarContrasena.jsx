@@ -1,37 +1,121 @@
-// pages/ReconfirmarContrasena.jsx
-import React, { useMemo, useState } from "react";
-import axios from "axios";
-import { toast } from "react-toastify";
-import { useLocation, useNavigate } from "react-router-dom";
-import { FaCheckCircle, FaTimesCircle, FaEye, FaEyeSlash } from "react-icons/fa";
+// frontend/src/pages/ReconfirmarContrasena.jsx
+
+import React, {
+  useMemo,
+  useState,
+} from "react";
+
+import {
+  toast,
+} from "react-toastify";
+
+import {
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
+
+import {
+  FaCheckCircle,
+  FaTimesCircle,
+  FaEye,
+  FaEyeSlash,
+  FaLock,
+} from "react-icons/fa";
+
+import apiClient
+  from "../utils/apiClient";
+
 import "react-toastify/dist/ReactToastify.css";
 import "../styles/login.css";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:3001/api";
 
-// --- utils ---
+/* =========================================================
+   OBTENER USUARIO DESDE TOKEN
+   ========================================================= */
+
 function getUsuarioFromToken() {
+
   try {
-    const token = localStorage.getItem("token");
-    if (!token) return null;
-    const payload = JSON.parse(atob(token.split(".")[1]));
-    return payload?.usuario || null;
+
+    const token =
+      localStorage.getItem(
+        "token"
+      );
+
+
+    if (
+      !token
+    ) {
+      return null;
+    }
+
+
+    const payload =
+      JSON.parse(
+        atob(
+          token.split(".")[1]
+        )
+      );
+
+
+    return (
+      payload?.usuario ||
+      null
+    );
+
   } catch {
+
     return null;
   }
 }
 
-// --- small UI components ---
-const RuleItem = ({ ok, children }) => (
-  <li className="d-flex align-items-center gap-2">
+
+/* =========================================================
+   REGLA DE CONTRASEÑA
+   ========================================================= */
+
+const RuleItem = ({
+  ok,
+  children,
+}) => (
+
+  <li
+    className={
+      `password-rule ${
+        ok
+          ? "password-rule-valid"
+          : "password-rule-invalid"
+      }`
+    }
+  >
+
     {ok ? (
-      <FaCheckCircle className="text-success" aria-hidden="true" />
+
+      <FaCheckCircle
+        aria-hidden="true"
+      />
+
     ) : (
-      <FaTimesCircle className="text-danger" aria-hidden="true" />
+
+      <FaTimesCircle
+        aria-hidden="true"
+      />
+
     )}
-    <span>{children}</span>
+
+
+    <span>
+      {children}
+    </span>
+
   </li>
+
 );
+
+
+/* =========================================================
+   CAMPO DE CONTRASEÑA
+   ========================================================= */
 
 const PasswordField = ({
   label,
@@ -41,62 +125,255 @@ const PasswordField = ({
   show,
   onToggleShow,
   autoComplete,
-  inputClass,
-  errorText, // opcional
+  validationClass = "",
+  errorText,
 }) => (
-  <div className="mb-3">
-    <label className="form-label">{label}</label>
-    <div className="input-group">
+
+  <div className="system-form-group">
+
+    <label
+      htmlFor={name}
+      className="system-form-label"
+    >
+      {label}
+    </label>
+
+
+    <div className="password-input-group">
+
       <input
-        type={show ? "text" : "password"}
+        id={name}
+        type={
+          show
+            ? "text"
+            : "password"
+        }
         name={name}
-        className={inputClass || "form-control"}
+        className={
+          `system-form-control password-input ${validationClass}`
+        }
         value={value}
         onChange={onChange}
         required
-        autoComplete={autoComplete}
+        autoComplete={
+          autoComplete
+        }
       />
+
+
       <button
         type="button"
-        className="btn btn-outline-secondary"
-        onClick={onToggleShow}
-        aria-label={`Mostrar/Ocultar ${label}`}
-        title={show ? "Ocultar" : "Mostrar"}
+        className="password-toggle"
+        onClick={
+          onToggleShow
+        }
+        aria-label={
+          show
+            ? `Ocultar ${label}`
+            : `Mostrar ${label}`
+        }
+        title={
+          show
+            ? "Ocultar"
+            : "Mostrar"
+        }
       >
-        {show ? <FaEyeSlash /> : <FaEye />}
+
+        {show ? (
+
+          <FaEyeSlash
+            aria-hidden="true"
+          />
+
+        ) : (
+
+          <FaEye
+            aria-hidden="true"
+          />
+
+        )}
+
       </button>
+
     </div>
-    {errorText ? <small className="text-danger">{errorText}</small> : null}
+
+
+    {errorText && (
+
+      <small className="system-form-error">
+        {errorText}
+      </small>
+
+    )}
+
   </div>
+
 );
 
+
+/* =========================================================
+   COMPONENTE
+   ========================================================= */
+
 const ReconfirmarContrasena = () => {
-  const [form, setForm] = useState({ actual: "", nueva: "", confirmar: "" });
-  const [loading, setLoading] = useState(false);
-  const [show, setShow] = useState({ actual: false, nueva: false, confirmar: false });
 
-  const navigate = useNavigate();
-  const location = useLocation();
+  /* =======================================================
+     ESTADOS
+     ======================================================= */
 
-  // usuario: del navigate(state) o del JWT
-  const usuario = useMemo(() => location.state?.usuario || getUsuarioFromToken(), [location.state]);
+  const [
+    form,
+    setForm,
+  ] =
+    useState({
+      actual: "",
+      nueva: "",
+      confirmar: "",
+    });
 
-  const onChange = (e) => setForm((s) => ({ ...s, [e.target.name]: e.target.value }));
 
-  // Reglas (sin carácter especial)
-  const rules = useMemo(() => {
-    const np = form.nueva || "";
-    return {
-      length: np.length >= 8,
-      upper: /[A-Z]/.test(np),
-      lower: /[a-z]/.test(np),
-      number: /\d/.test(np),
+  const [
+    loading,
+    setLoading,
+  ] =
+    useState(false);
+
+
+  const [
+    show,
+    setShow,
+  ] =
+    useState({
+      actual: false,
+      nueva: false,
+      confirmar: false,
+    });
+
+
+  const navigate =
+    useNavigate();
+
+
+  const location =
+    useLocation();
+
+
+  /* =======================================================
+     USUARIO
+
+     Primero usa navigate(state).
+     Si no existe, lo obtiene del JWT.
+     ======================================================= */
+
+  const usuario =
+    useMemo(
+      () =>
+        location.state?.usuario ||
+        getUsuarioFromToken(),
+      [
+        location.state,
+      ]
+    );
+
+
+  /* =======================================================
+     CAMBIAR CAMPOS
+     ======================================================= */
+
+  const onChange =
+    (event) => {
+
+      const {
+        name,
+        value,
+      } =
+        event.target;
+
+
+      setForm(
+        (state) => ({
+          ...state,
+
+          [name]:
+            value,
+        })
+      );
     };
-  }, [form.nueva]);
 
-  const cumpleRequisitos = rules.length && rules.upper && rules.lower && rules.number;
-  const coincideConfirmacion = form.nueva === form.confirmar && form.confirmar.length > 0;
-  const nuevaNoIgualActual = form.nueva && form.actual && form.nueva !== form.actual;
+
+  /* =======================================================
+     REGLAS DE CONTRASEÑA
+
+     Se conserva la lógica actual:
+     - mínimo 8 caracteres
+     - mayúscula
+     - minúscula
+     - número
+     - sin requisito de carácter especial
+     ======================================================= */
+
+  const rules =
+    useMemo(
+      () => {
+
+        const nuevaPassword =
+          form.nueva ||
+          "";
+
+
+        return {
+
+          length:
+            nuevaPassword.length >=
+            8,
+
+          upper:
+            /[A-Z]/.test(
+              nuevaPassword
+            ),
+
+          lower:
+            /[a-z]/.test(
+              nuevaPassword
+            ),
+
+          number:
+            /\d/.test(
+              nuevaPassword
+            ),
+        };
+
+      },
+      [
+        form.nueva,
+      ]
+    );
+
+
+  const cumpleRequisitos =
+    rules.length &&
+    rules.upper &&
+    rules.lower &&
+    rules.number;
+
+
+  const coincideConfirmacion =
+    form.nueva ===
+      form.confirmar &&
+    form.confirmar.length >
+      0;
+
+
+  const nuevaNoIgualActual =
+    form.nueva &&
+    form.actual &&
+    form.nueva !==
+      form.actual;
+
+
+  /* =======================================================
+     ESTADO DEL BOTÓN
+     ======================================================= */
 
   const disableSubmit =
     loading ||
@@ -108,137 +385,442 @@ const ReconfirmarContrasena = () => {
     !coincideConfirmacion ||
     !nuevaNoIgualActual;
 
-  const onSubmit = async (e) => {
-    e.preventDefault();
 
-    if (!usuario) {
-      toast.error("No se pudo identificar el usuario. Inicie sesión nuevamente.");
-      navigate("/");
-      return;
-    }
+  /* =======================================================
+     ENVIAR CAMBIO DE CONTRASEÑA
+     ======================================================= */
 
-    const token = localStorage.getItem("token");
-    if (!token) {
-      toast.error("Sesión no válida. Inicie sesión nuevamente.");
-      navigate("/");
-      return;
-    }
+  const onSubmit =
+    async (
+      event
+    ) => {
 
-    try {
-      setLoading(true);
-      const { data } = await axios.post(
-        `${API_BASE}/auth/reconfirmar-password`,
-        { usuario, actual: form.actual, nueva: form.nueva },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      event.preventDefault();
 
-      if (data?.token) localStorage.setItem("token", data.token);
 
-      toast.success("Contraseña actualizada correctamente");
-      setForm({ actual: "", nueva: "", confirmar: "" });
-      navigate("/dashboard");
-    } catch (err) {
-      const msg = err?.response?.data?.message || "Error al actualizar la contraseña";
-      toast.error(msg);
-    } finally {
-      setLoading(false);
-    }
-  };
+      if (
+        !usuario
+      ) {
 
-  // Clases de validación visual
-  const inputClassActual = form.actual.length === 0 ? "form-control" : "form-control is-valid";
-  const inputClassNueva =
-    form.nueva.length === 0 ? "form-control" : cumpleRequisitos ? "form-control is-valid" : "form-control is-invalid";
-  const inputClassConfirm =
+        toast.error(
+          "No se pudo identificar el usuario. Inicie sesión nuevamente."
+        );
+
+
+        navigate("/");
+
+        return;
+      }
+
+
+      const token =
+        localStorage.getItem(
+          "token"
+        );
+
+
+      if (
+        !token
+      ) {
+
+        toast.error(
+          "Sesión no válida. Inicie sesión nuevamente."
+        );
+
+
+        navigate("/");
+
+        return;
+      }
+
+
+      try {
+
+        setLoading(
+          true
+        );
+
+
+        /*
+         * apiClient ya:
+         * - usa VITE_API_URL
+         * - agrega /api
+         * - adjunta Bearer token
+         */
+
+        const {
+          data,
+        } =
+          await apiClient.post(
+            "/auth/reconfirmar-password",
+            {
+              usuario,
+              actual:
+                form.actual,
+              nueva:
+                form.nueva,
+            }
+          );
+
+
+        if (
+          data?.token
+        ) {
+
+          localStorage.setItem(
+            "token",
+            data.token
+          );
+        }
+
+
+        toast.success(
+          "Contraseña actualizada correctamente"
+        );
+
+
+        setForm({
+          actual: "",
+          nueva: "",
+          confirmar: "",
+        });
+
+
+        navigate(
+          "/dashboard"
+        );
+
+      } catch (
+        error
+      ) {
+
+        const message =
+          error
+            ?.response
+            ?.data
+            ?.message ||
+          "Error al actualizar la contraseña";
+
+
+        toast.error(
+          message
+        );
+
+      } finally {
+
+        setLoading(
+          false
+        );
+      }
+    };
+
+
+  /* =======================================================
+     VALIDACIÓN VISUAL
+     ======================================================= */
+
+  const validationActual =
+    form.actual.length === 0
+      ? ""
+      : "is-valid";
+
+
+  const validationNueva =
+    form.nueva.length === 0
+      ? ""
+      : cumpleRequisitos
+        ? "is-valid"
+        : "is-invalid";
+
+
+  const validationConfirm =
     form.confirmar.length === 0
-      ? "form-control"
+      ? ""
       : coincideConfirmacion
-      ? "form-control is-valid"
-      : "form-control is-invalid";
+        ? "is-valid"
+        : "is-invalid";
+
+
+  /* =======================================================
+     RENDER
+     ======================================================= */
 
   return (
-    <div className="container d-flex justify-content-center align-items-center min-vh-100">
-      <div className="col-md-6 col-lg-5 p-4 shadow rounded bg-light">
-        <div className="text-center mb-2" style={{ fontSize: 28, fontWeight: 700 }}>
-          Actualizar Contraseña
-        </div>
-        <p className="text-center text-muted" style={{ marginTop: -6 }}>
-          Mantén tu cuenta segura con una contraseña fuerte
-        </p>
 
-        {usuario && (
-          <p className="text-center text-muted" style={{ marginTop: -6 }}>
-            Usuario: <strong>{usuario}</strong>
+    <main className="login-page">
+
+      <section className="system-card login-card reconfirmar-card">
+
+        {/* =================================================
+            ENCABEZADO
+        ================================================= */}
+
+        <header className="reconfirmar-header">
+
+          <span className="reconfirmar-icon">
+
+            <FaLock
+              aria-hidden="true"
+            />
+
+          </span>
+
+
+          <h1 className="system-title">
+            Actualizar Contraseña
+          </h1>
+
+
+          <p className="system-subtitle">
+            Mantén tu cuenta segura con una contraseña fuerte.
           </p>
-        )}
 
-        <form onSubmit={onSubmit} autoComplete="on">
-          {/* Actual */}
+
+          {usuario && (
+
+            <p className="reconfirmar-user">
+
+              Usuario:{" "}
+
+              <strong>
+                {usuario}
+              </strong>
+
+            </p>
+
+          )}
+
+        </header>
+
+
+        {/* =================================================
+            FORMULARIO
+        ================================================= */}
+
+        <form
+          className="system-form"
+          onSubmit={
+            onSubmit
+          }
+          autoComplete="on"
+        >
+
+          {/* ===============================================
+              CONTRASEÑA ACTUAL
+          =============================================== */}
+
           <PasswordField
             label="Contraseña Actual"
             name="actual"
-            value={form.actual}
-            onChange={onChange}
-            show={show.actual}
-            onToggleShow={() => setShow((s) => ({ ...s, actual: !s.actual }))}
+            value={
+              form.actual
+            }
+            onChange={
+              onChange
+            }
+            show={
+              show.actual
+            }
+            onToggleShow={
+              () =>
+                setShow(
+                  (state) => ({
+                    ...state,
+
+                    actual:
+                      !state.actual,
+                  })
+                )
+            }
             autoComplete="current-password"
-            inputClass={inputClassActual}
+            validationClass={
+              validationActual
+            }
           />
 
-          {/* Nueva */}
+
+          {/* ===============================================
+              NUEVA CONTRASEÑA
+          =============================================== */}
+
           <PasswordField
             label="Nueva Contraseña"
             name="nueva"
-            value={form.nueva}
-            onChange={onChange}
-            show={show.nueva}
-            onToggleShow={() => setShow((s) => ({ ...s, nueva: !s.nueva }))}
+            value={
+              form.nueva
+            }
+            onChange={
+              onChange
+            }
+            show={
+              show.nueva
+            }
+            onToggleShow={
+              () =>
+                setShow(
+                  (state) => ({
+                    ...state,
+
+                    nueva:
+                      !state.nueva,
+                  })
+                )
+            }
             autoComplete="new-password"
-            inputClass={inputClassNueva}
+            validationClass={
+              validationNueva
+            }
             errorText={
-              form.nueva.length > 0 && !cumpleRequisitos
+              form.nueva.length > 0 &&
+              !cumpleRequisitos
                 ? "La nueva contraseña no cumple con los requisitos"
                 : undefined
             }
           />
 
-          {/* Requisitos */}
-          <div className="p-3 mt-2 mb-2 rounded" style={{ background: "#f6f8ff", borderLeft: "4px solid #3758f9" }}>
-            <div style={{ fontWeight: 700, marginBottom: 6 }}>Requisitos de la contraseña:</div>
-            <ul className="mb-0" style={{ paddingLeft: 0, listStyle: "none" }}>
-              <RuleItem ok={rules.length}>Mínimo 8 caracteres</RuleItem>
-              <RuleItem ok={rules.upper}>Al menos una letra mayúscula</RuleItem>
-              <RuleItem ok={rules.lower}>Al menos una letra minúscula</RuleItem>
-              <RuleItem ok={rules.number}>Al menos un número</RuleItem>
+
+          {/* ===============================================
+              REQUISITOS
+          =============================================== */}
+
+          <div className="password-requirements">
+
+            <h2 className="password-requirements-title">
+              Requisitos de la contraseña
+            </h2>
+
+
+            <ul className="password-rules">
+
+              <RuleItem
+                ok={
+                  rules.length
+                }
+              >
+                Mínimo 8 caracteres
+              </RuleItem>
+
+
+              <RuleItem
+                ok={
+                  rules.upper
+                }
+              >
+                Al menos una letra mayúscula
+              </RuleItem>
+
+
+              <RuleItem
+                ok={
+                  rules.lower
+                }
+              >
+                Al menos una letra minúscula
+              </RuleItem>
+
+
+              <RuleItem
+                ok={
+                  rules.number
+                }
+              >
+                Al menos un número
+              </RuleItem>
+
             </ul>
+
           </div>
 
-          {/* Confirmar */}
+
+          {/* ===============================================
+              CONFIRMAR CONTRASEÑA
+          =============================================== */}
+
           <PasswordField
             label="Confirmar Nueva Contraseña"
             name="confirmar"
-            value={form.confirmar}
-            onChange={onChange}
-            show={show.confirmar}
-            onToggleShow={() => setShow((s) => ({ ...s, confirmar: !s.confirmar }))}
+            value={
+              form.confirmar
+            }
+            onChange={
+              onChange
+            }
+            show={
+              show.confirmar
+            }
+            onToggleShow={
+              () =>
+                setShow(
+                  (state) => ({
+                    ...state,
+
+                    confirmar:
+                      !state.confirmar,
+                  })
+                )
+            }
             autoComplete="new-password"
-            inputClass={inputClassConfirm}
+            validationClass={
+              validationConfirm
+            }
             errorText={
-              form.confirmar.length > 0 && !coincideConfirmacion
+              form.confirmar.length > 0 &&
+              !coincideConfirmacion
                 ? "Las contraseñas no coinciden"
-                : form.nueva && form.actual && !nuevaNoIgualActual
-                ? "La nueva contraseña no puede ser igual a la actual"
-                : undefined
+                : form.nueva &&
+                    form.actual &&
+                    !nuevaNoIgualActual
+                  ? "La nueva contraseña no puede ser igual a la actual"
+                  : undefined
             }
           />
 
-          <button type="submit" className="btn btn-primary w-100 mt-2" disabled={disableSubmit}>
-            {loading ? "Actualizando..." : "Actualizar Contraseña"}
+
+          {/* ===============================================
+              GUARDAR
+          =============================================== */}
+
+          <button
+            type="submit"
+            className="app-btn app-btn-primary app-btn-block"
+            disabled={
+              disableSubmit
+            }
+          >
+
+            {loading ? (
+
+              <>
+
+                <span
+                  className="system-spinner system-spinner-small"
+                  aria-hidden="true"
+                />
+
+                <span>
+                  Actualizando...
+                </span>
+
+              </>
+
+            ) : (
+
+              <span>
+                Actualizar Contraseña
+              </span>
+
+            )}
+
           </button>
+
         </form>
-      </div>
-    </div>
+
+      </section>
+
+    </main>
+
   );
 };
+
 
 export default ReconfirmarContrasena;

@@ -1,193 +1,1113 @@
-:root { 
+/* =========================================================
+   SISTEMA DE DISEÑO GLOBAL
+   ========================================================= */
+
+:root {
+  /* Fondo */
   --color-fondo: #f5f7fa;
+  --color-superficie: #ffffff;
+  --color-superficie-secundaria: #f1f4f7;
+
+  /* Texto */
+  --color-texto: #24313d;
+  --color-texto-secundario: #66717c;
+
+  /* Marca */
+  --color-primario: #007f88;
+  --color-primario-hover: #006c74;
+  --color-primario-oscuro: #00587a;
+
+  /* Sidebar */
+  --color-sidebar-fondo:
+    linear-gradient(
+      135deg,
+      #00587a 0%,
+      #008891 100%
+    );
+
+  /* Compatibilidad con estilos existentes */
   --morado-principal: #e14eca;
   --morado-hover: #b330b7;
-  --morado-submenu: #cbb9ff;
-  --morado-submenu-activo: #d8b4fe;
-  --color-sidebar-fondo: linear-gradient(135deg, #00587a 0%, #008891 100%);
-  --sombra-principal: 0 0 8px var(--morado-principal);
+  --morado-submenu: #e9f7f8;
+  --morado-submenu-activo: #ffffff;
+
+  /* Estados */
+  --color-peligro: #dc3545;
+  --color-peligro-hover: #b92c3a;
+
+  --color-borde: #d9e0e6;
+
+  /* Radios */
+  --radio-pequeno: 6px;
+  --radio-medio: 10px;
+  --radio-grande: 14px;
+
+  /* Sombras */
+  --sombra-suave:
+    0 4px 14px rgba(0, 0, 0, 0.08);
+
+  --sombra-sidebar:
+    4px 0 18px rgba(0, 0, 0, 0.18);
+
+  /* Layout */
+  --sidebar-width: 260px;
+  --sidebar-offset: 284px;
 }
 
-/* 📌 Contenedor general */
+
+/* =========================================================
+   CONTENEDOR GENERAL
+   ========================================================= */
+
 .dashboard-container {
   display: flex;
-  height: 100vh;
-  width: 100vw;
-  overflow: hidden;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  background-color: var(--color-fondo);
+
+  width: 100%;
+  min-height: 100dvh;
+
   margin: 0;
+
+  overflow: hidden;
+
+  font-family:
+    "Segoe UI",
+    Tahoma,
+    Geneva,
+    Verdana,
+    sans-serif;
+
+  background-color: var(--color-fondo);
+
+  box-sizing: border-box;
 }
 
-/* 📌 Sidebar */
+
+/* =========================================================
+   SIDEBAR
+   ========================================================= */
+
 .sidebar {
-  width: 260px;
-  min-width: 260px;
-  background: var(--color-sidebar-fondo);
-  color: white;
-  border-radius: 15px;
-  padding: 20px;
-  box-shadow: 4px 0 8px rgba(0, 0, 0, 0.25);
-  flex-shrink: 0;
+  position: fixed;
+
+  top: 12px;
+  bottom: 12px;
+  left: 12px;
+
+  width: var(--sidebar-width);
+
+  padding: 16px;
+
+  box-sizing: border-box;
+
   display: flex;
   flex-direction: column;
-  position: fixed;
-  top: 10px;
-  left: 10px;
-  height: calc(100vh - 20px);
+
+  color: white;
+
+  background: var(--color-sidebar-fondo);
+
+  border-radius: var(--radio-grande);
+
+  box-shadow: var(--sombra-sidebar);
+
+  overflow-x: hidden;
   overflow-y: auto;
+
+  z-index: 1100;
 }
+
+
+/* =========================================================
+   CABECERA SIDEBAR
+   ========================================================= */
 
 .sidebar-header {
-  padding: 1rem;
-  font-weight: bold;
+  flex-shrink: 0;
+
+  padding:
+    0.8rem
+    0.8rem
+    1rem;
+
+  margin-bottom: 0.5rem;
+
   text-align: center;
-  font-size: 1.3rem;
-  letter-spacing: 1px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+
+  font-size: 1.15rem;
+  font-weight: 700;
+
+  letter-spacing: 0.5px;
+
+  border-bottom:
+    1px solid rgba(255, 255, 255, 0.2);
 }
 
-.sidebar ul {
+
+/* =========================================================
+   CONTROLES MÓVILES
+   ========================================================= */
+
+.mobile-menu-button,
+.sidebar-close {
+  display: none;
+}
+
+.sidebar-overlay {
+  display: none;
+}
+
+
+/* =========================================================
+   LISTA PRINCIPAL
+   ========================================================= */
+
+.sidebar-menu {
+  width: 100%;
+
+  flex-grow: 1;
+
   list-style: none;
+
   padding: 0;
   margin: 0;
-  flex-grow: 1;
 }
 
-/* 📌 Módulo del menú */
+.sidebar-menu-item {
+  width: 100%;
+}
+
+
+/* =========================================================
+   MÓDULO DEL MENÚ
+   ========================================================= */
+
 .menu-module {
-  padding: 1rem;
+  width: 100%;
+
+  min-width: 0;
+
+  box-sizing: border-box;
+
+  padding: 0.85rem 0.9rem;
+
   display: flex;
   align-items: center;
+
   gap: 10px;
-  border-radius: 10px;
+
+  border-radius: var(--radio-medio);
+
   cursor: pointer;
+
+  font-size: 0.95rem;
   font-weight: 500;
-  transition: background 0.2s ease;
+
+  transition:
+    background-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
 }
 
 .menu-module:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background-color:
+    rgba(255, 255, 255, 0.1);
 }
 
 .menu-module.active {
-  background-color: var(--morado-principal);
-  font-weight: 700;
-  box-shadow: var(--sombra-principal);
+  background-color:
+    rgba(255, 255, 255, 0.16);
+
+  font-weight: 600;
+
+  box-shadow:
+    inset 3px 0 0
+    rgba(255, 255, 255, 0.85);
 }
 
-/* 📌 Submenú */
+
+/* =========================================================
+   ICONOS / TEXTO MENÚ
+   ========================================================= */
+
+.menu-icon,
+.submenu-icon {
+  display: inline-flex;
+
+  align-items: center;
+  justify-content: center;
+
+  flex: 0 0 auto;
+
+  font-size: 1rem;
+}
+
+.menu-label,
+.submenu-label {
+  flex: 1;
+
+  min-width: 0;
+
+  overflow-wrap: anywhere;
+}
+
+.menu-arrow {
+  display: inline-flex;
+
+  align-items: center;
+  justify-content: center;
+
+  flex: 0 0 auto;
+
+  margin-left: auto;
+
+  font-size: 0.8rem;
+}
+
+
+/* =========================================================
+   SUBMENÚ
+   ========================================================= */
+
 .submenu {
-  margin-top: 5px;
-  padding-left: 25px;
-  border-left: 1.5px solid rgba(255, 255, 255, 0.3);
+  width: calc(100% - 12px);
+
+  box-sizing: border-box;
+
+  list-style: none;
+
+  margin:
+    5px
+    0
+    8px
+    12px;
+
+  padding:
+    4px
+    0
+    4px
+    10px;
+
+  border-left:
+    1px solid
+    rgba(255, 255, 255, 0.22);
 }
 
 .submenu li {
-  margin-bottom: 1rem;
-  padding: 8px 10px;
+  width: 100%;
+
+  box-sizing: border-box;
+
+  display: flex;
+  align-items: center;
+
+  gap: 8px;
+
+  margin-bottom: 4px;
+
+  padding:
+    8px
+    10px;
+
   border-radius: 8px;
+
   cursor: pointer;
-  font-size: 0.95rem;
-  color: var(--morado-submenu);
+
+  font-size: 0.9rem;
+
+  color:
+    rgba(255, 255, 255, 0.82);
+
   user-select: none;
-  transition: background 0.2s ease, color 0.2s ease;
+
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
 }
 
 .submenu li:hover {
-  background-color: rgba(255, 255, 255, 0.15);
   color: white;
+
+  background-color:
+    rgba(255, 255, 255, 0.1);
 }
 
 .submenu li.active {
-  background-color: var(--morado-submenu-activo);
-  font-weight: 700;
-  color: #1b1b1b;
-  box-shadow: 0 0 5px var(--morado-submenu-activo);
-}
-
-/* 📌 Área principal */
-.main-content {
-  flex-grow: 1;
-  margin-left: 280px;        /* espacio para la sidebar */
-  padding: 30px;
-  overflow-y: auto;
-  margin-top: 70px;          /* espacio para navbar */
-  background: linear-gradient(to bottom, #f9f9f9, #ececec);
-  min-height: 100vh;
-  box-sizing: border-box;
-}
-
-/* 📌 Navbar */
-.navbar {
-  background: linear-gradient(90deg, #00587a, #008891);
   color: white;
-  padding: 1rem 2rem;
+
+  font-weight: 600;
+
+  background-color:
+    rgba(255, 255, 255, 0.18);
+}
+
+
+/* =========================================================
+   ÁREA PRINCIPAL
+   ========================================================= */
+
+.main-content {
+  width: 100%;
+
+  min-width: 0;
+
+  height: 100dvh;
+
+  margin-left: var(--sidebar-offset);
+
+  padding:
+    94px
+    28px
+    32px;
+
+  box-sizing: border-box;
+
+  overflow-x: hidden;
+  overflow-y: auto;
+
+  background:
+    linear-gradient(
+      to bottom,
+      #f9fafb,
+      #eef1f4
+    );
+}
+
+
+/* =========================================================
+   NAVBAR
+   ========================================================= */
+
+.navbar {
+  position: fixed;
+
+  top: 12px;
+  left: var(--sidebar-offset);
+  right: 12px;
+
+  z-index: 1000;
+
+  min-height: 64px;
+
+  box-sizing: border-box;
+
+  padding:
+    0.8rem
+    1.4rem;
+
   display: flex;
+
   justify-content: space-between;
   align-items: center;
-  position: fixed;
-  top: 0;
-  left: 280px;
-  right: 0;
-  z-index: 1000;
-  border-radius: 0 0 10px 10px;
+
+  gap: 1.5rem;
+
+  color: white;
+
+  background:
+    linear-gradient(
+      90deg,
+      #00587a,
+      #008891
+    );
+
+  border-radius:
+    var(--radio-grande);
+
+  box-shadow:
+    0 3px 12px
+    rgba(0, 0, 0, 0.12);
 }
 
-.user-info {
+
+/* =========================================================
+   BIENVENIDA
+   ========================================================= */
+
+.bienvenida {
+  min-width: 0;
+
+  flex: 1;
+}
+
+.bienvenida h2 {
+  margin: 0;
+
+  font-size:
+    clamp(
+      1rem,
+      1.3vw,
+      1.3rem
+    );
+
+  line-height: 1.3;
+
+  font-weight: 500;
+
+  overflow-wrap: anywhere;
+}
+
+.navbar-role {
+  font-weight: 700;
+}
+
+
+/* =========================================================
+   USUARIO
+   ========================================================= */
+
+.navbar-actions {
   display: flex;
+
   align-items: center;
-  gap: 8px;
+
+  justify-content: flex-end;
+
+  gap: 1rem;
+
+  flex-shrink: 0;
 }
 
-/* 📌 Submódulos */
+.user-name {
+  max-width: 220px;
+
+  font-size: 0.95rem;
+
+  font-weight: 600;
+
+  overflow: hidden;
+
+  text-overflow: ellipsis;
+
+  white-space: nowrap;
+}
+
+
+/* =========================================================
+   CONTENIDO DE SUBMÓDULOS
+   ========================================================= */
+
 .submodulo-wrapper {
   width: 100%;
-  margin: 0;
-  padding: 2rem 1.5rem;
-  text-align: left !important;
-  display: block;
+
+  max-width: 1600px;
+
+  min-width: 0;
+
+  margin:
+    0
+    auto;
+
+  padding: 0;
+
   box-sizing: border-box;
+
+  text-align: left;
 }
 
-.submodulo-item {
-  margin-bottom: 1rem;
-  padding: 8px 10px;
-  border-radius: 10px;
-  cursor: pointer;
-  font-weight: 400;
-  font-size: 0.95rem;
-  color: var(--morado-submenu);
-  transition: background-color 0.2s ease, color 0.2s ease;
+.submodulo-wrapper > * {
+  max-width: 100%;
 }
 
-.submodulo-item:hover {
-  background-color: rgba(255, 255, 255, 0.15);
-  color: white;
+
+/* Evitar que medios rompan el layout */
+
+.submodulo-wrapper img,
+.submodulo-wrapper canvas {
+  max-width: 100%;
 }
 
-.submodulo-item.active {
-  background-color: var(--morado-submenu-activo);
-  font-weight: 700;
-  color: #1b1b1b;
-  box-shadow: 0 0 10px rgba(255, 255, 255, 0.7);
+
+/* =========================================================
+   MÓDULO VACÍO
+   ========================================================= */
+
+.empty-module {
+  width: 100%;
+
+  padding: 2rem;
+
+  box-sizing: border-box;
+
+  text-align: center;
+
+  color:
+    var(--color-texto-secundario);
 }
 
-/* 📌 Botón logout */
-.btn-logout {
-  display: flex;
+.empty-module h2 {
+  margin: 0;
+
+  font-size: 1.2rem;
+
+  font-weight: 500;
+}
+
+
+/* =========================================================
+   SISTEMA GLOBAL DE BOTONES
+   ========================================================= */
+
+.app-btn {
+  min-height: 40px;
+
+  box-sizing: border-box;
+
+  display: inline-flex;
+
   align-items: center;
+  justify-content: center;
+
   gap: 8px;
-  background: #ff4d4d;
-  color: white;
-  border: none;
-  padding: 0.5rem 1rem;
-  border-radius: 6px;
+
+  padding:
+    0.55rem
+    1rem;
+
+  border:
+    1px solid transparent;
+
+  border-radius:
+    var(--radio-pequeno);
+
+  font-family: inherit;
+
+  font-size: 0.9rem;
+
+  font-weight: 600;
+
+  line-height: 1;
+
   cursor: pointer;
-  font-weight: bold;
-  transition: background 0.3s ease;
+
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.15s ease;
 }
 
-.btn-logout:hover {
-  background: #cc0000;
+.app-btn:hover {
+  transform: translateY(-1px);
+}
+
+.app-btn:active {
+  transform: translateY(0);
+}
+
+.app-btn:focus-visible {
+  outline: 3px solid
+    rgba(0, 136, 145, 0.25);
+
+  outline-offset: 2px;
+}
+
+
+/* Guardar / acción principal */
+
+.app-btn-primary {
+  color: white;
+
+  background-color:
+    var(--color-primario);
+}
+
+.app-btn-primary:hover {
+  background-color:
+    var(--color-primario-hover);
+}
+
+
+/* Editar / acciones secundarias */
+
+.app-btn-secondary {
+  color:
+    var(--color-texto);
+
+  background-color:
+    var(--color-superficie-secundaria);
+
+  border-color:
+    var(--color-borde);
+}
+
+.app-btn-secondary:hover {
+  background-color: #e3e8ed;
+}
+
+
+/* Cancelar */
+
+.app-btn-cancel {
+  color:
+    var(--color-texto-secundario);
+
+  background-color:
+    var(--color-superficie);
+
+  border-color:
+    var(--color-borde);
+}
+
+.app-btn-cancel:hover {
+  color:
+    var(--color-texto);
+
+  background-color:
+    var(--color-superficie-secundaria);
+}
+
+
+/* Eliminar / cerrar sesión / acciones peligrosas */
+
+.app-btn-danger {
+  color: white;
+
+  background-color:
+    var(--color-peligro);
+}
+
+.app-btn-danger:hover {
+  background-color:
+    var(--color-peligro-hover);
+}
+
+
+/* =========================================================
+   LOGOUT
+   ========================================================= */
+
+.btn-logout {
+  white-space: nowrap;
+}
+
+
+/* =========================================================
+   PANTALLAS MEDIANAS
+   Laptop pequeña / tablet horizontal
+   ========================================================= */
+
+@media (min-width: 901px) and (max-width: 1199px) {
+  :root {
+    --sidebar-width: 230px;
+    --sidebar-offset: 254px;
+  }
+
+  .sidebar {
+    padding: 14px;
+  }
+
+  .menu-module {
+    padding:
+      0.8rem
+      0.75rem;
+
+    font-size: 0.9rem;
+  }
+
+  .submenu li {
+    font-size: 0.86rem;
+  }
+
+  .main-content {
+    padding:
+      92px
+      20px
+      26px;
+  }
+
+  .navbar {
+    padding:
+      0.75rem
+      1rem;
+  }
+
+  .navbar-actions {
+    gap: 0.7rem;
+  }
+
+  .user-name {
+    max-width: 150px;
+  }
+}
+
+
+/* =========================================================
+   TABLET / PANTALLAS PEQUEÑAS
+   MENÚ LATERAL DESLIZABLE
+   ========================================================= */
+
+@media (max-width: 900px) {
+  .dashboard-container {
+    display: block;
+
+    width: 100%;
+    min-height: 100dvh;
+
+    overflow-x: hidden;
+  }
+
+  /* Sidebar tipo drawer */
+  .sidebar {
+    position: fixed;
+
+    top: 0;
+    bottom: 0;
+    left: 0;
+
+    width: min(300px, 85vw);
+    height: 100dvh;
+
+    margin: 0;
+
+    padding: 16px;
+
+    border-radius:
+      0
+      var(--radio-grande)
+      var(--radio-grande)
+      0;
+
+    z-index: 3000;
+
+    transform: translateX(-105%);
+
+    transition:
+      transform 0.25s ease;
+
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  /* Cabecera sidebar */
+  .sidebar-header {
+    display: flex;
+
+    align-items: center;
+    justify-content: space-between;
+
+    gap: 10px;
+
+    padding:
+      0.65rem
+      0.5rem
+      0.9rem;
+
+    text-align: left;
+  }
+
+  .sidebar-close {
+    width: 38px;
+    height: 38px;
+
+    padding: 0;
+
+    display: inline-flex;
+
+    align-items: center;
+    justify-content: center;
+
+    flex-shrink: 0;
+
+    color: white;
+
+    background:
+      rgba(255, 255, 255, 0.12);
+
+    border: none;
+
+    border-radius: 8px;
+
+    cursor: pointer;
+
+    font-size: 1.1rem;
+  }
+
+  .sidebar-close:hover {
+    background:
+      rgba(255, 255, 255, 0.2);
+  }
+
+  .sidebar-close:focus-visible,
+  .mobile-menu-button:focus-visible {
+    outline:
+      3px solid
+      rgba(255, 255, 255, 0.35);
+
+    outline-offset: 2px;
+  }
+
+  /* Fondo oscuro */
+  .sidebar-overlay {
+    position: fixed;
+
+    inset: 0;
+
+    display: block;
+
+    background:
+      rgba(0, 0, 0, 0.42);
+
+    backdrop-filter: blur(2px);
+
+    z-index: 2900;
+  }
+
+  /* Contenido */
+  .main-content {
+    width: 100%;
+
+    min-width: 0;
+
+    height: 100dvh;
+
+    margin-left: 0;
+
+    padding:
+      82px
+      16px
+      24px;
+
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  /* Navbar siempre visible */
+  .navbar {
+    position: fixed;
+
+    top: 8px;
+    left: 8px;
+    right: 8px;
+
+    min-height: 60px;
+
+    padding:
+      0.7rem
+      0.9rem;
+
+    gap: 0.8rem;
+
+    border-radius:
+      12px;
+
+    z-index: 2000;
+  }
+
+  /* Botón hamburguesa */
+  .mobile-menu-button {
+    width: 40px;
+    height: 40px;
+
+    padding: 0;
+
+    display: inline-flex;
+
+    align-items: center;
+    justify-content: center;
+
+    flex:
+      0 0 40px;
+
+    color: white;
+
+    background:
+      rgba(255, 255, 255, 0.14);
+
+    border: none;
+
+    border-radius: 8px;
+
+    cursor: pointer;
+
+    font-size: 1.15rem;
+  }
+
+  .mobile-menu-button:hover {
+    background:
+      rgba(255, 255, 255, 0.22);
+  }
+
+  .submodulo-wrapper {
+    width: 100%;
+
+    min-width: 0;
+    max-width: 100%;
+
+    padding: 0;
+  }
+}
+
+
+/* =========================================================
+   CELULARES
+   ========================================================= */
+
+@media (max-width: 600px) {
+  .sidebar {
+    width:
+      min(290px, 88vw);
+
+    padding: 14px;
+  }
+
+  .sidebar-header {
+    font-size: 1rem;
+  }
+
+  .menu-module {
+    min-height: 44px;
+
+    padding:
+      0.75rem
+      0.7rem;
+
+    font-size: 0.9rem;
+  }
+
+  .submenu {
+    width:
+      calc(100% - 8px);
+
+    margin-left: 8px;
+  }
+
+  .submenu li {
+    min-height: 40px;
+
+    margin-bottom: 3px;
+
+    padding:
+      7px
+      8px;
+
+    font-size: 0.85rem;
+  }
+
+  .main-content {
+    padding:
+      80px
+      10px
+      20px;
+  }
+
+  .navbar {
+    left: 6px;
+    right: 6px;
+
+    padding:
+      0.65rem
+      0.7rem;
+
+    gap: 0.6rem;
+  }
+
+  .bienvenida {
+    min-width: 0;
+  }
+
+  .bienvenida h2 {
+    font-size: 0.9rem;
+
+    line-height: 1.25;
+  }
+
+  .navbar-actions {
+    gap: 0.5rem;
+  }
+
+  /* El usuario sigue accesible en tablet,
+     pero en móvil pequeño priorizamos menú + contenido + logout */
+  .user-name {
+    display: none;
+  }
+
+  .btn-logout {
+    min-width: 40px;
+    min-height: 40px;
+
+    padding:
+      0.5rem
+      0.65rem;
+
+    flex-shrink: 0;
+
+    font-size: 0.85rem;
+  }
+
+  .btn-logout span {
+    display: none;
+  }
+}
+
+
+/* =========================================================
+   CELULARES MUY PEQUEÑOS
+   ========================================================= */
+
+@media (max-width: 380px) {
+  .main-content {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
+  .navbar {
+    left: 4px;
+    right: 4px;
+
+    padding:
+      0.55rem
+      0.6rem;
+  }
+
+  .mobile-menu-button,
+  .btn-logout {
+    width: 38px;
+    min-width: 38px;
+    height: 38px;
+    min-height: 38px;
+  }
+
+  .bienvenida h2 {
+    font-size: 0.82rem;
+  }
+}
+
+
+/* =========================================================
+   PANTALLAS GRANDES
+   ========================================================= */
+
+@media (min-width: 1600px) {
+  :root {
+    --sidebar-width: 280px;
+    --sidebar-offset: 304px;
+  }
+
+  .main-content {
+    padding-left: 36px;
+    padding-right: 36px;
+  }
+}
+
+
+/* =========================================================
+   ACCESIBILIDAD
+   ========================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  .menu-module,
+  .submenu li,
+  .app-btn,
+  .sidebar {
+    transition: none;
+  }
+
+  .app-btn:hover {
+    transform: none;
+  }
 }

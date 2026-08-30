@@ -3,14 +3,17 @@ import {
   FaSignOutAlt,
   FaChevronRight,
   FaChevronDown,
-  FaRegSquare, // ícono de fallback
+  FaRegSquare,
+  FaBars,
+  FaTimes,
 } from "react-icons/fa";
-import * as FaIcons from "react-icons/fa"; // import dinámico de todos los íconos
+import * as FaIcons from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
 import { toast } from "react-toastify";
 import axios from "axios";
 import "../styles/dashboard.css";
+
 
 // Importar vistas
 import MiPerfil from "./Perfil/MiPerfil";
@@ -22,6 +25,19 @@ import UmbralDeLlenado from "./umbrales/UmbralDeLlenado";
 import Backup from "./backups/Backup";
 import HistorialCosto from "./historialcosto/HistorialCosto";
 import HistorialGrafica from "./controlDSH/HistorialGrafica";
+
+/**
+ * =====================================================
+ * CONFIGURACIÓN DE ENTORNO
+ * =====================================================
+ *
+ * La URL del backend se define en:
+ * VITE_API_URL
+ *
+ * El valor cambia según el entorno
+ * sin modificar este archivo.
+ */
+const API_URL = import.meta.env.VITE_API_URL;
 
 // Función para obtener ícono dinámicamente desde la BD
 const getIcon = (iconName) => {
@@ -35,12 +51,14 @@ const getIcon = (iconName) => {
       .join("");
 
   const IconComponent = FaIcons[formatted];
+
   return IconComponent ? <IconComponent /> : <FaRegSquare />;
 };
 
-// Traductor de nombres (snake_case → Capitalizado)
+// Traductor de nombres
 const formatoTitulo = (texto) => {
   if (!texto) return "";
+
   return texto
     .replace(/_/g, " ")
     .replace(/\w\S*/g, (w) =>
@@ -59,15 +77,14 @@ const submoduloComponents = {
   "/configuracion/copia-seguridad": Backup,
   "/costo/historial": HistorialCosto,
   "/control-dsh/historial-graficas": HistorialGrafica,
-
-
 };
 
 const Dashboard = () => {
   const [menuItems, setMenuItems] = useState([]);
   const [expandedModule, setExpandedModule] = useState(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  //  Por defecto cargamos Inicio
+  // Por defecto cargamos Inicio
   const [selectedSubmodule, setSelectedSubmodule] = useState({
     id: 0,
     nombre: "Inicio",
@@ -75,13 +92,22 @@ const Dashboard = () => {
     icono: "home",
   });
 
-  const [userData, setUserData] = useState({ usuario: "", rol: "" });
+  const [userData, setUserData] = useState({
+    usuario: "",
+    rol: "",
+  });
+
   const navigate = useNavigate();
 
-  //  Cargar menú dinámico desde backend
+  /**
+   * =====================================================
+   * CARGAR MENÚ DINÁMICO
+   * =====================================================
+   */
   useEffect(() => {
     const loadMenu = async () => {
       const token = localStorage.getItem("token");
+
       if (!token) return;
 
       try {
@@ -93,27 +119,41 @@ const Dashboard = () => {
         });
 
         const res = await axios.get(
-          `http://localhost:3001/api/menu/${decoded.rol_id}`,
-          { headers: { Authorization: `Bearer ${token}` } }
+          `${API_URL}/api/menu/${decoded.rol_id}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
         );
+
         setMenuItems(res.data);
 
-        //  Buscar Inicio en el menú de BD
-        const inicioModulo = res.data.find((m) => m.ruta === "/dashboard");
+        // Buscar Inicio en el menú de BD
+        const inicioModulo = res.data.find(
+          (modulo) => modulo.ruta === "/dashboard"
+        );
+
         if (inicioModulo) {
-          setSelectedSubmodule(inicioModulo); // lo selecciona automáticamente
+          setSelectedSubmodule(inicioModulo);
         }
       } catch (err) {
         console.error("Error cargando menú:", err);
         toast.error("No se pudo cargar el menú");
       }
     };
+
     loadMenu();
   }, []);
 
-  //  Verificación y expiración automática del token
+  /**
+   * =====================================================
+   * EXPIRACIÓN AUTOMÁTICA DEL TOKEN
+   * =====================================================
+   */
   useEffect(() => {
     const token = localStorage.getItem("token");
+
     if (!token) return;
 
     try {
@@ -122,105 +162,221 @@ const Dashboard = () => {
 
       if (decoded.exp > now) {
         const timeLeft = (decoded.exp - now) * 1000;
+
         const timer = setTimeout(() => {
           handleLogout(true);
         }, timeLeft);
+
         return () => clearTimeout(timer);
-      } else {
-        handleLogout(true);
       }
+
+      handleLogout(true);
     } catch {
       handleLogout(true);
     }
   }, []);
 
-  //  Función para abrir/cerrar módulos
+  /**
+   * =====================================================
+   * CERRAR MENÚ MÓVIL CON ESC
+   * =====================================================
+   */
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setMobileMenuOpen(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [mobileMenuOpen]);
+
+  /**
+   * =====================================================
+   * ABRIR / CERRAR MÓDULOS
+   * =====================================================
+   */
   const toggleModule = (id, hasSubmodules) => {
     if (!hasSubmodules) return;
-    setExpandedModule(expandedModule === id ? null : id);
+
+    setExpandedModule(
+      expandedModule === id ? null : id
+    );
   };
 
-  //  Función para cerrar sesión
+  /**
+   * =====================================================
+   * CERRAR SESIÓN
+   * =====================================================
+   */
   const handleLogout = async (auto = false) => {
     const token = localStorage.getItem("token");
 
     if (token) {
       try {
         await axios.post(
-          "/api/auth/logout",
+          `${API_URL}/api/auth/logout`,
           {},
-          { headers: { Authorization: `Bearer ${token}` } }
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+      } catch (err) {
+        console.error(
+          "Error al cerrar sesión en backend:",
+          err
         );
 
-      } catch (err) {
-        console.error("Error al cerrar sesión en backend:", err);
-        // incluso si falla el backend, forzamos logout en frontend
+        // Aunque falle backend,
+        // frontend debe cerrar la sesión.
       }
     }
 
     localStorage.removeItem("token");
+
     if (auto) {
-      toast.warning("Tu sesión ha caducado, vuelve a iniciar sesión ");
+      toast.warning(
+        "Tu sesión ha caducado, vuelve a iniciar sesión"
+      );
     } else {
-      toast.success("Sesión cerrada correctamente ");
+      toast.success(
+        "Sesión cerrada correctamente"
+      );
     }
+
     navigate("/");
   };
 
-  //  Determinar componente a mostrar según la `ruta` del submódulo
+  /**
+   * =====================================================
+   * COMPONENTE SELECCIONADO
+   * =====================================================
+   */
   const SubmoduloComponent =
-    selectedSubmodule && submoduloComponents[selectedSubmodule.ruta];
+    selectedSubmodule &&
+    submoduloComponents[selectedSubmodule.ruta];
 
   return (
     <div className="dashboard-container">
-      {/* Sidebar */}
-      <aside className="sidebar">
-        <div className="sidebar-header">Menú</div>
-        <ul>
+
+      {/* ==================================================
+          OVERLAY MÓVIL
+      ================================================== */}
+      {mobileMenuOpen && (
+        <div
+          className="sidebar-overlay"
+          onClick={() => setMobileMenuOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* ==================================================
+          SIDEBAR
+      ================================================== */}
+      <aside
+        className={`sidebar ${mobileMenuOpen ? "open" : ""}`}
+        aria-label="Menú principal"
+      >
+        <div className="sidebar-header">
+          <span>Menú</span>
+
+          <button
+            type="button"
+            className="sidebar-close"
+            onClick={() => setMobileMenuOpen(false)}
+            aria-label="Cerrar menú"
+          >
+            <FaTimes />
+          </button>
+        </div>
+
+        <ul className="sidebar-menu">
           {menuItems.map((modulo) => {
             const hasSubmodules =
-              Array.isArray(modulo.submodulos) && modulo.submodulos.length > 0;
+              Array.isArray(modulo.submodulos) &&
+              modulo.submodulos.length > 0;
+
+            const isExpanded =
+              expandedModule === modulo.id;
 
             return (
-              <li key={modulo.id}>
+              <li
+                key={modulo.id}
+                className="sidebar-menu-item"
+              >
                 <div
-                  className={`menu-module ${expandedModule === modulo.id ? "active" : ""
-                    }`}
+                  className={`menu-module ${
+                    isExpanded ? "active" : ""
+                  }`}
                   onClick={() => {
-                    //  Si es Inicio (sin submódulos), cargar directamente su vista
-                    if (!hasSubmodules && modulo.ruta === "/dashboard") {
+                    if (
+                      !hasSubmodules &&
+                      modulo.ruta === "/dashboard"
+                    ) {
                       setSelectedSubmodule(modulo);
+                      setMobileMenuOpen(false);
                     } else {
-                      toggleModule(modulo.id, hasSubmodules);
+                      toggleModule(
+                        modulo.id,
+                        hasSubmodules
+                      );
                     }
                   }}
                 >
-                  <span style={{ marginRight: "6px" }}>
+                  <span className="menu-icon">
                     {getIcon(modulo.icono)}
                   </span>
-                  <span>{formatoTitulo(modulo.nombre)}</span>
 
-                  {hasSubmodules &&
-                    (expandedModule === modulo.id ? (
-                      <FaChevronDown className="arrow-icon" />
-                    ) : (
-                      <FaChevronRight className="arrow-icon" />
-                    ))}
+                  <span className="menu-label">
+                    {formatoTitulo(modulo.nombre)}
+                  </span>
+
+                  {hasSubmodules && (
+                    <span className="menu-arrow">
+                      {isExpanded ? (
+                        <FaChevronDown />
+                      ) : (
+                        <FaChevronRight />
+                      )}
+                    </span>
+                  )}
                 </div>
 
-                {expandedModule === modulo.id && hasSubmodules && (
+                {isExpanded && hasSubmodules && (
                   <ul className="submenu">
-                    {modulo.submodulos.map((sub) => (
-                      <li
-                        key={sub.id}
-                        onClick={() => setSelectedSubmodule(sub)}
-                      >
-                        <span style={{ marginRight: "6px" }}>
-                          {getIcon(sub.icono)}
-                        </span>
-                        {formatoTitulo(sub.nombre)}
-                      </li>
-                    ))}
+                    {modulo.submodulos.map((sub) => {
+                      const isSelected =
+                        selectedSubmodule?.id === sub.id;
+
+                      return (
+                        <li
+                          key={sub.id}
+                          className={
+                            isSelected ? "active" : ""
+                          }
+                          onClick={() => {
+                            setSelectedSubmodule(sub);
+                            setMobileMenuOpen(false);
+                          }}
+                        >
+                          <span className="submenu-icon">
+                            {getIcon(sub.icono)}
+                          </span>
+
+                          <span className="submenu-label">
+                            {formatoTitulo(sub.nombre)}
+                          </span>
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
               </li>
@@ -229,17 +385,47 @@ const Dashboard = () => {
         </ul>
       </aside>
 
-      {/* Main Content */}
+      {/* ==================================================
+          CONTENIDO PRINCIPAL
+      ================================================== */}
       <main className="main-content">
+
+        {/* Navbar */}
         <nav className="navbar">
+          <button
+            type="button"
+            className="mobile-menu-button"
+            onClick={() => setMobileMenuOpen(true)}
+            aria-label="Abrir menú"
+          >
+            <FaBars />
+          </button>
+
           <div className="bienvenida">
-            <h2>Bienvenido al Sistema: {userData.rol}</h2>
+            <h2>
+              Bienvenido al Sistema:
+              <span className="navbar-role">
+                {" "}
+                {userData.rol}
+              </span>
+            </h2>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: "2rem" }}>
-            <span style={{ fontWeight: "bold" }}>{userData.usuario}</span>
-            <button className="btn-logout" onClick={() => handleLogout(false)}>
-              <FaSignOutAlt /> Cerrar Sesión
+          <div className="navbar-actions">
+            <span className="user-name">
+              {userData.usuario}
+            </span>
+
+            <button
+              type="button"
+              className="app-btn app-btn-danger btn-logout"
+              onClick={() => handleLogout(false)}
+            >
+              <FaSignOutAlt />
+
+              <span>
+                Cerrar Sesión
+              </span>
             </button>
           </div>
         </nav>
@@ -249,7 +435,11 @@ const Dashboard = () => {
           {SubmoduloComponent ? (
             <SubmoduloComponent />
           ) : (
-            <h2>este modulo aun no tiene vista asignada...</h2>
+            <div className="empty-module">
+              <h2>
+                Este módulo aún no tiene una vista asignada
+              </h2>
+            </div>
           )}
         </div>
       </main>

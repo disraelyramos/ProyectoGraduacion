@@ -13,7 +13,15 @@ import {
   FaInfoCircle,
 } from "react-icons/fa";
 
+/*
+ * TEMPORAL:
+ * Se mantiene Bootstrap hasta revisar:
+ * - ModalCosto
+ * - ModalTotales
+ * - RegistroRecoleccion
+ */
 import "bootstrap/dist/css/bootstrap.min.css";
+
 import "../../styles/nuevo-registro.css";
 
 import apiClient from "../../utils/apiClient";
@@ -29,15 +37,9 @@ import ModalTotales from "../../components/controlDSH/ModalTotales";
 import RegistroRecoleccion from "./RegistroRecoleccion";
 
 
-// =====================================================
-// CONSTANTES DE INTERFAZ
-// =====================================================
-//
-// Estas constantes únicamente sirven para decidir
-// qué pantalla mostrar.
-//
-// El estado real sigue perteneciendo al backend.
-// =====================================================
+/* =========================================================
+   CONSTANTES DE INTERFAZ
+   ========================================================= */
 
 const ESTADO_PROCESO = {
   EN_PROCESO: "EN_PROCESO",
@@ -51,71 +53,53 @@ const ETAPA_PROCESO = {
 };
 
 
-// =====================================================
-// TIPOS PARA PRESENTACIÓN
-// =====================================================
+/* =========================================================
+   TIPOS PARA PRESENTACIÓN
+   ========================================================= */
 
 const TIPOS = [
   {
     id: 2,
     label: "Punzocortante",
     Icon: FaSyringe,
-    iconClass: "text-danger",
-    barClass: "bg-danger",
-    barTextClass: "",
+    themeClass: "residuo-card--punzocortante",
   },
 
   {
     id: 1,
     label: "Bioinfeccioso",
     Icon: FaBiohazard,
-    iconClass: "text-warning",
-    barClass: "bg-warning",
-    barTextClass: "text-dark",
+    themeClass: "residuo-card--bioinfeccioso",
   },
 ];
 
 
-// =====================================================
-// HELPERS DE PRESENTACIÓN
-// =====================================================
+/* =========================================================
+   HELPERS
+   ========================================================= */
 
-const clamp0to100 = (
-  value
-) => {
+const clamp0to100 = (value) => {
+  const numero = Number(value);
 
-  const numero =
-    Number(value);
-
-
-  if (
-    !Number.isFinite(
-      numero
-    )
-  ) {
+  if (!Number.isFinite(numero)) {
     return 0;
   }
 
-
   return Math.min(
     100,
-    Math.max(
-      0,
-      numero
-    )
+    Math.max(0, numero)
   );
 };
 
 
-// =====================================================
-// COMPONENTE
-// =====================================================
+/* =========================================================
+   COMPONENTE
+   ========================================================= */
 
 const NuevoRegistro = () => {
-
-  // ===================================================
-  // DATOS SOLO PARA PRESENTACIÓN
-  // ===================================================
+  /* =======================================================
+     DATOS SOLO PARA PRESENTACIÓN
+     ======================================================= */
 
   const [
     loading,
@@ -132,15 +116,9 @@ const NuevoRegistro = () => {
   });
 
 
-  // ===================================================
-  // ESTADO DE VISTAS
-  // ===================================================
-  //
-  // Estos estados solamente controlan
-  // qué componente se muestra.
-  //
-  // NO contienen datos de negocio.
-  // ===================================================
+  /* =======================================================
+     ESTADO DE VISTAS
+     ======================================================= */
 
   const [
     showCosto,
@@ -160,9 +138,9 @@ const NuevoRegistro = () => {
   ] = useState(false);
 
 
-  // ===================================================
-  // PROTECCIONES DE INTERFAZ
-  // ===================================================
+  /* =======================================================
+     PROTECCIONES DE INTERFAZ
+     ======================================================= */
 
   const recuperacionConsultadaRef =
     useRef(false);
@@ -176,9 +154,9 @@ const NuevoRegistro = () => {
     useRef(false);
 
 
-  // ===================================================
-  // ¿HAY FLUJO ABIERTO?
-  // ===================================================
+  /* =======================================================
+     ¿HAY FLUJO ABIERTO?
+     ======================================================= */
 
   const hayProcesoUIActivo =
     useMemo(
@@ -194,13 +172,12 @@ const NuevoRegistro = () => {
     );
 
 
-  // ===================================================
-  // RESET VISUAL
-  // ===================================================
+  /* =======================================================
+     RESET VISUAL
+     ======================================================= */
 
   const resetFlujoUI =
     useCallback(() => {
-
       setShowCosto(false);
 
       setShowTotales(false);
@@ -212,44 +189,30 @@ const NuevoRegistro = () => {
 
       recuperandoProcesoRef.current =
         false;
-
     }, []);
 
 
-  // ===================================================
-  // ABRIR ETAPA
-  // ===================================================
-  //
-  // Esta función NO decide cuál es la etapa.
-  //
-  // Solo recibe la etapa que previamente
-  // confirmó el backend.
-  // ===================================================
+  /* =======================================================
+     ABRIR ETAPA
+     ======================================================= */
 
   const abrirEtapa =
     useCallback(
-      async (
-        etapaServidor
-      ) => {
-
+      async (etapaServidor) => {
         const etapa =
           String(
-            etapaServidor ||
-            ""
+            etapaServidor || ""
           )
             .trim()
             .toUpperCase();
 
 
-        // =============================================
-        // FOTO 2
-        // =============================================
+        /* FOTO 2 */
 
         if (
           etapa ===
           ETAPA_PROCESO.COSTO
         ) {
-
           setShowCosto(true);
 
           setShowTotales(false);
@@ -260,15 +223,12 @@ const NuevoRegistro = () => {
         }
 
 
-        // =============================================
-        // FOTO 3
-        // =============================================
+        /* FOTO 3 */
 
         if (
           etapa ===
           ETAPA_PROCESO.CALCULO
         ) {
-
           setShowCosto(false);
 
           setShowTotales(true);
@@ -279,15 +239,12 @@ const NuevoRegistro = () => {
         }
 
 
-        // =============================================
-        // FOTO 4
-        // =============================================
+        /* FOTO 4 */
 
         if (
           etapa ===
           ETAPA_PROCESO.RECOLECCION
         ) {
-
           setShowCosto(false);
 
           setShowTotales(false);
@@ -309,55 +266,43 @@ const NuevoRegistro = () => {
     );
 
 
-  // ===================================================
-  // CERRAR FOTO 2
-  // ===================================================
+  /* =======================================================
+     CERRAR FOTO 2
+     ======================================================= */
 
   const closeCosto =
     useCallback(() => {
-
       /*
        * Cerrar el modal
        * NO cancela el proceso.
        */
       setShowCosto(false);
-
     }, []);
 
 
-  // ===================================================
-  // CERRAR FOTO 3
-  // ===================================================
+  /* =======================================================
+     CERRAR FOTO 3
+     ======================================================= */
 
   const closeTotales =
     useCallback(() => {
-
       /*
        * Cerrar el modal
        * NO cancela el proceso.
        */
       setShowTotales(false);
-
     }, []);
 
 
-  // ===================================================
-  // CARGAR NIVELES
-  // ===================================================
-  //
-  // Únicamente para pintar las barras.
-  //
-  // Estos valores NO participan en Foto 3.
-  // ===================================================
+  /* =======================================================
+     CARGAR NIVELES
+     ======================================================= */
 
   const cargarNiveles =
     useCallback(async () => {
-
       setLoading(true);
 
-
       try {
-
         const res =
           await apiClient.get(
             "/contenedores"
@@ -369,7 +314,6 @@ const NuevoRegistro = () => {
             res.data
           )
             ? res.data
-
             : res.data?.rows ||
               res.data?.data ||
               [];
@@ -385,7 +329,6 @@ const NuevoRegistro = () => {
           const contenedor
           of list
         ) {
-
           const tipoId =
             Number(
               contenedor
@@ -410,7 +353,6 @@ const NuevoRegistro = () => {
 
 
           next[tipoId] = {
-
             porcentaje:
               clamp0to100(
                 contenedor
@@ -424,9 +366,7 @@ const NuevoRegistro = () => {
           next
         );
 
-
       } catch (err) {
-
         console.error(
           "Error cargando niveles:",
           err
@@ -440,12 +380,10 @@ const NuevoRegistro = () => {
 
 
         await showBackendAlert({
-
           status:
             err?.response
               ?.status ||
             500,
-
 
           data:
             err?.response
@@ -456,25 +394,18 @@ const NuevoRegistro = () => {
             },
         });
 
-
       } finally {
-
         setLoading(false);
       }
-
     }, []);
 
 
-  // ===================================================
-  // CONSULTAR PROCESO ACTIVO
-  // ===================================================
-  //
-  // Esta es la fuente real de verdad.
-  // ===================================================
+  /* =======================================================
+     CONSULTAR PROCESO ACTIVO
+     ======================================================= */
 
   const obtenerProcesoActivo =
     useCallback(async () => {
-
       const res =
         await apiClient.get(
           "/control-dsh/registro-pesaje/proceso-activo"
@@ -486,45 +417,29 @@ const NuevoRegistro = () => {
           ?.tiene_proceso_activo !==
         true
       ) {
-
         return null;
       }
 
 
       const proceso =
-        res.data
-          ?.proceso;
+        res.data?.proceso;
 
 
       if (!proceso) {
-
         return null;
       }
 
 
       return proceso;
-
     }, []);
 
 
-  // ===================================================
-  // CONTINUAR PROCESO
-  // ===================================================
-  //
-  // IMPORTANTE:
-  //
-  // NO confiamos simplemente en el objeto recibido
-  // por el modal.
-  //
-  // Cuando el usuario pulsa "Continuar proceso",
-  // consultamos NUEVAMENTE al backend.
-  //
-  // Así sabemos la etapa actual en ese instante.
-  // ===================================================
+  /* =======================================================
+     CONTINUAR PROCESO
+     ======================================================= */
 
   const continuarProceso =
     useCallback(async () => {
-
       if (
         recuperandoProcesoRef.current
       ) {
@@ -537,17 +452,11 @@ const NuevoRegistro = () => {
 
 
       try {
-
-        // =============================================
-        // 1. CONSULTA NUEVA AL BACKEND
-        // =============================================
-
         const proceso =
           await obtenerProcesoActivo();
 
 
         if (!proceso) {
-
           await showInfoAlert(
             "No existe un proceso activo para continuar."
           );
@@ -556,17 +465,10 @@ const NuevoRegistro = () => {
         }
 
 
-        // =============================================
-        // 2. VALIDAR ESTADO
-        // =============================================
-
         if (
-          proceso
-            .estado_proceso !==
-          ESTADO_PROCESO
-            .EN_PROCESO
+          proceso.estado_proceso !==
+          ESTADO_PROCESO.EN_PROCESO
         ) {
-
           await showInfoAlert(
             "El proceso ya no se encuentra activo."
           );
@@ -575,24 +477,16 @@ const NuevoRegistro = () => {
         }
 
 
-        // =============================================
-        // 3. EL BACKEND INDICA LA ETAPA
-        // =============================================
-
         await abrirEtapa(
           proceso.etapa
         );
 
-
       } catch (err) {
-
         await showBackendAlert({
-
           status:
             err?.response
               ?.status ||
             500,
-
 
           data:
             err?.response
@@ -603,52 +497,28 @@ const NuevoRegistro = () => {
             },
         });
 
-
       } finally {
-
         recuperandoProcesoRef.current =
           false;
       }
-
     }, [
       abrirEtapa,
       obtenerProcesoActivo,
     ]);
 
 
-  // ===================================================
-  // CANCELAR PROCESO
-  // ===================================================
-  //
-  // TEMPORAL:
-  //
-  // El endpoint actual todavía recibe
-  // historial_calculo_id.
-  //
-  // No lo almacenamos en React.
-  //
-  // Se obtiene inmediatamente desde backend.
-  //
-  // Cuando migremos cancelar:
-  //
-  // POST /cancelar {}
-  // ===================================================
+  /* =======================================================
+     CANCELAR PROCESO
+     ======================================================= */
 
   const cancelarProcesoActual =
     useCallback(async () => {
-
       try {
-
-        // =============================================
-        // 1. CONSULTAR PROCESO ACTUAL
-        // =============================================
-
         const proceso =
           await obtenerProcesoActivo();
 
 
         if (!proceso) {
-
           resetFlujoUI();
 
 
@@ -669,7 +539,6 @@ const NuevoRegistro = () => {
 
 
         if (!procesoId) {
-
           await showInfoAlert(
             "El servidor no devolvió un proceso válido."
           );
@@ -679,17 +548,12 @@ const NuevoRegistro = () => {
         }
 
 
-        // =============================================
-        // 2. CANCELAR
-        // =============================================
-
         await apiClient.post(
           "/control-dsh/registro-pesaje/cancelar",
 
           {
             /*
              * Compatibilidad temporal.
-             *
              * No se guarda como estado React.
              */
             historial_calculo_id:
@@ -697,10 +561,6 @@ const NuevoRegistro = () => {
           }
         );
 
-
-        // =============================================
-        // 3. LIMPIAR INTERFAZ
-        // =============================================
 
         resetFlujoUI();
 
@@ -715,16 +575,12 @@ const NuevoRegistro = () => {
 
         return true;
 
-
       } catch (err) {
-
         await showBackendAlert({
-
           status:
             err?.response
               ?.status ||
             500,
-
 
           data:
             err?.response
@@ -738,7 +594,6 @@ const NuevoRegistro = () => {
 
         return false;
       }
-
     }, [
       cargarNiveles,
       obtenerProcesoActivo,
@@ -746,9 +601,9 @@ const NuevoRegistro = () => {
     ]);
 
 
-  // ===================================================
-  // MOSTRAR MODAL "PROCESO EN CURSO"
-  // ===================================================
+  /* =======================================================
+     MOSTRAR MODAL "PROCESO EN CURSO"
+     ======================================================= */
 
   const mostrarDecisionProceso =
     useCallback(
@@ -757,63 +612,36 @@ const NuevoRegistro = () => {
         message =
           "Tiene un proceso de pesaje en curso. ¿Qué desea hacer?"
       ) => {
-
         if (!proceso) {
           return;
         }
 
 
         await showBackendAlert({
-
           status: 409,
 
-
           data: {
-
             codigo:
               "PROCESO_EN_CURSO",
-
 
             requiere_decision:
               true,
 
-
             message,
 
-
-            /*
-             * Se utiliza únicamente para
-             * mostrar la advertencia.
-             *
-             * Al pulsar Continuar,
-             * consultamos el backend otra vez.
-             */
             proceso,
           },
 
-
-          // =========================================
-          // CONTINUAR
-          // =========================================
-
           onContinueProcess:
             async () => {
-
               await continuarProceso();
             },
 
-
-          // =========================================
-          // CANCELAR
-          // =========================================
-
           onCancelProcess:
             async () => {
-
               await cancelarProcesoActual();
             },
         });
-
       },
       [
         cancelarProcesoActual,
@@ -822,15 +650,13 @@ const NuevoRegistro = () => {
     );
 
 
-  // ===================================================
-  // RECUPERAR PROCESO AL ENTRAR
-  // ===================================================
+  /* =======================================================
+     RECUPERAR PROCESO AL ENTRAR
+     ======================================================= */
 
   const recuperarProcesoActivo =
     useCallback(async () => {
-
       try {
-
         const proceso =
           await obtenerProcesoActivo();
 
@@ -844,9 +670,7 @@ const NuevoRegistro = () => {
           proceso
         );
 
-
       } catch (err) {
-
         console.error(
           "Error consultando proceso activo:",
           err
@@ -854,12 +678,10 @@ const NuevoRegistro = () => {
 
 
         await showBackendAlert({
-
           status:
             err?.response
               ?.status ||
             500,
-
 
           data:
             err?.response
@@ -870,23 +692,17 @@ const NuevoRegistro = () => {
             },
         });
       }
-
     }, [
       mostrarDecisionProceso,
       obtenerProcesoActivo,
     ]);
 
 
-  // ===================================================
-  // INICIALIZACIÓN
-  // ===================================================
+  /* =======================================================
+     INICIALIZACIÓN
+     ======================================================= */
 
   useEffect(() => {
-
-    /*
-     * Evita doble ejecución por StrictMode
-     * durante desarrollo.
-     */
     if (
       recuperacionConsultadaRef.current
     ) {
@@ -900,17 +716,7 @@ const NuevoRegistro = () => {
 
     const inicializar =
       async () => {
-
-        // =============================================
-        // DATOS VISUALES
-        // =============================================
-
         await cargarNiveles();
-
-
-        // =============================================
-        // PROCESO REAL
-        // =============================================
 
         await recuperarProcesoActivo();
       };
@@ -918,27 +724,21 @@ const NuevoRegistro = () => {
 
     inicializar();
 
-
   }, [
     cargarNiveles,
     recuperarProcesoActivo,
   ]);
 
 
-  // ===================================================
-  // INICIAR NUEVO PROCESO
-  // ===================================================
+  /* =======================================================
+     INICIAR NUEVO PROCESO
+     ======================================================= */
 
   const handleSelectTipo =
     useCallback(
       async (
         idTipoResiduo
       ) => {
-
-        // =============================================
-        // BLOQUEO DEL FRONTEND
-        // =============================================
-
         if (
           hayProcesoUIActivo ||
           inicioProcesoEnCursoRef.current
@@ -952,14 +752,6 @@ const NuevoRegistro = () => {
 
 
         try {
-
-          // ===========================================
-          // El único dato de negocio introducido
-          // aquí es la selección del usuario.
-          //
-          // El backend vuelve a validarlo.
-          // ===========================================
-
           await apiClient.post(
             "/control-dsh/registro-pesaje/iniciar",
 
@@ -970,22 +762,13 @@ const NuevoRegistro = () => {
           );
 
 
-          // ===========================================
-          // PROCESO NUEVO
-          //
-          // El backend acaba de crearlo,
-          // por lo tanto comienza en COSTO.
-          // ===========================================
-
           setShowCosto(true);
 
           setShowTotales(false);
 
           setShowRecoleccion(false);
 
-
         } catch (err) {
-
           const status =
             err?.response
               ?.status ||
@@ -999,35 +782,22 @@ const NuevoRegistro = () => {
 
 
           await showBackendAlert({
-
             status,
 
             data,
 
-
             onContinueProcess:
               async () => {
-
-                /*
-                 * No usamos los datos de
-                 * la respuesta anterior.
-                 *
-                 * Consultamos nuevamente.
-                 */
                 await continuarProceso();
               },
 
-
             onCancelProcess:
               async () => {
-
                 await cancelarProcesoActual();
               },
           });
 
-
         } finally {
-
           inicioProcesoEnCursoRef.current =
             false;
         }
@@ -1041,75 +811,52 @@ const NuevoRegistro = () => {
     );
 
 
-  // ===================================================
-  // FOTO 2 → FOTO 3
-  // ===================================================
+  /* =======================================================
+     FOTO 2 → FOTO 3
+     ======================================================= */
 
   const handleOpenTotales =
     useCallback(() => {
-
-      /*
-       * ModalCosto solamente llega aquí
-       * después de que el BACKEND confirmó
-       * correctamente el costo.
-       */
-
       setShowCosto(false);
 
       setShowTotales(true);
 
       setShowRecoleccion(false);
-
     }, []);
 
 
-  // ===================================================
-  // FOTO 3 → FOTO 4
-  // ===================================================
+  /* =======================================================
+     FOTO 3 → FOTO 4
+     ======================================================= */
 
   const handleShowRecoleccion =
     useCallback(() => {
-
-      /*
-       * Foto 3 llega aquí únicamente después
-       * de que el backend guardó el cálculo.
-       */
-
       setShowCosto(false);
 
       setShowTotales(false);
 
       setShowRecoleccion(true);
-
     }, []);
 
 
-  // ===================================================
-  // CANCELAR DESDE CUALQUIER FOTO
-  // ===================================================
+  /* =======================================================
+     CANCELAR DESDE CUALQUIER FOTO
+     ======================================================= */
 
   const handleCancel =
     useCallback(async () => {
-
       await cancelarProcesoActual();
-
     }, [
       cancelarProcesoActual,
     ]);
 
 
-  // ===================================================
-  // FINALIZAR
-  // ===================================================
+  /* =======================================================
+     FINALIZAR
+     ======================================================= */
 
   const handleFinish =
     useCallback(async () => {
-
-      /*
-       * Solo se ejecutará cuando Foto 4
-       * confirme que backend finalizó.
-       */
-
       resetFlujoUI();
 
 
@@ -1120,23 +867,19 @@ const NuevoRegistro = () => {
 
       await cargarNiveles();
 
-
     }, [
       cargarNiveles,
       resetFlujoUI,
     ]);
 
 
-  // ===================================================
-  // TARJETAS
-  // ===================================================
+  /* =======================================================
+     TARJETAS
+     ======================================================= */
 
   const renderCard =
     useCallback(
-      (
-        tipo
-      ) => {
-
+      (tipo) => {
         const nivel =
           nivelesPorTipo[
             tipo.id
@@ -1147,11 +890,9 @@ const NuevoRegistro = () => {
           nivel
             ? Number(
                 clamp0to100(
-                  nivel
-                    .porcentaje
+                  nivel.porcentaje
                 ).toFixed(0)
               )
-
             : 0;
 
 
@@ -1161,149 +902,99 @@ const NuevoRegistro = () => {
 
 
         return (
+          <button
+            key={tipo.id}
+            type="button"
 
-          <div
-            key={
-              tipo.id
-            }
-
-            className={
-              `mb-4 residuo-card ${
-                disabled
-                  ? "opacity-75"
-                  : ""
-              }`
-            }
+            className={`residuo-card ${tipo.themeClass} ${
+              disabled
+                ? "disabled"
+                : ""
+            }`}
 
             onClick={() => {
-
               if (disabled) {
                 return;
               }
-
 
               handleSelectTipo(
                 tipo.id
               );
             }}
 
-            onKeyDown={(
-              event
-            ) => {
+            disabled={disabled}
 
-              if (disabled) {
-                return;
-              }
-
-
-              if (
-                event.key ===
-                  "Enter" ||
-                event.key ===
-                  " "
-              ) {
-
-                event.preventDefault();
-
-
-                handleSelectTipo(
-                  tipo.id
-                );
-              }
-            }}
-
-            role="button"
-
-            tabIndex={
-              disabled
-                ? -1
-                : 0
-            }
-
-            aria-disabled={
-              disabled
-            }
+            aria-label={`Seleccionar residuo ${tipo.label}`}
           >
 
-            <div
-              className="
-                d-flex
-                align-items-center
-                mb-2
-              "
-            >
+            {/* ===========================================
+                CABECERA DE RESIDUO
+            =========================================== */}
 
-              <tipo.Icon
-                className={
-                  `${tipo.iconClass} me-2`
-                }
-              />
+            <div className="residuo-card-header">
+
+              <div className="residuo-card-identity">
+
+                <span className="residuo-card-icon">
+                  <tipo.Icon />
+                </span>
 
 
-              <span
-                className="fw-semibold"
-              >
+                <span className="residuo-card-name">
+                  {tipo.label}
+                </span>
 
-                {tipo.label}
+              </div>
 
-              </span>
+
+              <strong className="residuo-card-percentage">
+                {porcentaje}%
+              </strong>
 
             </div>
 
 
+            {/* ===========================================
+                BARRA DE NIVEL
+            =========================================== */}
+
             <div
-              className="
-                progress
-                custom-progress
-              "
+              className="custom-progress"
+              role="progressbar"
+              aria-valuenow={
+                porcentaje
+              }
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-label={`Nivel de ${tipo.label}: ${porcentaje}%`}
             >
 
               <div
-                className={
-                  `progress-bar ${tipo.barClass} ${tipo.barTextClass}`
-                }
-
-                role="progressbar"
-
+                className="custom-progress-bar"
                 style={{
                   width:
                     `${porcentaje}%`,
                 }}
-
-                aria-valuenow={
-                  porcentaje
-                }
-
-                aria-valuemin="0"
-
-                aria-valuemax="100"
-              >
-
-                {porcentaje}%
-
-              </div>
+              />
 
             </div>
 
 
+            {/* ===========================================
+                SIN DATOS
+            =========================================== */}
+
             {!nivel &&
               !loading && (
 
-                <small
-                  className="
-                    text-muted
-                    d-block
-                    mt-2
-                  "
-                >
-
-                  Sin datos
-                  (contenedor no disponible o inactivo).
-
+                <small className="residuo-card-empty">
+                  Sin datos disponibles para
+                  este tipo de residuo.
                 </small>
+
               )}
 
-          </div>
+          </button>
         );
       },
 
@@ -1315,173 +1006,155 @@ const NuevoRegistro = () => {
     );
 
 
-  // ===================================================
-  // RENDER
-  // ===================================================
+  /* =======================================================
+     RENDER
+     ======================================================= */
 
   return (
+    <section className="system-page nuevo-registro-page">
 
-    <div
-      className="
-        d-flex
-        justify-content-start
-        align-items-start
-        p-4
-        gap-5
-      "
-    >
-
-      <div
-        className="
-          card
-          shadow-sm
-          border-0
-          nuevo-registro-card
-        "
-      >
+      <div className="system-container">
 
         <div
-          className="
-            card-body
-            p-4
-          "
+          className={`nuevo-registro-layout ${
+            showRecoleccion
+              ? "with-recoleccion"
+              : ""
+          }`}
         >
 
-          <h4
-            className="
-              card-title
-              d-flex
-              align-items-center
-              mb-4
-            "
-          >
+          {/* =============================================
+              SELECCIÓN DE RESIDUO
+          ============================================= */}
 
-            <FaChartLine
-              className="
-                text-primary
-                me-2
-              "
-              size={24}
-            />
+          <div className="system-card nuevo-registro-card">
 
+            <header className="nuevo-registro-header">
 
-            <span
-              className="fw-bold"
-            >
+              <div className="nuevo-registro-title">
 
-              Niveles de Residuos
+                <FaChartLine />
 
-            </span>
+                <div>
 
-          </h4>
+                  <h2 className="system-card-title">
+                    Niveles de Residuos
+                  </h2>
 
+                  <p className="system-card-description">
+                    Seleccione el tipo de residuo
+                    que desea registrar.
+                  </p>
 
-          {TIPOS.map(
-            renderCard
-          )}
+                </div>
+
+              </div>
+
+            </header>
 
 
-          <div
-            className="
-              alert
-              alert-info
-              d-flex
-              align-items-start
-              mb-0
-            "
-          >
+            <div className="nuevo-registro-list">
 
-            <FaInfoCircle
-              className="
-                me-2
-                mt-1
-              "
-            />
+              {TIPOS.map(
+                renderCard
+              )}
+
+            </div>
 
 
-            <div>
+            <div className="system-alert system-alert-info nuevo-registro-info">
 
-              <strong>
-                Información:
-              </strong>{" "}
+              <FaInfoCircle />
 
-              Debe seleccionar uno de los desechos para el cálculo del pesaje.
+              <div>
+
+                <strong>
+                  Información:
+                </strong>
+
+                <span>
+                  {" "}
+                  Debe seleccionar uno de los
+                  desechos para iniciar el cálculo
+                  del pesaje.
+                </span>
+
+              </div>
 
             </div>
 
           </div>
 
+
+          {/* =============================================
+              FOTO 4
+          ============================================= */}
+
+          {showRecoleccion && (
+
+            <div className="nuevo-registro-recoleccion">
+
+              <RegistroRecoleccion
+                onCancel={
+                  handleCancel
+                }
+
+                onFinish={
+                  handleFinish
+                }
+              />
+
+            </div>
+
+          )}
+
         </div>
+
+
+        {/* ===============================================
+            FOTO 2
+        =============================================== */}
+
+        <ModalCosto
+          show={
+            showCosto
+          }
+
+          handleClose={
+            closeCosto
+          }
+
+          handleOpenTotales={
+            handleOpenTotales
+          }
+        />
+
+
+        {/* ===============================================
+            FOTO 3
+        =============================================== */}
+
+        <ModalTotales
+          show={
+            showTotales
+          }
+
+          handleClose={
+            closeTotales
+          }
+
+          handleShowRecoleccion={
+            handleShowRecoleccion
+          }
+
+          onCancel={
+            handleCancel
+          }
+        />
 
       </div>
 
-
-      {/* ============================================= */}
-      {/* FOTO 4                                      */}
-      {/* ============================================= */}
-
-      {showRecoleccion && (
-
-        <div
-          className="flex-grow-1"
-        >
-
-          <RegistroRecoleccion
-            onCancel={
-              handleCancel
-            }
-
-            onFinish={
-              handleFinish
-            }
-          />
-
-        </div>
-      )}
-
-
-      {/* ============================================= */}
-      {/* FOTO 2                                      */}
-      {/* ============================================= */}
-
-      <ModalCosto
-        show={
-          showCosto
-        }
-
-        handleClose={
-          closeCosto
-        }
-
-        handleOpenTotales={
-          handleOpenTotales
-        }
-      />
-
-
-      {/* ============================================= */}
-      {/* FOTO 3                                      */}
-      {/* ============================================= */}
-
-      <ModalTotales
-        show={
-          showTotales
-        }
-
-        handleClose={
-          closeTotales
-        }
-
-        handleShowRecoleccion={
-          handleShowRecoleccion
-        }
-
-        onCancel={
-          handleCancel
-        }
-      />
-
-    </div>
+    </section>
   );
 };
 

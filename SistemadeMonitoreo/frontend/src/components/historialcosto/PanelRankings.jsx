@@ -1,9 +1,8 @@
 import React from "react";
 
 import {
-  Card,
-  Table,
-} from "react-bootstrap";
+  FaTrophy,
+} from "react-icons/fa";
 
 
 const fmtQ =
@@ -13,11 +12,8 @@ const fmtQ =
     ).toLocaleString(
       "es-GT",
       {
-        minimumFractionDigits:
-          2,
-
-        maximumFractionDigits:
-          2,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
       }
     )}`;
 
@@ -27,33 +23,53 @@ export default function PanelRankings({
 }) {
 
   return (
-    <Card className="shadow-sm border-0">
 
-      <Card.Body>
+    <section className="system-card">
 
-        <div className="fw-bold mb-2">
-          Top 5 Contenedores por Costo
+      {/* =================================================
+          ENCABEZADO
+      ================================================= */}
+
+      <div className="system-card-header">
+
+        <div>
+
+          <h3 className="system-card-title">
+
+            <FaTrophy />
+
+            {" "}
+            Top 5 Contenedores por Costo
+
+          </h3>
+
         </div>
 
+      </div>
 
-        <Table
-          responsive
-          bordered
-          hover
-          size="sm"
-          className="mb-0"
-        >
 
-          <thead className="table-dark">
+      {/* =================================================
+          TABLA
+      ================================================= */}
+
+      <div className="system-table-wrapper">
+
+        <table className="system-table">
+
+          <thead>
+
             <tr>
+
               <th>
                 Contenedor
               </th>
 
-              <th className="text-end">
+              <th className="system-text-right">
                 Total (Q)
               </th>
+
             </tr>
+
           </thead>
 
 
@@ -70,37 +86,54 @@ export default function PanelRankings({
                     `${row.contenedor_codigo || "CNT"}-${index}`
                   }
                 >
+
                   <td>
-                    {row.contenedor_codigo || "-"}
+
+                    <span className="system-badge system-badge-info">
+
+                      {row.contenedor_codigo || "-"}
+
+                    </span>
+
                   </td>
 
-                  <td className="text-end">
+
+                  <td className="system-table-number">
+
                     {fmtQ(
                       row.total_q
                     )}
+
                   </td>
+
                 </tr>
+
               )
             )}
 
 
-            {topContenedores.length === 0 ? (
+            {topContenedores.length === 0 && (
+
               <tr>
+
                 <td
                   colSpan={2}
-                  className="text-center text-muted py-3"
+                  className="system-table-empty"
                 >
                   Sin datos
                 </td>
+
               </tr>
-            ) : null}
+
+            )}
 
           </tbody>
 
-        </Table>
+        </table>
 
-      </Card.Body>
+      </div>
 
-    </Card>
+    </section>
+
   );
 }
