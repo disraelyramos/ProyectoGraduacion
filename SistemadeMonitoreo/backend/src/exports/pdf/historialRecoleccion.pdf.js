@@ -1,177 +1,986 @@
-// backend/src/exports/pdf/historialRecoleccion.pdf.js
-const puppeteer = require("puppeteer");
+const {
+  PDF_COLORS,
+  PDF_STYLES,
+  PDF_TABLE_LAYOUT,
+  crearPdfBuffer,
+} = require("./pdfmake.config");
 
-// ===== Browser singleton (evita el delay de 5s por abrir Chromium cada vez) =====
-let browserPromise = null;
 
-async function getBrowser() {
-  if (!browserPromise) {
-    browserPromise = puppeteer.launch({
-      headless: "new",
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
-    });
-  }
-  return browserPromise;
-}
+/* =========================================================
+   CONSTANTES
+   ========================================================= */
 
-// ===== Helpers =====
-function safeText(v) {
-  return v === null || v === undefined ? "" : String(v);
-}
+const MAX_TEXT_LENGTH = 500;
 
-function escapeHtml(v) {
-  return safeText(v)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
 
-function fmtDateTimeGT() {
-  const d = new Date();
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(
-    d.getHours()
-  )}:${pad(d.getMinutes())}`;
-}
+/* =========================================================
+   TEXTO SEGURO
+   ========================================================= */
 
-function toPct(v) {
-  if (v === null || v === undefined || v === "") return "";
-  const n = Number(v);
-  return Number.isNaN(n) ? safeText(v) : `${n}%`;
-}
-
-function renderRows(rows, columns, emptyColspan) {
-  if (!rows?.length) {
-    return `<tr><td class="empty" colspan="${emptyColspan}">Sin registros para mostrar.</td></tr>`;
+function textoSeguro(
+  valor,
+  maxLength = MAX_TEXT_LENGTH
+) {
+  if (
+    valor === null ||
+    valor === undefined ||
+    valor === ""
+  ) {
+    return "-";
   }
 
-  return rows
-    .map((r) => {
-      const tds = columns
-        .map((c) => {
-          const raw = typeof c.value === "function" ? c.value(r) : r?.[c.value];
-          const val = escapeHtml(raw);
-          const cls = c.className ? ` class="${c.className}"` : "";
-          return `<td${cls}>${val}</td>`;
-        })
-        .join("");
-      return `<tr>${tds}</tr>`;
+  const texto =
+    String(valor).trim();
+
+  if (!texto) {
+    return "-";
+  }
+
+  return texto.length > maxLength
+    ? `${texto.slice(0, maxLength)}…`
+    : texto;
+}
+
+
+/* =========================================================
+   PORCENTAJE
+   ========================================================= */
+
+function porcentaje(valor) {
+  if (
+    valor === null ||
+    valor === undefined ||
+    valor === ""
+  ) {
+    return "-";
+  }
+
+  const numero =
+    Number(valor);
+
+  if (!Number.isFinite(numero)) {
+    return textoSeguro(valor);
+  }
+
+  return `${numero}%`;
+}
+
+
+/* =========================================================
+   FECHA PARA MOSTRAR EN PDF
+
+   El backend continúa trabajando con YYYY-MM-DD.
+   Aquí únicamente cambiamos su presentación visual:
+
+   2026-08-01
+        ↓
+   01/08/2026
+   ========================================================= */
+
+function fechaParaPdf(valor) {
+  const fecha =
+    String(valor || "").trim();
+
+  const match =
+    /^(\d{4})-(\d{2})-(\d{2})$/.exec(
+      fecha
+    );
+
+  if (!match) {
+    return textoSeguro(valor);
+  }
+
+  const [
+    ,
+    year,
+    month,
+    day,
+  ] = match;
+
+  return `${day}/${month}/${year}`;
+}
+
+
+/* =========================================================
+   MONEDA EN QUETZALES
+   ========================================================= */
+
+function monedaQuetzales(
+  valor,
+  decimales = 2
+) {
+  if (
+    valor === null ||
+    valor === undefined ||
+    valor === ""
+  ) {
+    return "-";
+  }
+
+  const numero =
+    Number(valor);
+
+  if (!Number.isFinite(numero)) {
+    return textoSeguro(valor);
+  }
+
+  const monto =
+    new Intl.NumberFormat(
+      "es-GT",
+      {
+        minimumFractionDigits:
+          decimales,
+
+        maximumFractionDigits:
+          decimales,
+      }
+    ).format(numero);
+
+  return `Q${monto}`;
+}
+
+
+/* =========================================================
+   FECHA/HORA DE GENERACIÓN
+
+   Se fuerza Guatemala porque el servidor puede estar
+   desplegado en otra zona horaria.
+   ========================================================= */
+
+function fechaHoraGuatemala() {
+  return new Intl.DateTimeFormat(
+    "es-GT",
+    {
+      timeZone:
+        "America/Guatemala",
+
+      day:
+        "2-digit",
+
+      month:
+        "2-digit",
+
+      year:
+        "numeric",
+
+      hour:
+        "2-digit",
+
+      minute:
+        "2-digit",
+
+      hour12:
+        false,
+    }
+  ).format(
+    new Date()
+  );
+}
+
+
+/* =========================================================
+   TIPO DE BÚSQUEDA
+   ========================================================= */
+
+function descripcionBuscarPor(
+  buscarPor
+) {
+  switch (
+    String(buscarPor || "")
+      .trim()
+      .toLowerCase()
+  ) {
+    case "codigo":
+      return "Código";
+
+    case "tipo":
+      return "Tipo de residuo";
+
+    default:
+      return "-";
+  }
+}
+
+
+/* =========================================================
+   ORDEN
+   ========================================================= */
+
+function descripcionOrden(order) {
+  return (
+    String(order || "")
+      .trim()
+      .toLowerCase() === "asc"
+  )
+    ? "Más antigua"
+    : "Más reciente";
+}
+
+
+/* =========================================================
+   CELDAS
+   ========================================================= */
+
+function celda(
+  valor,
+  style = "tableCell"
+) {
+  return {
+    text:
+      textoSeguro(valor),
+
+    style,
+  };
+}
+
+
+function celdaPorcentaje(valor) {
+  return {
+    text:
+      porcentaje(valor),
+
+    style:
+      "tableCellCenter",
+  };
+}
+
+
+/* =========================================================
+   CABECERA DE TABLA
+   ========================================================= */
+
+function crearHeader(columnas) {
+  return columnas.map(
+    (texto) => ({
+      text: texto,
+
+      style:
+        "tableHeader",
+
+      fillColor:
+        PDF_COLORS.tableHeader,
+
+      margin: [
+        0,
+        2,
+        0,
+        2,
+      ],
     })
-    .join("");
+  );
 }
 
-function buildHtml({ filtros, detalle, pesaje, generadoPor, total }) {
-  const nombre = escapeHtml(generadoPor?.nombre);
-  const usuario = escapeHtml(generadoPor?.usuario);
 
-  const detalleCols = [
-    { value: "codigo" },
-    { value: "fecha" },
-    { value: "distrito" },
-    { value: "tipo_residuo" },
-    { value: "numero_recibo" },
-    { value: "responsable" },
-    { value: "empresa_recolectora" },
-    { value: (r) => toPct(r?.porcentaje_pendiente), className: "num" },
-    { value: "cantidad_libras_pendientes", className: "num" },
-    { value: "observaciones" },
-  ];
+/* =========================================================
+   FILAS DE RECOLECCIÓN
+   ========================================================= */
 
-  // ✅ Pesaje SIN "ID Recolección"
-  const pesajeCols = [
-    { value: "total_en_libras", className: "num" },
-    { value: (p) => toPct(p?.porcentaje_recolectado), className: "num" },
-    { value: (p) => toPct(p?.porcentaje_llenado), className: "num" },
-    { value: "costo_por_libra_aplicado", className: "num" },
-    { value: "total_costo_q", className: "num" },
-  ];
+function crearFilasDetalle(
+  detalle = []
+) {
+  if (!detalle.length) {
+    return [
+      [
+        {
+          text:
+            "Sin registros para mostrar.",
 
-  return `<!doctype html>
-<html lang="es">
-<head>
-<meta charset="utf-8" />
-<title>Historial de Recolección</title>
-<style>
-  *{box-sizing:border-box}
-  body{font-family:Arial,sans-serif;color:#111;margin:0;padding:24px}
-  .center{text-align:center}
-  h1{margin:0;font-size:20px;font-weight:700}
-  .sub{margin-top:4px;font-size:13px;color:#444}
-  .meta{margin-top:10px;font-size:12px}
-  .rule{margin:14px 0;border-top:1px solid #ddd}
-  h2{font-size:14px;margin:18px 0 8px}
-  .filters{font-size:12px;color:#222;line-height:1.35}
-  table{width:100%;border-collapse:collapse;margin-top:8px}
-  th,td{border:1px solid #ddd;padding:6px;font-size:10.5px;vertical-align:top}
-  th{background:#f3f3f3;font-weight:700;text-align:left}
-  td.num{text-align:right;white-space:nowrap}
-  td.empty{text-align:center;color:#666;padding:12px}
-  thead{display:table-header-group}
-  tr{page-break-inside:avoid}
-  @page{size:A4;margin:20mm}
-</style>
-</head>
-<body>
-  <div class="center">
-    <h1>Historial de Recolección</h1>
-    <div class="sub">Control DSH</div>
-    <div class="meta">
-      Generado por: ${nombre}${usuario ? ` (${usuario})` : ""} &nbsp;&nbsp;&nbsp;
-      Fecha/Hora: ${escapeHtml(fmtDateTimeGT())}
-    </div>
-  </div>
+          colSpan: 10,
 
-  <div class="rule"></div>
+          style:
+            "empty",
 
-  <h2>Cómo se hizo la búsqueda</h2>
-  <div class="filters">
-    <div>Buscar por: tipo residuo</div>
-    <div>Búsqueda: ${escapeHtml(filtros?.valorBusqueda)}</div>
-    <div>Rango: ${escapeHtml(filtros?.fechaInicio)} — ${escapeHtml(filtros?.fechaFin)}</div>
-    <div>Registros encontrados: ${escapeHtml(total)}</div>
-  </div>
+          margin: [
+            0,
+            6,
+            0,
+            6,
+          ],
+        },
 
-  <h2>Datos de Registro de Recolección</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>Código</th>
-        <th>Fecha</th>
-        <th>Distrito</th>
-        <th>Tipo residuo</th>
-        <th>No. recibo</th>
-        <th>Responsable</th>
-        <th>Empresa</th>
-        <th>% Pend.</th>
-        <th>Lbs Pend.</th>
-        <th>Observaciones</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${renderRows(detalle, detalleCols, 10)}
-    </tbody>
-  </table>
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+      ],
+    ];
+  }
 
-  <h2>Control de Pesaje</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>Total lbs</th>
-        <th>% Recolectado</th>
-        <th>% Llenado</th>
-        <th>Costo/lb</th>
-        <th>Total Q</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${renderRows(pesaje, pesajeCols, 5)}
-    </tbody>
-  </table>
-</body>
-</html>`;
+
+  return detalle.map(
+    (registro) => [
+      celda(
+        registro.codigo
+      ),
+
+      celda(
+        registro.fecha,
+        "tableCellCenter"
+      ),
+
+      celda(
+        registro.distrito
+      ),
+
+      celda(
+        registro.tipo_residuo
+      ),
+
+      celda(
+        registro.numero_recibo,
+        "tableCellCenter"
+      ),
+
+      celda(
+        registro.responsable
+      ),
+
+      celda(
+        registro.empresa_recolectora
+      ),
+
+      celdaPorcentaje(
+        registro.porcentaje_pendiente
+      ),
+
+      celda(
+        registro.cantidad_libras_pendientes,
+        "tableCellRight"
+      ),
+
+      celda(
+        registro.observaciones
+      ),
+    ]
+  );
 }
+
+
+/* =========================================================
+   FILAS DE PESAJE
+   ========================================================= */
+
+function crearFilasPesaje(
+  pesaje = []
+) {
+  if (!pesaje.length) {
+    return [
+      [
+        {
+          text:
+            "Sin registros para mostrar.",
+
+          colSpan: 5,
+
+          style:
+            "empty",
+
+          margin: [
+            0,
+            6,
+            0,
+            6,
+          ],
+        },
+
+        {},
+        {},
+        {},
+        {},
+      ],
+    ];
+  }
+
+
+  return pesaje.map(
+    (registro) => [
+      celda(
+        registro.total_en_libras,
+        "tableCellRight"
+      ),
+
+      celdaPorcentaje(
+        registro.porcentaje_recolectado
+      ),
+
+      celdaPorcentaje(
+        registro.porcentaje_llenado
+      ),
+
+      /*
+        El costo por libra conserva 4 decimales,
+        porque el valor puede necesitar precisión.
+      */
+      celda(
+        monedaQuetzales(
+          registro.costo_por_libra_aplicado,
+          4
+        ),
+        "tableCellRight"
+      ),
+
+      /*
+        El costo total se muestra con 2 decimales.
+      */
+      celda(
+        monedaQuetzales(
+          registro.total_costo_q,
+          2
+        ),
+        "tableCellRight"
+      ),
+    ]
+  );
+}
+
+
+/* =========================================================
+   BLOQUE DE FILTROS
+   ========================================================= */
+
+function crearBloqueFiltros({
+  filtros,
+  total,
+}) {
+  return {
+    margin: [
+      0,
+      0,
+      0,
+      7,
+    ],
+
+    table: {
+      widths: [
+        90,
+        "*",
+        90,
+        "*",
+      ],
+
+      body: [
+
+        /* FILA 1 */
+
+        [
+          {
+            text:
+              "Buscar por:",
+
+            style:
+              "filterLabel",
+          },
+
+          textoSeguro(
+            descripcionBuscarPor(
+              filtros?.buscarPor
+            )
+          ),
+
+          {
+            text:
+              "Orden:",
+
+            style:
+              "filterLabel",
+          },
+
+          descripcionOrden(
+            filtros?.order
+          ),
+        ],
+
+
+        /* FILA 2 */
+
+        [
+          {
+            text:
+              "Búsqueda:",
+
+            style:
+              "filterLabel",
+          },
+
+          textoSeguro(
+            filtros?.valorBusqueda
+          ),
+
+          {
+            text:
+              "Registros:",
+
+            style:
+              "filterLabel",
+          },
+
+          textoSeguro(
+            total
+          ),
+        ],
+
+
+        /* FILA 3 */
+
+        [
+          {
+            text:
+              "Rango:",
+
+            style:
+              "filterLabel",
+          },
+
+          {
+            text:
+              `${fechaParaPdf(
+                filtros?.fechaInicio
+              )} — ${fechaParaPdf(
+                filtros?.fechaFin
+              )}`,
+
+            colSpan: 3,
+          },
+
+          {},
+          {},
+        ],
+      ],
+    },
+
+
+    layout: {
+      hLineWidth() {
+        return 0;
+      },
+
+      vLineWidth() {
+        return 0;
+      },
+
+      paddingLeft() {
+        return 2;
+      },
+
+      paddingRight() {
+        return 6;
+      },
+
+      paddingTop() {
+        return 2;
+      },
+
+      paddingBottom() {
+        return 2;
+      },
+    },
+  };
+}
+
+
+/* =========================================================
+   CONSTRUIR DOCUMENTO
+   ========================================================= */
+
+function construirDocumento({
+  filtros = {},
+  detalle = [],
+  pesaje = [],
+  generadoPor = {},
+  total = 0,
+}) {
+  const generadoPorTexto =
+    generadoPor?.nombre ||
+    generadoPor?.usuario ||
+    "N/A";
+
+
+  return {
+
+    /* =====================================================
+       INFORMACIÓN
+       ===================================================== */
+
+    info: {
+      title:
+        "Historial de Recolección",
+
+      subject:
+        "Control DSH",
+
+      creator:
+        "Sistema de Monitoreo",
+    },
+
+
+    /* =====================================================
+       PÁGINA
+       ===================================================== */
+
+    pageSize:
+      "A4",
+
+    pageOrientation:
+      "landscape",
+
+    pageMargins: [
+      28,
+      32,
+      28,
+      35,
+    ],
+
+
+    /* =====================================================
+       ESTILO GENERAL
+       ===================================================== */
+
+    defaultStyle: {
+      font:
+        "Roboto",
+
+      fontSize:
+        8,
+
+      color:
+        PDF_COLORS.text,
+    },
+
+
+    styles:
+      PDF_STYLES,
+
+
+    /* =====================================================
+       PIE DE PÁGINA
+       ===================================================== */
+
+    footer(
+      currentPage,
+      pageCount
+    ) {
+      return {
+        columns: [
+          {
+            text:
+              "Control DSH",
+
+            style:
+              "footer",
+
+            margin: [
+              28,
+              8,
+              0,
+              0,
+            ],
+          },
+
+          {
+            text:
+              `Página ${currentPage} de ${pageCount}`,
+
+            style:
+              "footer",
+
+            alignment:
+              "right",
+
+            margin: [
+              0,
+              8,
+              28,
+              0,
+            ],
+          },
+        ],
+      };
+    },
+
+
+    /* =====================================================
+       CONTENIDO
+       ===================================================== */
+
+    content: [
+
+      /* =========================
+         TÍTULO
+         ========================= */
+
+      {
+        text:
+          "Historial de Recolección",
+
+        style:
+          "title",
+      },
+
+
+      {
+        text:
+          "Control DSH",
+
+        style:
+          "subtitle",
+
+        margin: [
+          0,
+          2,
+          0,
+          5,
+        ],
+      },
+
+
+      /* =========================
+         USUARIO Y FECHA
+         ========================= */
+
+      {
+        columns: [
+          {
+            text: [
+              {
+                text:
+                  "Generado por: ",
+
+                bold:
+                  true,
+              },
+
+              textoSeguro(
+                generadoPorTexto
+              ),
+
+              generadoPor?.usuario
+                ? ` (${textoSeguro(
+                    generadoPor.usuario
+                  )})`
+                : "",
+            ],
+
+            style:
+              "metadata",
+          },
+
+
+          {
+            text: [
+              {
+                text:
+                  "Fecha/Hora: ",
+
+                bold:
+                  true,
+              },
+
+              fechaHoraGuatemala(),
+            ],
+
+            style:
+              "metadata",
+
+            alignment:
+              "right",
+          },
+        ],
+
+        margin: [
+          0,
+          0,
+          0,
+          8,
+        ],
+      },
+
+
+      /* =========================
+         LÍNEA
+         ========================= */
+
+      {
+        canvas: [
+          {
+            type:
+              "line",
+
+            x1:
+              0,
+
+            y1:
+              0,
+
+            x2:
+              785,
+
+            y2:
+              0,
+
+            lineWidth:
+              1,
+
+            lineColor:
+              PDF_COLORS.primary,
+          },
+        ],
+
+        margin: [
+          0,
+          0,
+          0,
+          7,
+        ],
+      },
+
+
+      /* =========================
+         FILTROS
+         ========================= */
+
+      {
+        text:
+          "Cómo se hizo la búsqueda",
+
+        style:
+          "sectionTitle",
+      },
+
+
+      crearBloqueFiltros({
+        filtros,
+        total,
+      }),
+
+
+      /* =========================
+         TABLA RECOLECCIÓN
+         ========================= */
+
+      {
+        text:
+          "Datos de Registro de Recolección",
+
+        style:
+          "sectionTitle",
+      },
+
+
+      {
+        table: {
+          headerRows:
+            1,
+
+          dontBreakRows:
+            true,
+
+          widths: [
+            50,
+            62,
+            52,
+            70,
+            55,
+            75,
+            75,
+            48,
+            55,
+            "*",
+          ],
+
+          body: [
+
+            crearHeader([
+              "Código",
+              "Fecha",
+              "Distrito",
+              "Tipo de residuo",
+              "No. recibo",
+              "Responsable",
+              "Empresa",
+              "% Pend.",
+              "Lbs Pend.",
+              "Observaciones",
+            ]),
+
+            ...crearFilasDetalle(
+              detalle
+            ),
+          ],
+        },
+
+        layout:
+          PDF_TABLE_LAYOUT,
+      },
+
+
+      /* =========================
+         CONTROL DE PESAJE
+         ========================= */
+
+      {
+        text:
+          "Control de Pesaje",
+
+        style:
+          "sectionTitle",
+
+        margin: [
+          0,
+          13,
+          0,
+          5,
+        ],
+      },
+
+
+      {
+        table: {
+          headerRows:
+            1,
+
+          dontBreakRows:
+            true,
+
+          widths: [
+            "*",
+            "*",
+            "*",
+            "*",
+            "*",
+          ],
+
+          body: [
+
+            crearHeader([
+              "Total (lb)",
+              "% Recolectado",
+              "% Llenado Actual",
+              "Costo por Libra",
+              "Costo Total",
+            ]),
+
+            ...crearFilasPesaje(
+              pesaje
+            ),
+          ],
+        },
+
+        layout:
+          PDF_TABLE_LAYOUT,
+      },
+    ],
+  };
+}
+
+
+/* =========================================================
+   GENERAR PDF
+   ========================================================= */
 
 async function buildHistorialRecoleccionPdfBuffer({
   filtros,
@@ -180,21 +989,50 @@ async function buildHistorialRecoleccionPdfBuffer({
   generadoPor,
   total,
 }) {
-  const html = buildHtml({ filtros, detalle, pesaje, generadoPor, total });
+  const documentDefinition =
+    construirDocumento({
 
-  const browser = await getBrowser();
-  const page = await browser.newPage();
+      filtros:
+        filtros &&
+        typeof filtros === "object"
+          ? filtros
+          : {},
 
-  try {
-    await page.setContent(html, { waitUntil: "domcontentloaded" });
-    return await page.pdf({
-      format: "A4",
-      printBackground: true,
-      margin: { top: "20mm", right: "20mm", bottom: "20mm", left: "20mm" },
+      detalle:
+        Array.isArray(detalle)
+          ? detalle
+          : [],
+
+      pesaje:
+        Array.isArray(pesaje)
+          ? pesaje
+          : [],
+
+      generadoPor:
+        generadoPor &&
+        typeof generadoPor === "object"
+          ? generadoPor
+          : {},
+
+      total:
+        Number.isFinite(
+          Number(total)
+        )
+          ? Number(total)
+          : 0,
     });
-  } finally {
-    await page.close();
-  }
+
+
+  return crearPdfBuffer(
+    documentDefinition
+  );
 }
 
-module.exports = { buildHistorialRecoleccionPdfBuffer };
+
+/* =========================================================
+   EXPORTACIÓN PÚBLICA
+   ========================================================= */
+
+module.exports = {
+  buildHistorialRecoleccionPdfBuffer,
+};

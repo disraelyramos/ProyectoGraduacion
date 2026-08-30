@@ -1,5 +1,6 @@
 import React, {
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -9,8 +10,6 @@ import {
   Form,
   Button,
   Card,
-  Row,
-  Col,
   InputGroup,
 } from "react-bootstrap";
 
@@ -21,142 +20,246 @@ import {
 } from "react-icons/fa";
 
 import "../../styles/historial-recoleccion.css";
-import "../../styles/historial-recoleccion2.css";
+
 import HistorialEnTablas from "./HistorialEnTablas";
 import apiClient from "../../utils/apiClient";
 
-
-const LIMIT = 10;
-
-
-/* =========================================================
-   PAGINACIÓN
-   ========================================================= */
-
-const clampPage = (p, totalPages) =>
-  Math.min(
-    Math.max(1, p),
-    totalPages
-  );
+import {
+  showBackendAlert,
+} from "../../utils/alerts";
 
 
 /* =========================================================
-   VALIDACIONES
+   CONFIGURACIÓN VISUAL
    ========================================================= */
 
-const buildValidationErrors = ({
+const DEFAULT_PAGE_SIZE = 10;
+
+
+/* =========================================================
+   MENSAJE EXPORTACIÓN VENCIDA
+
+   Solo UX.
+
+   Backend sigue siendo la fuente de verdad.
+   ========================================================= */
+
+const MENSAJE_EXPORTACION_EXPIRADA =
+  "El tiempo disponible para exportar esta búsqueda venció. Por seguridad, PDF y Excel se bloquearon. Presione 'Ver' nuevamente para habilitarlos.";
+
+
+/* =========================================================
+   VALIDACIÓN VISUAL
+   ========================================================= */
+
+function validarFormulario({
   buscarPor,
   valorBusqueda,
   fechaInicio,
   fechaFin,
-}) => {
-
+}) {
   const errors = {};
+
 
   if (!buscarPor) {
     errors.buscarPor =
       "Este campo es obligatorio";
   }
 
-  const value = String(
-    valorBusqueda || ""
-  ).trim();
 
-  if (!value) {
+  const busqueda =
+    String(
+      valorBusqueda || ""
+    ).trim();
+
+
+  if (!busqueda) {
     errors.valorBusqueda =
       "Este campo es obligatorio";
-  } else if (value.length < 2) {
+
+  } else if (
+    busqueda.length < 2
+  ) {
     errors.valorBusqueda =
       "Ingrese al menos 2 caracteres";
   }
+
 
   if (!fechaInicio) {
     errors.fechaInicio =
       "Este campo es obligatorio";
   }
 
+
   if (!fechaFin) {
     errors.fechaFin =
       "Este campo es obligatorio";
   }
 
-  if (fechaInicio && fechaFin) {
 
-    const ini =
-      new Date(
-        `${fechaInicio}T00:00:00`
-      );
+  if (
+    fechaInicio &&
+    fechaFin &&
+    fechaInicio > fechaFin
+  ) {
+    errors.fechaFin =
+      "La fecha final no puede ser menor a la inicial";
+  }
 
-    const fin =
-      new Date(
-        `${fechaFin}T23:59:59`
-      );
 
-    if (ini > fin) {
-      errors.fechaFin =
-        "La fecha final no puede ser menor a la inicial";
+  return errors;
+}
+
+
+/* =========================================================
+   ERROR HTTP
+   ========================================================= */
+
+function obtenerErrorHttp(err) {
+  return {
+    status:
+      Number(
+        err?.response?.status
+      ) || 500,
+
+    data:
+      err?.response?.data &&
+      typeof err.response.data === "object"
+        ? err.response.data
+        : {
+            message:
+              err?.message ||
+              "No se pudo conectar con el servidor.",
+          },
+  };
+}
+
+
+/* =========================================================
+   ERROR BLOB PDF / EXCEL
+   ========================================================= */
+
+async function obtenerErrorBlob(
+  err
+) {
+  const status =
+    Number(
+      err?.response?.status
+    ) || 500;
+
+
+  const responseData =
+    err?.response?.data;
+
+
+  if (
+    responseData instanceof Blob
+  ) {
+    try {
+
+      const text =
+        await responseData.text();
+
+
+      const json =
+        JSON.parse(
+          text
+        );
+
+
+      return {
+        status,
+
+        data: {
+          message:
+            json?.message ||
+            "No fue posible realizar la exportación.",
+
+          code:
+            json?.code ||
+            json?.codigo ||
+            null,
+
+          type:
+            json?.type ||
+            "validation",
+        },
+      };
+
+
+    } catch {
+
+      return {
+        status,
+
+        data: {
+          message:
+            "No fue posible procesar la respuesta de exportación.",
+        },
+      };
     }
   }
 
-  return errors;
-};
+
+  return obtenerErrorHttp(
+    err
+  );
+}
 
 
 /* =========================================================
-   MENSAJES DE ERROR
+   CALENDARIO
    ========================================================= */
 
-const getErrorMessage = (err) =>
-  err?.response?.data?.message ||
-  err?.message ||
-  "No se pudo conectar con el servidor.";
-
-
-/* =========================================================
-   ABRIR CALENDARIO NATIVO
-   ========================================================= */
-
-const tryOpenNativeDatePicker = (
+function abrirCalendario(
   inputEl
-) => {
+) {
+  if (!inputEl) {
+    return;
+  }
 
-  if (!inputEl) return;
 
   if (
     typeof inputEl.showPicker ===
     "function"
   ) {
-    return inputEl.showPicker();
+    inputEl.showPicker();
+
+    return;
   }
 
+
   inputEl.focus();
+
   inputEl.click();
-};
+}
 
 
 /* =========================================================
-   ABRIR PDF
+   PDF
    ========================================================= */
 
-const openBlobInNewTab = (
+function abrirBlobEnPestana(
   blob,
-  preOpenedWindow
-) => {
-
+  ventana
+) {
   const url =
-    URL.createObjectURL(blob);
+    URL.createObjectURL(
+      blob
+    );
+
 
   try {
 
     if (
-      preOpenedWindow &&
-      !preOpenedWindow.closed
+      ventana &&
+      !ventana.closed
     ) {
 
-      preOpenedWindow.location.href =
+      ventana.location.href =
         url;
 
-      preOpenedWindow.focus();
+      ventana.focus();
 
     } else {
 
@@ -166,51 +269,75 @@ const openBlobInNewTab = (
       );
     }
 
+
   } finally {
 
     setTimeout(
-      () =>
-        URL.revokeObjectURL(url),
+      () => {
+
+        URL.revokeObjectURL(
+          url
+        );
+
+      },
       60_000
     );
   }
-};
+}
 
 
 /* =========================================================
-   DESCARGAR ARCHIVO
+   EXCEL
    ========================================================= */
 
-const downloadBlob = (
+function descargarBlob(
   blob,
   filename
-) => {
-
+) {
   const url =
-    URL.createObjectURL(blob);
+    URL.createObjectURL(
+      blob
+    );
 
-  const a =
-    document.createElement("a");
 
-  a.href = url;
-  a.download = filename;
+  const link =
+    document.createElement(
+      "a"
+    );
 
-  document.body.appendChild(a);
 
-  a.click();
+  link.href =
+    url;
 
-  a.remove();
+  link.download =
+    filename;
+
+
+  document.body.appendChild(
+    link
+  );
+
+
+  link.click();
+
+  link.remove();
+
 
   setTimeout(
-    () =>
-      URL.revokeObjectURL(url),
+    () => {
+
+      URL.revokeObjectURL(
+        url
+      );
+
+    },
     30_000
   );
-};
+}
 
 
 /* =========================================================
-   CAMPO DE FECHA
+   CAMPO FECHA
    ========================================================= */
 
 const DateField = ({
@@ -221,10 +348,15 @@ const DateField = ({
   onChange,
 }) => {
 
-  const handleIconClick = () =>
-    tryOpenNativeDatePicker(
-      inputRef?.current
-    );
+  const handleCalendar =
+    () => {
+
+      abrirCalendario(
+        inputRef?.current
+      );
+
+    };
+
 
   return (
 
@@ -234,29 +366,46 @@ const DateField = ({
 
         <Form.Control
           ref={inputRef}
+
           type="date"
+
           name={name}
+
           value={value}
+
           onChange={onChange}
+
           className={`
             app-control
-            ${error ? "is-invalid" : ""}
+            ${
+              error
+                ? "is-invalid"
+                : ""
+            }
           `}
         />
 
+
         <InputGroup.Text
           role="button"
+
           tabIndex={0}
+
           title="Abrir calendario"
+
           className="historial-date-trigger"
-          onClick={handleIconClick}
+
+          onClick={
+            handleCalendar
+          }
+
           onKeyDown={(e) => {
 
             if (
               e.key === "Enter" ||
               e.key === " "
             ) {
-              handleIconClick();
+              handleCalendar();
             }
 
           }}
@@ -268,9 +417,10 @@ const DateField = ({
 
       </InputGroup>
 
+
       {error && (
 
-        <div className="invalid-feedback d-block">
+        <div className="invalid-feedback d-block historial-error">
 
           {error}
 
@@ -284,10 +434,11 @@ const DateField = ({
 
 
 /* =========================================================
-   COMPONENTE PRINCIPAL
+   COMPONENTE
    ========================================================= */
 
-const HistorialRecoleccion = () => {
+const HistorialRecoleccion =
+  () => {
 
   /* =======================================================
      FORMULARIO
@@ -297,24 +448,23 @@ const HistorialRecoleccion = () => {
     formData,
     setFormData,
   ] = useState({
-
     buscarPor: "",
     valorBusqueda: "",
     fechaInicio: "",
     fechaFin: "",
     order: "desc",
-
   });
 
-
-  /* =======================================================
-     ESTADOS
-     ======================================================= */
 
   const [
     errors,
     setErrors,
   ] = useState({});
+
+
+  /* =======================================================
+     CARGA
+     ======================================================= */
 
   const [
     loading,
@@ -322,10 +472,32 @@ const HistorialRecoleccion = () => {
   ] = useState(false);
 
 
+  /*
+    IMPORTANTE:
+
+    false:
+    no renderizar tablas.
+
+    true:
+    backend confirmó una búsqueda válida
+    con resultados.
+  */
+
+  const [
+    hasSearched,
+    setHasSearched,
+  ] = useState(false);
+
+
+  /* =======================================================
+     RESULTADOS
+     ======================================================= */
+
   const [
     detalle,
     setDetalle,
   ] = useState([]);
+
 
   const [
     pesaje,
@@ -338,6 +510,7 @@ const HistorialRecoleccion = () => {
     setPage,
   ] = useState(1);
 
+
   const [
     total,
     setTotal,
@@ -345,14 +518,16 @@ const HistorialRecoleccion = () => {
 
 
   const [
-    serverMessage,
-    setServerMessage,
-  ] = useState("");
+    pageSize,
+    setPageSize,
+  ] = useState(
+    DEFAULT_PAGE_SIZE
+  );
 
-  const [
-    hasSearched,
-    setHasSearched,
-  ] = useState(false);
+
+  /* =======================================================
+     SNAPSHOT
+     ======================================================= */
 
   const [
     exportId,
@@ -360,12 +535,25 @@ const HistorialRecoleccion = () => {
   ] = useState("");
 
 
+  const [
+    exportExpiresAtMs,
+    setExportExpiresAtMs,
+  ] = useState(null);
+
+
+  const [
+    exportExpired,
+    setExportExpired,
+  ] = useState(false);
+
+
   /* =======================================================
-     REFERENCIAS DE FECHA
+     REFERENCIAS
      ======================================================= */
 
   const fechaInicioRef =
     useRef(null);
+
 
   const fechaFinRef =
     useRef(null);
@@ -376,50 +564,208 @@ const HistorialRecoleccion = () => {
      ======================================================= */
 
   const totalPages =
-    useMemo(
-      () =>
-        Math.max(
-          1,
-          Math.ceil(
-            (total || 0) / LIMIT
-          )
-        ),
-      [total]
-    );
+    useMemo(() => {
+
+      if (
+        total <= 0 ||
+        pageSize <= 0
+      ) {
+        return 1;
+      }
+
+
+      return Math.max(
+        1,
+        Math.ceil(
+          total /
+          pageSize
+        )
+      );
+
+    }, [
+      total,
+      pageSize,
+    ]);
 
 
   /* =======================================================
-     LIMPIAR RESULTADOS
+     LIMPIAR EXPORTACIÓN
      ======================================================= */
 
-  const resetResults =
+  const limpiarExportacion =
     useCallback(() => {
 
-      setDetalle([]);
-      setPesaje([]);
-      setTotal(0);
-      setPage(1);
       setExportId("");
+
+      setExportExpiresAtMs(
+        null
+      );
+
+      setExportExpired(
+        false
+      );
 
     }, []);
 
 
   /* =======================================================
-     LIMPIAR ERROR DEL CAMPO
+     LIMPIAR RESULTADOS
+
+     Oculta completamente la tabla anterior.
      ======================================================= */
 
-  const clearErrorsFor =
+  const limpiarResultados =
+    useCallback(() => {
+
+      setDetalle([]);
+
+      setPesaje([]);
+
+      setTotal(0);
+
+      setPage(1);
+
+      setPageSize(
+        DEFAULT_PAGE_SIZE
+      );
+
+
+      limpiarExportacion();
+
+    }, [
+      limpiarExportacion,
+    ]);
+
+
+  /* =======================================================
+     BLOQUEAR EXPORTACIÓN
+
+     No elimina resultados.
+
+     Solo bloquea PDF / Excel y muestra Modal.
+     ======================================================= */
+
+  const bloquearExportacion =
+    useCallback(
+      (
+        message =
+          MENSAJE_EXPORTACION_EXPIRADA,
+
+        code =
+          "EXPORT_SNAPSHOT_EXPIRADO"
+      ) => {
+
+        setExportId("");
+
+        setExportExpiresAtMs(
+          null
+        );
+
+        setExportExpired(
+          true
+        );
+
+
+        void showBackendAlert({
+          status: 410,
+
+          data: {
+            message,
+
+            code,
+
+            type:
+              "validation",
+          },
+        });
+
+      },
+      []
+    );
+
+
+  /* =======================================================
+     TEMPORIZADOR DEL SNAPSHOT
+     ======================================================= */
+
+  useEffect(() => {
+
+    if (
+      !exportId ||
+      !Number.isFinite(
+        exportExpiresAtMs
+      )
+    ) {
+      return undefined;
+    }
+
+
+    const tiempoRestante =
+      exportExpiresAtMs -
+      Date.now();
+
+
+    if (
+      tiempoRestante <= 0
+    ) {
+
+      bloquearExportacion();
+
+      return undefined;
+    }
+
+
+    const timer =
+      window.setTimeout(
+        () => {
+
+          bloquearExportacion();
+
+        },
+        tiempoRestante
+      );
+
+
+    return () => {
+
+      window.clearTimeout(
+        timer
+      );
+
+    };
+
+  }, [
+    exportId,
+    exportExpiresAtMs,
+    bloquearExportacion,
+  ]);
+
+
+  /* =======================================================
+     LIMPIAR ERROR DE CAMPO
+     ======================================================= */
+
+  const limpiarErrorCampo =
     useCallback(
       (name) => {
 
         setErrors(
-          (prev) =>
-            prev[name]
-              ? {
-                  ...prev,
-                  [name]: "",
-                }
-              : prev
+          (prev) => {
+
+            if (
+              !prev[name]
+            ) {
+              return prev;
+            }
+
+
+            return {
+              ...prev,
+
+              [name]:
+                "",
+            };
+          }
         );
 
       },
@@ -428,7 +774,10 @@ const HistorialRecoleccion = () => {
 
 
   /* =======================================================
-     CAMBIO DE CAMPOS
+     CAMBIO DE FILTROS
+
+     Cualquier cambio invalida visualmente
+     la búsqueda anterior.
      ======================================================= */
 
   const handleChange =
@@ -438,158 +787,468 @@ const HistorialRecoleccion = () => {
         const {
           name,
           value,
-        } = e.target;
+        } =
+          e.target;
+
 
         setFormData(
           (prev) => ({
             ...prev,
-            [name]: value,
+
+            [name]:
+              value,
           })
         );
 
-        clearErrorsFor(name);
 
-        setHasSearched(false);
+        limpiarErrorCampo(
+          name
+        );
 
-        setServerMessage("");
 
-        resetResults();
+        /*
+          Ocultamos inmediatamente
+          resultados anteriores.
+        */
+
+        setHasSearched(
+          false
+        );
+
+
+        limpiarResultados();
 
       },
       [
-        clearErrorsFor,
-        resetResults,
+        limpiarErrorCampo,
+        limpiarResultados,
       ]
     );
 
 
   /* =======================================================
-     CONSULTAR HISTORIAL
+     CONFIGURAR SNAPSHOT
      ======================================================= */
 
-  const fetchHistorial =
+  const configurarSnapshot =
+    useCallback(
+      (data) => {
+
+        const nuevoExportId =
+          typeof data?.export_id ===
+            "string"
+            ? data.export_id.trim()
+            : "";
+
+
+        const segundos =
+          Number(
+            data
+              ?.export_expires_in_seconds
+          );
+
+
+        if (
+          nuevoExportId &&
+          Number.isFinite(
+            segundos
+          ) &&
+          segundos > 0
+        ) {
+
+          setExportId(
+            nuevoExportId
+          );
+
+
+          setExportExpiresAtMs(
+            Date.now() +
+            (
+              segundos *
+              1000
+            )
+          );
+
+
+          setExportExpired(
+            false
+          );
+
+
+          return true;
+        }
+
+
+        limpiarExportacion();
+
+        return false;
+
+      },
+      [
+        limpiarExportacion,
+      ]
+    );
+
+
+  /* =======================================================
+     CONSULTA
+
+     REGLA IMPORTANTE:
+
+     Los datos NO se guardan en el estado visual hasta
+     comprobar que toda la respuesta es válida.
+
+     Esto evita que una tabla aparezca por un instante.
+     ======================================================= */
+
+  const consultar =
     useCallback(
       async (
-        targetPage = 1
+        targetPage = 1,
+        prepararExportacion = false
       ) => {
 
-        setLoading(true);
+        setLoading(
+          true
+        );
 
-        setServerMessage("");
 
         try {
 
-          const res =
+          const response =
             await apiClient.get(
               "/historial-recoleccion",
               {
                 params: {
 
                   buscarPor:
-                    formData.buscarPor,
+                    formData
+                      .buscarPor,
 
                   valorBusqueda:
                     String(
-                      formData.valorBusqueda ||
-                        ""
+                      formData
+                        .valorBusqueda ||
+                      ""
                     ).trim(),
 
                   fechaInicio:
-                    formData.fechaInicio,
+                    formData
+                      .fechaInicio,
 
                   fechaFin:
-                    formData.fechaFin,
+                    formData
+                      .fechaFin,
+
+                  order:
+                    formData.order,
 
                   page:
                     targetPage,
 
-                  limit:
-                    LIMIT,
-
-                  order:
-                    formData.order,
+                  prepararExportacion,
                 },
               }
             );
 
 
           const data =
-            res.data || {};
+            response?.data ||
+            {};
 
 
-          const totalValue =
+          /* =================================================
+             PREPARAR DATOS
+
+             Todavía NO hacemos setDetalle ni setPesaje.
+             ================================================= */
+
+          const totalBackend =
             Number(
-              data?.total || 0
+              data.total
             );
 
 
-          setServerMessage(
-            data?.message || ""
-          );
+          const totalSeguro =
+            Number.isSafeInteger(
+              totalBackend
+            ) &&
+            totalBackend >= 0
+              ? totalBackend
+              : 0;
 
+
+          const pageBackend =
+            Number(
+              data.page
+            );
+
+
+          const pageSeguro =
+            Number.isSafeInteger(
+              pageBackend
+            ) &&
+            pageBackend >= 1
+              ? pageBackend
+              : targetPage;
+
+
+          const limitBackend =
+            Number(
+              data.limit
+            );
+
+
+          const limitSeguro =
+            Number.isSafeInteger(
+              limitBackend
+            ) &&
+            limitBackend > 0
+              ? limitBackend
+              : DEFAULT_PAGE_SIZE;
+
+
+          const detalleSeguro =
+            Array.isArray(
+              data?.data?.detalle
+            )
+              ? data.data.detalle
+              : [];
+
+
+          const pesajeSeguro =
+            Array.isArray(
+              data?.data?.pesaje
+            )
+              ? data.data.pesaje
+              : [];
+
+
+          /* =================================================
+             SIN RESULTADOS
+
+             No guardamos ningún dato.
+
+             Las tablas continúan ocultas.
+             ================================================= */
+
+          if (
+            totalSeguro === 0
+          ) {
+
+            setHasSearched(
+              false
+            );
+
+
+            limpiarResultados();
+
+
+            await showBackendAlert({
+              status: 404,
+
+              data: {
+                message:
+                  typeof data.message ===
+                    "string"
+                    ? data.message
+                    : "No se encontraron registros con los criterios seleccionados.",
+              },
+            });
+
+
+            return;
+          }
+
+
+          /* =================================================
+             VERIFICAR QUE HAYA FILAS
+
+             Protección adicional.
+
+             total > 0 pero detalle vacío en página 1
+             no debe mostrar una tabla vacía.
+             ================================================= */
+
+          if (
+            prepararExportacion &&
+            detalleSeguro.length === 0
+          ) {
+
+            setHasSearched(
+              false
+            );
+
+
+            limpiarResultados();
+
+
+            await showBackendAlert({
+              status: 500,
+
+              data: {
+                message:
+                  "El servidor indicó que existen registros, pero no devolvió información para mostrar.",
+              },
+            });
+
+
+            return;
+          }
+
+
+          /* =================================================
+             SNAPSHOT
+
+             Solo en nueva búsqueda con Ver.
+             ================================================= */
+
+          if (
+            prepararExportacion
+          ) {
+
+            const snapshotConfigurado =
+              configurarSnapshot(
+                data
+              );
+
+
+            if (
+              !snapshotConfigurado
+            ) {
+
+              setHasSearched(
+                false
+              );
+
+
+              limpiarResultados();
+
+
+              await showBackendAlert({
+                status: 500,
+
+                data: {
+                  message:
+                    "La consulta se realizó correctamente, pero no fue posible habilitar temporalmente la exportación. Presione 'Ver' nuevamente.",
+                },
+              });
+
+
+              return;
+            }
+          }
+
+
+          /* =================================================
+             RESPUESTA CONFIRMADA
+
+             RECIÉN AQUÍ actualizamos la pantalla.
+             ================================================= */
 
           setTotal(
-            totalValue
+            totalSeguro
           );
-
-
-          const nextPage =
-            Number(
-              data?.page ||
-                targetPage
-            );
 
 
           setPage(
-            nextPage
+            pageSeguro
+          );
+
+
+          setPageSize(
+            limitSeguro
           );
 
 
           setDetalle(
-            data?.data?.detalle ||
-              []
+            detalleSeguro
           );
 
 
           setPesaje(
-            data?.data?.pesaje ||
-              []
+            pesajeSeguro
           );
 
 
-          setExportId(
-            totalValue > 0 &&
-              data?.export_id
-              ? String(
-                  data.export_id
-                )
-              : ""
-          );
+          /* =================================================
+             MOSTRAR TABLAS
+
+             Solo nueva búsqueda válida.
+
+             Durante paginación ya estaba en true.
+             ================================================= */
+
+          if (
+            prepararExportacion
+          ) {
+
+            setHasSearched(
+              true
+            );
+
+          }
+
 
         } catch (err) {
 
-          resetResults();
+          const errorHttp =
+            obtenerErrorHttp(
+              err
+            );
 
-          setServerMessage(
-            getErrorMessage(err)
-          );
+
+          /*
+            Si esta petición viene del botón Ver,
+            jamás dejamos visible información anterior.
+          */
+
+          if (
+            prepararExportacion
+          ) {
+
+            setHasSearched(
+              false
+            );
+
+
+            limpiarResultados();
+
+          }
+
+
+          await showBackendAlert({
+            status:
+              errorHttp.status,
+
+            data:
+              errorHttp.data,
+          });
+
 
         } finally {
 
-          setLoading(false);
+          setLoading(
+            false
+          );
 
         }
 
       },
       [
         formData,
-        resetResults,
+        configurarSnapshot,
+        limpiarResultados,
       ]
     );
 
 
   /* =======================================================
-     ENVIAR FORMULARIO
+     BOTÓN VER
+
+     CORRECCIÓN DEL BUG:
+
+     NO hacemos setHasSearched(true) aquí.
      ======================================================= */
 
   const handleSubmit =
@@ -600,7 +1259,7 @@ const HistorialRecoleccion = () => {
 
 
         const validationErrors =
-          buildValidationErrors(
+          validarFormulario(
             formData
           );
 
@@ -610,39 +1269,68 @@ const HistorialRecoleccion = () => {
         );
 
 
+        /* =================================================
+           CAMPOS INVÁLIDOS
+           ================================================= */
+
         if (
           Object.keys(
             validationErrors
           ).length > 0
         ) {
 
-          setHasSearched(false);
+          setHasSearched(
+            false
+          );
 
-          setServerMessage("");
 
-          resetResults();
+          limpiarResultados();
+
 
           return;
         }
 
 
-        setHasSearched(true);
+        /* =================================================
+           NUEVA BÚSQUEDA
 
-        setPage(1);
+           PRIMERO:
+           ocultamos tabla anterior.
 
-        await fetchHistorial(1);
+           DESPUÉS:
+           consultamos backend.
+
+           Solo consultar() puede volver a poner
+           hasSearched=true cuando todo sea correcto.
+           ================================================= */
+
+        setHasSearched(
+          false
+        );
+
+
+        limpiarResultados();
+
+
+        await consultar(
+          1,
+          true
+        );
 
       },
       [
-        fetchHistorial,
+        consultar,
         formData,
-        resetResults,
+        limpiarResultados,
       ]
     );
 
 
   /* =======================================================
-     CAMBIO DE PÁGINA
+     PAGINACIÓN
+
+     No borra la tabla mientras cambia página.
+     No crea snapshot nuevo.
      ======================================================= */
 
   const handlePageChange =
@@ -651,35 +1339,38 @@ const HistorialRecoleccion = () => {
         nextPage
       ) => {
 
-        if (loading) return;
+        if (loading) {
+          return;
+        }
 
 
-        const safeNext =
-          clampPage(
-            nextPage,
-            totalPages
+        const pagina =
+          Number(
+            nextPage
           );
 
 
         if (
-          safeNext === page
+          !Number.isSafeInteger(
+            pagina
+          ) ||
+          pagina < 1 ||
+          pagina >
+            totalPages ||
+          pagina === page
         ) {
           return;
         }
 
 
-        setPage(
-          safeNext
-        );
-
-
-        await fetchHistorial(
-          safeNext
+        await consultar(
+          pagina,
+          false
         );
 
       },
       [
-        fetchHistorial,
+        consultar,
         loading,
         page,
         totalPages,
@@ -688,25 +1379,30 @@ const HistorialRecoleccion = () => {
 
 
   /* =======================================================
-     EXPORTACIÓN DISPONIBLE
+     EXPORTACIÓN
      ======================================================= */
 
   const canExport =
     hasSearched &&
     !loading &&
     total > 0 &&
-    Boolean(exportId);
+    Boolean(
+      exportId
+    ) &&
+    !exportExpired;
 
 
   /* =======================================================
-     EXPORTAR PDF
+     PDF
      ======================================================= */
 
   const handleExportPdf =
     useCallback(
       async () => {
 
-        if (!canExport) {
+        if (
+          !canExport
+        ) {
           return;
         }
 
@@ -720,11 +1416,10 @@ const HistorialRecoleccion = () => {
 
         try {
 
-          const res =
+          const response =
             await apiClient.get(
               "/historial-recoleccion/export/pdf",
               {
-
                 params: {
                   exportId,
                 },
@@ -736,10 +1431,13 @@ const HistorialRecoleccion = () => {
 
 
           const blob =
-            res.data instanceof Blob
-              ? res.data
+            response.data
+              instanceof Blob
+              ? response.data
               : new Blob(
-                  [res.data],
+                  [
+                    response.data,
+                  ],
                   {
                     type:
                       "application/pdf",
@@ -747,10 +1445,11 @@ const HistorialRecoleccion = () => {
                 );
 
 
-          openBlobInNewTab(
+          abrirBlobEnPestana(
             blob,
             newTab
           );
+
 
         } catch (err) {
 
@@ -762,9 +1461,58 @@ const HistorialRecoleccion = () => {
           }
 
 
-          setServerMessage(
-            getErrorMessage(err)
-          );
+          const errorHttp =
+            await obtenerErrorBlob(
+              err
+            );
+
+
+          const codigo =
+            errorHttp
+              ?.data?.code ||
+            errorHttp
+              ?.data?.codigo ||
+            null;
+
+
+          if (
+            codigo ===
+              "EXPORT_SNAPSHOT_EXPIRADO" ||
+            codigo ===
+              "EXPORT_SNAPSHOT_INVALIDO"
+          ) {
+
+            setExportId("");
+
+            setExportExpiresAtMs(
+              null
+            );
+
+            setExportExpired(
+              true
+            );
+
+
+            await showBackendAlert({
+              status:
+                errorHttp.status,
+
+              data:
+                errorHttp.data,
+            });
+
+
+            return;
+          }
+
+
+          await showBackendAlert({
+            status:
+              errorHttp.status,
+
+            data:
+              errorHttp.data,
+          });
 
         }
 
@@ -777,25 +1525,26 @@ const HistorialRecoleccion = () => {
 
 
   /* =======================================================
-     EXPORTAR EXCEL
+     EXCEL
      ======================================================= */
 
   const handleExportExcel =
     useCallback(
       async () => {
 
-        if (!canExport) {
+        if (
+          !canExport
+        ) {
           return;
         }
 
 
         try {
 
-          const res =
+          const response =
             await apiClient.get(
               "/historial-recoleccion/export/excel",
               {
-
                 params: {
                   exportId,
                 },
@@ -807,10 +1556,13 @@ const HistorialRecoleccion = () => {
 
 
           const blob =
-            res.data instanceof Blob
-              ? res.data
+            response.data
+              instanceof Blob
+              ? response.data
               : new Blob(
-                  [res.data],
+                  [
+                    response.data,
+                  ],
                   {
                     type:
                       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -818,16 +1570,66 @@ const HistorialRecoleccion = () => {
                 );
 
 
-          downloadBlob(
+          descargarBlob(
             blob,
             "historial_recoleccion.xlsx"
           );
 
+
         } catch (err) {
 
-          setServerMessage(
-            getErrorMessage(err)
-          );
+          const errorHttp =
+            await obtenerErrorBlob(
+              err
+            );
+
+
+          const codigo =
+            errorHttp
+              ?.data?.code ||
+            errorHttp
+              ?.data?.codigo ||
+            null;
+
+
+          if (
+            codigo ===
+              "EXPORT_SNAPSHOT_EXPIRADO" ||
+            codigo ===
+              "EXPORT_SNAPSHOT_INVALIDO"
+          ) {
+
+            setExportId("");
+
+            setExportExpiresAtMs(
+              null
+            );
+
+            setExportExpired(
+              true
+            );
+
+
+            await showBackendAlert({
+              status:
+                errorHttp.status,
+
+              data:
+                errorHttp.data,
+            });
+
+
+            return;
+          }
+
+
+          await showBackendAlert({
+            status:
+              errorHttp.status,
+
+            data:
+              errorHttp.data,
+          });
 
         }
 
@@ -847,16 +1649,15 @@ const HistorialRecoleccion = () => {
 
     <main className="historial-recoleccion-container app-page">
 
-      {/* ================================================
-          TARJETA DE BÚSQUEDA
-          ================================================ */}
+
+      {/* ===================================================
+          BÚSQUEDA
+          =================================================== */}
 
       <Card className="app-card historial-search-card">
 
         <Card.Body className="app-card-body">
 
-
-          {/* TÍTULO */}
 
           <div className="app-section-heading">
 
@@ -877,23 +1678,25 @@ const HistorialRecoleccion = () => {
           <div className="app-divider" />
 
 
-          {/* ============================================
-              FORMULARIO
-              ============================================ */}
-
           <Form
-            onSubmit={handleSubmit}
+            onSubmit={
+              handleSubmit
+            }
+
             className="historial-search-form"
           >
 
 
-            {/* ========================================
-                BUSCAR POR
-                ======================================== */}
+            {/* =============================================
+                FILTROS PRINCIPALES
+                ============================================= */}
 
-            <Row className="historial-form-row">
+            <div className="historial-filter-grid">
 
-              <Col xs={12}>
+
+              {/* BUSCAR POR */}
+
+              <div className="historial-filter-group">
 
                 <Form.Label className="app-label">
 
@@ -901,22 +1704,18 @@ const HistorialRecoleccion = () => {
 
                 </Form.Label>
 
-              </Col>
-
-
-              <Col
-                xs={12}
-                className="historial-field-wrap"
-              >
 
                 <Form.Select
                   name="buscarPor"
+
                   value={
                     formData.buscarPor
                   }
+
                   onChange={
                     handleChange
                   }
+
                   className={`
                     app-control
                     historial-field
@@ -942,35 +1741,23 @@ const HistorialRecoleccion = () => {
 
                 </Form.Select>
 
-              </Col>
 
-
-              {errors.buscarPor && (
-
-                <Col xs={12}>
+                {errors.buscarPor && (
 
                   <div className="invalid-feedback d-block historial-error">
 
-                    {
-                      errors.buscarPor
-                    }
+                    {errors.buscarPor}
 
                   </div>
 
-                </Col>
+                )}
 
-              )}
-
-            </Row>
+              </div>
 
 
-            {/* ========================================
-                TEXTO DE BÚSQUEDA
-                ======================================== */}
+              {/* BÚSQUEDA */}
 
-            <Row className="historial-form-row">
-
-              <Col xs={12}>
+              <div className="historial-filter-group">
 
                 <Form.Label className="app-label">
 
@@ -978,135 +1765,62 @@ const HistorialRecoleccion = () => {
 
                 </Form.Label>
 
-              </Col>
+
+                <InputGroup className="historial-search-input-group">
+
+                  <InputGroup.Text className="historial-search-icon">
+
+                    <FaSearch />
+
+                  </InputGroup.Text>
 
 
-              <Col
-                xs={12}
-                className="historial-field-wrap"
-              >
+                  <Form.Control
+                    type="text"
 
-                <Form.Control
-                  type="text"
-                  name="valorBusqueda"
-                  placeholder="Ej: CNT-001 o Bioinfeccioso..."
-                  value={
-                    formData.valorBusqueda
-                  }
-                  onChange={
-                    handleChange
-                  }
-                  className={`
-                    app-control
-                    historial-field
-                    ${
-                      errors.valorBusqueda
-                        ? "is-invalid"
-                        : ""
+                    name="valorBusqueda"
+
+                    placeholder="Ej: CNT-001 o Bioinfeccioso..."
+
+                    value={
+                      formData.valorBusqueda
                     }
-                  `}
-                />
 
-              </Col>
+                    onChange={
+                      handleChange
+                    }
+
+                    className={`
+                      app-control
+                      historial-field
+                      historial-search-input
+                      ${
+                        errors.valorBusqueda
+                          ? "is-invalid"
+                          : ""
+                      }
+                    `}
+                  />
+
+                </InputGroup>
 
 
-              {errors.valorBusqueda && (
-
-                <Col xs={12}>
+                {errors.valorBusqueda && (
 
                   <div className="invalid-feedback d-block historial-error">
 
-                    {
-                      errors.valorBusqueda
-                    }
+                    {errors.valorBusqueda}
 
                   </div>
 
-                </Col>
+                )}
 
-              )}
-
-            </Row>
+              </div>
 
 
-            {/* ========================================
-                RANGO DE FECHAS
-                ======================================== */}
+              {/* ORDEN */}
 
-            <Row className="historial-form-row">
-
-              <Col xs={12}>
-
-                <Form.Label className="app-label">
-
-                  Rango de Fechas
-
-                </Form.Label>
-
-              </Col>
-
-
-              <Col xs={12}>
-
-                <div className="historial-date-range">
-
-
-                  <DateField
-                    name="fechaInicio"
-                    value={
-                      formData.fechaInicio
-                    }
-                    error={
-                      errors.fechaInicio
-                    }
-                    inputRef={
-                      fechaInicioRef
-                    }
-                    onChange={
-                      handleChange
-                    }
-                  />
-
-
-                  <span
-                    className="historial-date-separator"
-                    aria-hidden="true"
-                  >
-                    —
-                  </span>
-
-
-                  <DateField
-                    name="fechaFin"
-                    value={
-                      formData.fechaFin
-                    }
-                    error={
-                      errors.fechaFin
-                    }
-                    inputRef={
-                      fechaFinRef
-                    }
-                    onChange={
-                      handleChange
-                    }
-                  />
-
-
-                </div>
-
-              </Col>
-
-            </Row>
-
-
-            {/* ========================================
-                ORDEN
-                ======================================== */}
-
-            <Row className="historial-form-row">
-
-              <Col xs={12}>
+              <div className="historial-filter-group">
 
                 <Form.Label className="app-label">
 
@@ -1114,22 +1828,18 @@ const HistorialRecoleccion = () => {
 
                 </Form.Label>
 
-              </Col>
-
-
-              <Col
-                xs={12}
-                className="historial-field-wrap"
-              >
 
                 <Form.Select
                   name="order"
+
                   value={
                     formData.order
                   }
+
                   onChange={
                     handleChange
                   }
+
                   className="app-control historial-field"
                 >
 
@@ -1143,28 +1853,102 @@ const HistorialRecoleccion = () => {
 
                 </Form.Select>
 
-              </Col>
+              </div>
 
-            </Row>
+            </div>
 
 
-            {/* ========================================
-                BOTÓN VER
-                ======================================== */}
+            {/* =============================================
+                FECHAS
+                ============================================= */}
+
+            <div className="historial-date-group">
+
+              <Form.Label className="app-label">
+
+                Rango de Fechas
+
+              </Form.Label>
+
+
+              <div className="historial-date-range">
+
+                <DateField
+                  name="fechaInicio"
+
+                  value={
+                    formData.fechaInicio
+                  }
+
+                  error={
+                    errors.fechaInicio
+                  }
+
+                  inputRef={
+                    fechaInicioRef
+                  }
+
+                  onChange={
+                    handleChange
+                  }
+                />
+
+
+                <span
+                  className="historial-date-separator"
+                  aria-hidden="true"
+                >
+                  —
+                </span>
+
+
+                <DateField
+                  name="fechaFin"
+
+                  value={
+                    formData.fechaFin
+                  }
+
+                  error={
+                    errors.fechaFin
+                  }
+
+                  inputRef={
+                    fechaFinRef
+                  }
+
+                  onChange={
+                    handleChange
+                  }
+                />
+
+              </div>
+
+            </div>
+
+
+            {/* =============================================
+                VER
+                ============================================= */}
 
             <div className="historial-submit-wrap">
 
               <Button
                 type="submit"
+
                 variant="primary"
+
                 className="app-btn historial-submit-btn"
-                disabled={loading}
+
+                disabled={
+                  loading
+                }
               >
 
                 <FaSearch
-                  className="me-2"
                   aria-hidden="true"
                 />
+
 
                 {
                   loading
@@ -1176,25 +1960,6 @@ const HistorialRecoleccion = () => {
 
             </div>
 
-
-            {/* ========================================
-                MENSAJE BACKEND
-                ======================================== */}
-
-            {serverMessage && (
-
-              <div
-                className="historial-server-message"
-                role="status"
-              >
-
-                {serverMessage}
-
-              </div>
-
-            )}
-
-
           </Form>
 
         </Card.Body>
@@ -1202,30 +1967,58 @@ const HistorialRecoleccion = () => {
       </Card>
 
 
-      {/* ================================================
+      {/* ===================================================
           RESULTADOS
-          ================================================ */}
+
+          Solo existen después de una respuesta
+          completamente válida.
+          =================================================== */}
 
       {hasSearched && (
 
         <section className="historial-results">
 
           <HistorialEnTablas
-            loading={loading}
-            detalle={detalle}
-            pesaje={pesaje}
-            page={page}
-            total={total}
-            limit={LIMIT}
+            loading={
+              loading
+            }
+
+            detalle={
+              detalle
+            }
+
+            pesaje={
+              pesaje
+            }
+
+            page={
+              page
+            }
+
+            total={
+              total
+            }
+
+            pageSize={
+              pageSize
+            }
+
             onPageChange={
               handlePageChange
             }
+
             canExport={
               canExport
             }
+
+            exportExpired={
+              exportExpired
+            }
+
             onExportPdf={
               handleExportPdf
             }
+
             onExportExcel={
               handleExportExcel
             }
@@ -1236,7 +2029,6 @@ const HistorialRecoleccion = () => {
       )}
 
     </main>
-
   );
 };
 

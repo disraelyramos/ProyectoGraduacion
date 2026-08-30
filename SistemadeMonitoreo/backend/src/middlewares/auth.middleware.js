@@ -1,83 +1,335 @@
-// middlewares/auth.middleware.js
-const jwt = require('jsonwebtoken');
-const pool = require('../config/db');
-require('dotenv').config();
+const {
+  verificarTokenJwt,
+  validarYRenovarSesion,
+  cerrarSesionPorToken,
+} = require(
+  "../services/Auth/Sesion.service"
+);
 
-// Acepta "40" o "40m" (pero recomendado: "40")
-function parseMinutes(value, fallback = 30) {
-  if (!value) return fallback;
-  const n = parseInt(String(value).trim(), 10);
-  return Number.isFinite(n) && n > 0 ? n : fallback;
+
+/* =========================================================
+   TOKEN BEARER
+
+   El middleware únicamente extrae el token del request.
+
+   La validación del JWT y la sesión pertenecen al Service.
+   ========================================================= */
+
+function obtenerBearerToken(req) {
+  const authorization =
+    String(
+      req.headers?.authorization || ""
+    ).trim();
+
+
+  if (!authorization) {
+    return null;
+  }
+
+
+  /*
+    Acepta:
+
+      Bearer TOKEN
+      Bearer     TOKEN
+
+    No distingue mayúsculas/minúsculas en "Bearer".
+  */
+
+  const match =
+    authorization.match(
+      /^Bearer\s+(.+)$/i
+    );
+
+
+  if (!match) {
+    return null;
+  }
+
+
+  const token =
+    String(
+      match[1] || ""
+    ).trim();
+
+
+  return token || null;
 }
 
-const SESSION_INACTIVITY_MIN = parseMinutes(process.env.SESSION_INACTIVITY_MIN, 30);
 
-module.exports = async (req, res, next) => {
+/* =========================================================
+   CERRAR SESIÓN DE FORMA SEGURA
+
+   Se utiliza cuando el JWT llegó a su límite absoluto.
+
+   Si la actualización en BD falla, no ocultamos
+   el error original del JWT.
+   ========================================================= */
+
+async function cerrarSesionSegura(
+  token
+) {
   try {
-    // 1) Header y token
-    const authHeader = req.headers.authorization;
-    if (!authHeader) return res.status(401).json({ message: 'Token requerido' });
 
-    const [scheme, token] = authHeader.split(' ');
-    if (scheme !== 'Bearer' || !token) {
-      return res.status(401).json({ message: 'Formato de Authorization inválido' });
+    await cerrarSesionPorToken(
+      token
+    );
+
+  } catch (error) {
+
+    console.error(
+      "No fue posible cerrar la sesión asociada al token:",
+      error
+    );
+
+  }
+}
+
+
+/* =========================================================
+   MIDDLEWARE DE AUTENTICACIÓN
+
+   RESPONSABILIDAD:
+
+   1. Obtener Bearer token.
+   2. Verificar JWT mediante Sesion.service.
+   3. Validar sesión en PostgreSQL.
+   4. Renovar ventana de inactividad.
+   5. Construir req.user.
+
+   NO maneja:
+   - SQL directamente.
+   - SESSION_INACTIVITY_MIN.
+   - JWT_SECRET.
+   - JWT_EXPIRES_IN.
+   - lógica de creación de sesiones.
+
+   Esas responsabilidades pertenecen a:
+   Sesion.service.js + auth.config.js + .env
+   ========================================================= */
+
+module.exports =
+  async (req, res, next) => {
+
+    /* =====================================================
+       1. OBTENER TOKEN
+       ===================================================== */
+
+    const token =
+      obtenerBearerToken(
+        req
+      );
+
+
+    if (!token) {
+      return res
+        .status(401)
+        .json({
+          message:
+            "Token de autenticación requerido.",
+        });
     }
 
-    // 2) Verificar JWT
+
+    /* =====================================================
+       2. VERIFICAR JWT
+
+       JWT_EXPIRES_IN representa el límite absoluto
+       configurado desde .env.
+
+       Ejemplo:
+       JWT_EXPIRES_IN=12h
+       ===================================================== */
+
     let decoded;
+
+
     try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET);
-    } catch (errJwt) {
-      if (errJwt?.name === 'TokenExpiredError') {
-        return res.status(401).json({ message: 'Token expirado' });
+
+      decoded =
+        verificarTokenJwt(
+          token
+        );
+
+
+    } catch (error) {
+
+      /* ---------------------------------------------------
+         TOKEN VENCIDO POR LÍMITE ABSOLUTO
+         --------------------------------------------------- */
+
+      if (
+        error?.name ===
+        "TokenExpiredError"
+      ) {
+
+        await cerrarSesionSegura(
+          token
+        );
+
+
+        return res
+          .status(401)
+          .json({
+            message:
+              "La sesión alcanzó su tiempo máximo. Inicie sesión nuevamente.",
+          });
       }
-      return res.status(403).json({ message: 'Token no válido' });
+
+
+      /* ---------------------------------------------------
+         JWT MALFORMADO / FIRMA INVÁLIDA / ETC.
+         --------------------------------------------------- */
+
+      return res
+        .status(401)
+        .json({
+          message:
+            "Token de autenticación inválido.",
+        });
     }
 
-    // 3) Validar sesión en BD (token debe existir y estar activa)
-    const { rows } = await pool.query(
-      `SELECT id, id_usuario, fecha_expiracion, activo
-         FROM sesiones
-        WHERE token = $1
-        LIMIT 1`,
-      [token]
-    );
 
-    if (rows.length === 0 || rows[0].activo !== true) {
-      return res.status(401).json({ message: 'Sesión expirada o inválida' });
+    /* =====================================================
+       3. VALIDAR SESIÓN + RENOVAR INACTIVIDAD
+
+       Sesion.service ejecuta una operación atómica:
+
+         UPDATE sesiones
+         SET fecha_expiracion = NOW() + ...
+         WHERE token = ...
+           AND activo = TRUE
+           AND fecha_expiracion > NOW()
+
+       Si devuelve null:
+       - expiró por inactividad,
+       - fue cerrada,
+       - fue reemplazada por otra sesión,
+       - o no existe.
+       ===================================================== */
+
+    let sesion;
+
+
+    try {
+
+      sesion =
+        await validarYRenovarSesion(
+          token
+        );
+
+
+    } catch (error) {
+
+      console.error(
+        "Error verificando la sesión en base de datos:",
+        error
+      );
+
+
+      return res
+        .status(500)
+        .json({
+          message:
+            "Error al validar la sesión.",
+        });
     }
 
-    const sesion = rows[0];
-    const ahora = new Date();
-    const exp = new Date(sesion.fecha_expiracion);
 
-    // 4) Si la sesión expiró por inactividad → desactivar y rechazar
-    if (ahora > exp) {
-      await pool.query(`UPDATE sesiones SET activo = false WHERE id = $1`, [sesion.id]);
-      return res.status(401).json({ message: 'Sesión expirada' });
+    if (!sesion) {
+      return res
+        .status(401)
+        .json({
+          message:
+            "Sesión expirada por inactividad o cerrada.",
+        });
     }
 
-    // 5) Renovar ventana de inactividad usando reloj de la BD
-    await pool.query(
-      `UPDATE sesiones
-          SET fecha_expiracion = NOW() + ($1 || ' minutes')::interval
-        WHERE id = $2`,
-      [SESSION_INACTIVITY_MIN, sesion.id]
-    );
 
-    // 6) Adjuntar identidad al request
-    // id_usuario se toma de la sesión (fuente de verdad). Datos extra vienen del JWT.
+    /* =====================================================
+       4. VERIFICAR CONSISTENCIA JWT ↔ SESIÓN
+
+       El id_usuario almacenado en PostgreSQL debe coincidir
+       con el id_usuario firmado dentro del JWT.
+
+       No confiamos únicamente en ninguno de los dos.
+       ===================================================== */
+
+    const usuarioJwt =
+      Number(
+        decoded?.id_usuario
+      );
+
+
+    const usuarioSesion =
+      Number(
+        sesion?.id_usuario
+      );
+
+
+    if (
+      !Number.isSafeInteger(
+        usuarioJwt
+      ) ||
+      usuarioJwt <= 0 ||
+      !Number.isSafeInteger(
+        usuarioSesion
+      ) ||
+      usuarioSesion <= 0 ||
+      usuarioJwt !== usuarioSesion
+    ) {
+
+      await cerrarSesionSegura(
+        token
+      );
+
+
+      return res
+        .status(401)
+        .json({
+          message:
+            "La sesión no es válida.",
+        });
+    }
+
+
+    /* =====================================================
+       5. IDENTIDAD DEL REQUEST
+
+       Conservamos exactamente el contrato que utilizan
+       actualmente los Controllers del sistema:
+
+       req.user.id_usuario
+       req.user.usuario
+       req.user.nombre
+       req.user.rol_id
+       req.user.rol
+
+       id_usuario se obtiene de la sesión de PostgreSQL.
+       Los demás metadatos vienen del JWT firmado.
+       ===================================================== */
+
     req.user = {
-      id_usuario: sesion.id_usuario,
-      usuario: decoded.usuario,
-      nombre: decoded.nombre,
-      rol_id: decoded.rol_id,
-      rol: decoded.rol
+      id_usuario:
+        usuarioSesion,
+
+      usuario:
+        decoded.usuario,
+
+      nombre:
+        decoded.nombre,
+
+      rol_id:
+        decoded.rol_id,
+
+      rol:
+        decoded.rol,
     };
 
+
+    /* =====================================================
+       6. CONTINUAR
+       ===================================================== */
+
     return next();
-  } catch (err) {
-    console.error('Error en auth middleware:', err);
-    return res.status(500).json({ message: 'Error de autenticación' });
-  }
-};
+  };

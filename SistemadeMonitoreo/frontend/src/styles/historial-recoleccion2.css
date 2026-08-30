@@ -1,72 +1,1017 @@
 /* =========================================================
-   CENTRADO DEL FORMULARIO
+   HISTORIAL DE RECOLECCIÓN
+
+   Estilos específicos de esta pantalla.
+
+   Colores, bordes, sombras, tamaños y espaciados generales
+   provienen de app-theme.css mediante variables --app-*.
+   ========================================================= */
+
+
+/* =========================================================
+   CONTENEDOR PRINCIPAL
+   ========================================================= */
+
+.historial-recoleccion-container {
+  width: 100%;
+  min-width: 0;
+}
+
+
+/* =========================================================
+   TARJETA DE BÚSQUEDA
+   ========================================================= */
+
+.historial-search-card {
+  width: 100%;
+  min-width: 0;
+
+  margin: 0 auto;
+}
+
+
+/* =========================================================
+   FORMULARIO
    ========================================================= */
 
 .historial-search-form {
   width: 100%;
-  max-width: 700px;
+  min-width: 0;
+
   margin: 0 auto;
 }
 
-/* Selects e input de búsqueda */
-.historial-field-wrap {
+
+/* =========================================================
+   LABELS
+   ========================================================= */
+
+.historial-search-form .app-label {
+  display: block;
+
   width: 100%;
-  display: flex;
-  justify-content: center;
+
+  margin-bottom: 0.4rem;
+
+  color: var(--app-color-text);
+
+  font-size: 0.9rem;
+  font-weight: 650;
 }
+
+
+/* =========================================================
+   GRID PRINCIPAL DE FILTROS
+
+   Móvil:
+   Buscar por
+   Búsqueda
+   Orden
+
+   Escritorio:
+   Buscar por | Búsqueda | Orden
+   ========================================================= */
+
+.historial-filter-grid {
+  width: 100%;
+  min-width: 0;
+
+  display: grid;
+
+  grid-template-columns: 1fr;
+
+  gap: 1rem;
+}
+
+
+.historial-filter-group {
+  width: 100%;
+  min-width: 0;
+}
+
+
+/* =========================================================
+   INPUTS Y SELECTS
+   ========================================================= */
 
 .historial-field {
   display: block;
+
   width: 100%;
-  max-width: 500px;
-  margin: 0 auto;
+  min-width: 0;
+
+  margin: 0;
+
+  background-color:
+    var(--app-color-surface);
 }
 
-/* Fechas */
-.historial-date-range {
+
+.historial-field::placeholder {
+  color:
+    var(--app-color-text-muted);
+
+  opacity: 0.72;
+}
+
+
+/* =========================================================
+   BUSCADOR CON ICONO
+   ========================================================= */
+
+.historial-search-input-group {
   width: 100%;
-  max-width: 500px;
-  margin: 0 auto;
+  min-width: 0;
+}
+
+
+.historial-search-icon {
+  width: 2.8rem;
 
   display: flex;
-  flex-direction: column;
   align-items: center;
+  justify-content: center;
 
-  gap: 12px;
+  padding: 0;
+
+  color:
+    var(--app-color-text-muted);
+
+  background-color:
+    var(--app-color-surface);
+
+  border-color:
+    var(--app-color-border);
+
+  border-top-left-radius:
+    var(--app-radius-sm);
+
+  border-bottom-left-radius:
+    var(--app-radius-sm);
 }
+
+
+.historial-search-input {
+  min-width: 0;
+
+  border-left: 0;
+}
+
+
+.historial-search-input:focus {
+  border-left: 0;
+}
+
+
+/* Cuando el input recibe foco, resaltamos también
+   visualmente el icono izquierdo. */
+
+.historial-search-input-group:focus-within
+.historial-search-icon {
+  color:
+    var(--app-color-primary);
+
+  border-color:
+    var(--app-color-primary);
+}
+
+
+/* =========================================================
+   CONTROLES DESHABILITADOS
+   ========================================================= */
+
+.historial-search-form
+.app-control:disabled,
+.historial-search-form
+.app-control[readonly] {
+  color:
+    var(--app-color-text-muted);
+
+  background-color: #f4f6f8;
+
+  opacity: 1;
+
+  cursor: not-allowed;
+}
+
+
+/* =========================================================
+   RANGO DE FECHAS
+   ========================================================= */
+
+.historial-date-group {
+  width: 100%;
+  min-width: 0;
+
+  margin-top: 1.2rem;
+}
+
+
+.historial-date-range {
+  width: 100%;
+  min-width: 0;
+
+  display: grid;
+
+  grid-template-columns: 1fr;
+
+  gap: 0.65rem;
+
+  align-items: center;
+}
+
+
+/* =========================================================
+   CAMPO INDIVIDUAL DE FECHA
+   ========================================================= */
 
 .historial-date-field {
   width: 100%;
-  max-width: 500px;
-  margin: 0 auto;
+  min-width: 0;
 }
 
-/* Separador de fechas */
+
+/* =========================================================
+   INPUT GROUP FECHA
+   ========================================================= */
+
+.historial-date-input-group {
+  width: 100%;
+  min-width: 0;
+}
+
+
+.historial-date-input-group
+.form-control {
+  min-width: 0;
+
+  border-top-right-radius: 0;
+
+  border-bottom-right-radius: 0;
+}
+
+
+/* =========================================================
+   BOTÓN CALENDARIO
+   ========================================================= */
+
+.historial-date-trigger {
+  width: 2.8rem;
+  min-width: 2.8rem;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 0;
+
+  color:
+    var(--app-color-text);
+
+  background-color: #f8f9fa;
+
+  border-color:
+    var(--app-color-border);
+
+  border-top-right-radius:
+    var(--app-radius-sm);
+
+  border-bottom-right-radius:
+    var(--app-radius-sm);
+
+  cursor: pointer;
+
+  transition:
+    color var(--app-transition),
+    background-color var(--app-transition),
+    border-color var(--app-transition),
+    box-shadow var(--app-transition);
+}
+
+
+.historial-date-trigger:hover {
+  color:
+    var(--app-color-primary);
+
+  background-color:
+    var(--app-color-primary-soft);
+
+  border-color:
+    var(--app-color-primary);
+}
+
+
+.historial-date-trigger:focus {
+  outline: none;
+
+  color:
+    var(--app-color-primary);
+
+  background-color:
+    var(--app-color-primary-soft);
+
+  border-color:
+    var(--app-color-primary);
+
+  box-shadow:
+    0 0 0 0.2rem
+    rgba(13, 110, 253, 0.15);
+}
+
+
+/* =========================================================
+   SEPARADOR DE FECHAS
+   ========================================================= */
+
 .historial-date-separator {
-  display: block;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  min-height: 1rem;
+
+  color:
+    var(--app-color-text-muted);
+
+  font-size: 1rem;
+  font-weight: 600;
+
+  user-select: none;
 }
 
-/* Botón */
+
+/* =========================================================
+   ERRORES DE VALIDACIÓN
+   ========================================================= */
+
+.historial-error {
+  width: 100%;
+
+  margin-top: 0.35rem;
+
+  font-size: 0.82rem;
+
+  text-align: left;
+}
+
+
+/* =========================================================
+   BOTÓN VER
+   ========================================================= */
+
 .historial-submit-wrap {
   width: 100%;
 
   display: flex;
+
   justify-content: center;
 
-  margin-top: 24px;
+  margin-top: 1.4rem;
 }
 
+
 .historial-submit-btn {
+  display: inline-flex;
+
+  align-items: center;
+  justify-content: center;
+
+  gap: 0.5rem;
+
   width: auto;
+
   min-width: 120px;
+
+  padding-left: 1.15rem;
+  padding-right: 1.15rem;
+}
+
+
+/* =========================================================
+   MENSAJE DEL SERVIDOR
+   ========================================================= */
+
+.historial-server-message {
+  width: 100%;
+
+  margin-top: 1rem;
+
+  padding: 0.8rem 1rem;
+
+  color: #842029;
+
+  background-color: #f8d7da;
+
+  border: 1px solid #f5c2c7;
+
+  border-radius:
+    var(--app-radius-sm);
+
+  font-size: 0.875rem;
+
+  line-height: 1.4;
+
+  text-align: left;
+
+  overflow-wrap: anywhere;
+}
+
+
+/* =========================================================
+   CONTENEDOR DE RESULTADOS
+   ========================================================= */
+
+.historial-results {
+  width: 100%;
+  min-width: 0;
+
+  margin-top:
+    var(--app-space-5);
+}
+
+
+.historial-tables {
+  width: 100%;
+  min-width: 0;
+}
+
+
+/* =========================================================
+   ÚNICA TARJETA DE RESULTADOS
+
+   Contiene:
+   - cabecera
+   - PDF / Excel
+   - tabla recolección
+   - tabla pesaje
+   - paginación
+   ========================================================= */
+
+.historial-results-card {
+  width: 100%;
+  min-width: 0;
 
   margin: 0 auto;
 }
 
-/* Tablet en adelante */
+
+.historial-results-body {
+  width: 100%;
+  min-width: 0;
+}
+
+
+/* =========================================================
+   CABECERA GENERAL DE RESULTADOS
+   ========================================================= */
+
+.historial-results-header {
+  width: 100%;
+  min-width: 0;
+
+  display: flex;
+
+  flex-direction: column;
+
+  align-items: flex-start;
+
+  gap: 1rem;
+}
+
+
+/* =========================================================
+   TÍTULO RESULTADOS
+   ========================================================= */
+
+.historial-results-title-wrap {
+  display: flex;
+
+  align-items: center;
+
+  gap: 0.55rem;
+
+  min-width: 0;
+}
+
+
+.historial-results-title-icon {
+  flex-shrink: 0;
+
+  color:
+    var(--app-color-primary);
+
+  font-size: 1.1rem;
+}
+
+
+.historial-results-title {
+  margin: 0;
+
+  color:
+    var(--app-color-heading);
+
+  font-size:
+    clamp(
+      1.05rem,
+      3vw,
+      1.3rem
+    );
+
+  font-weight: 700;
+
+  line-height: 1.3;
+
+  overflow-wrap: anywhere;
+}
+
+
+/* =========================================================
+   DIVISOR RESULTADOS
+   ========================================================= */
+
+.historial-results-divider {
+  width: 100%;
+
+  height: 1px;
+
+  margin:
+    1rem 0
+    1.25rem;
+
+  background-color:
+    var(--app-color-border-soft);
+}
+
+
+/* =========================================================
+   BOTONES PDF / EXCEL
+
+   ÚNICAMENTE EXISTE ESTE GRUPO.
+   ========================================================= */
+
+.historial-export-actions {
+  width: 100%;
+
+  display: flex;
+
+  flex-wrap: wrap;
+
+  align-items: center;
+
+  gap: 0.65rem;
+}
+
+
+.historial-export-btn {
+  display: inline-flex;
+
+  align-items: center;
+  justify-content: center;
+
+  min-width: 135px;
+
+  padding-left: 1rem;
+  padding-right: 1rem;
+
+  white-space: nowrap;
+
+  box-shadow:
+    0 1px 3px
+    rgba(0, 0, 0, 0.08);
+}
+
+
+/* =========================================================
+   SECCIONES DE TABLA
+   ========================================================= */
+
+.historial-result-section {
+  width: 100%;
+  min-width: 0;
+}
+
+
+.historial-result-section
++ .historial-result-section {
+  margin-top: 2rem;
+}
+
+
+/* =========================================================
+   TÍTULOS DE TABLAS
+   ========================================================= */
+
+.historial-table-title {
+  margin:
+    0 0
+    0.8rem;
+
+  color:
+    var(--app-color-primary);
+
+  font-size:
+    clamp(
+      1rem,
+      2.5vw,
+      1.1rem
+    );
+
+  font-weight: 700;
+
+  line-height: 1.3;
+}
+
+
+/* =========================================================
+   SCROLL DE TABLAS
+   ========================================================= */
+
+.historial-result-section
+.app-table-scroll {
+  width: 100%;
+  min-width: 0;
+
+  max-height: 26rem;
+
+  overflow-x: auto;
+  overflow-y: auto;
+
+  background-color:
+    var(--app-color-surface);
+
+  border:
+    1px solid
+    var(--app-color-border-soft);
+
+  border-radius:
+    var(--app-radius-sm);
+
+  -webkit-overflow-scrolling:
+    touch;
+}
+
+
+/* =========================================================
+   TABLA GENERAL
+   ========================================================= */
+
+.historial-table {
+  width: 100%;
+
+  margin: 0;
+
+  color:
+    var(--app-color-text);
+
+  border-collapse: separate;
+
+  border-spacing: 0;
+}
+
+
+/* =========================================================
+   TABLA DE RECOLECCIÓN
+
+   Tiene 10 columnas, por eso no se comprime.
+   ========================================================= */
+
+.historial-table--detail {
+  min-width: 1180px;
+}
+
+
+/* =========================================================
+   TABLA DE PESAJE
+   ========================================================= */
+
+.historial-table--weight {
+  min-width: 700px;
+}
+
+
+/* =========================================================
+   CABECERAS
+   ========================================================= */
+
+.historial-table
+thead
+th {
+  padding:
+    0.72rem
+    0.65rem;
+
+  color: #ffffff;
+
+  background-color:
+    var(--app-color-table-head);
+
+  border-color:
+    var(--app-color-table-head-border);
+
+  font-size: 0.8rem;
+
+  font-weight: 700;
+
+  line-height: 1.2;
+
+  text-align: center;
+
+  vertical-align: middle;
+
+  white-space: normal;
+}
+
+
+/* =========================================================
+   CABECERA STICKY
+   ========================================================= */
+
+.historial-table
+.sticky-head
+th {
+  position: sticky;
+
+  top: 0;
+
+  z-index: 5;
+}
+
+
+/* =========================================================
+   CELDAS
+   ========================================================= */
+
+.historial-table
+tbody
+td {
+  padding:
+    0.68rem
+    0.65rem;
+
+  color:
+    var(--app-color-text);
+
+  background-color:
+    var(--app-color-surface);
+
+  border-color:
+    var(--app-color-border-soft);
+
+  font-size: 0.84rem;
+
+  line-height: 1.35;
+
+  vertical-align: middle;
+}
+
+
+/* =========================================================
+   FILAS ALTERNAS
+   ========================================================= */
+
+.historial-table
+tbody
+tr:nth-child(even)
+td {
+  background-color: #fbfcfd;
+}
+
+
+/* =========================================================
+   HOVER
+   ========================================================= */
+
+.historial-table
+tbody
+tr:hover
+td {
+  background-color:
+    var(--app-color-row-hover);
+}
+
+
+/* =========================================================
+   CELDAS NUMÉRICAS
+   ========================================================= */
+
+.historial-cell-number {
+  text-align: right;
+
+  white-space: nowrap;
+}
+
+
+/* =========================================================
+   SIN RESULTADOS / CARGANDO
+   ========================================================= */
+
+.historial-table-state {
+  padding:
+    1.7rem !important;
+
+  color:
+    var(--app-color-text-muted) !important;
+
+  background-color:
+    var(--app-color-surface) !important;
+
+  text-align:
+    center !important;
+
+  font-style: italic;
+}
+
+
+/* =========================================================
+   PAGINACIÓN
+   ========================================================= */
+
+.historial-pagination-bar {
+  width: 100%;
+
+  display: flex;
+
+  flex-direction: column;
+
+  align-items: center;
+
+  gap: 1rem;
+
+  margin-top: 1.75rem;
+
+  padding-top: 1rem;
+
+  border-top:
+    1px solid
+    var(--app-color-border-soft);
+}
+
+
+.historial-pagination-info {
+  color:
+    var(--app-color-text-muted);
+
+  font-size: 0.875rem;
+
+  text-align: center;
+}
+
+
+.historial-pagination-info
+strong {
+  color:
+    var(--app-color-text);
+
+  font-weight: 600;
+}
+
+
+.historial-pagination-control {
+  max-width: 100%;
+
+  overflow-x: auto;
+}
+
+
+/* =========================================================
+   TABLET
+   ========================================================= */
+
 @media (min-width: 576px) {
+
+  /* -----------------------------------------
+     RESULTADOS
+     ----------------------------------------- */
+
+  .historial-results-header {
+    flex-direction: row;
+
+    align-items: center;
+
+    justify-content:
+      space-between;
+  }
+
+
+  .historial-export-actions {
+    width: auto;
+
+    justify-content:
+      flex-end;
+  }
+
+
+  /* -----------------------------------------
+     PAGINACIÓN
+     ----------------------------------------- */
+
+  .historial-pagination-bar {
+    flex-direction: row;
+
+    justify-content:
+      space-between;
+
+    align-items: center;
+  }
+
+
+  .historial-pagination-info {
+    text-align: left;
+  }
+}
+
+
+/* =========================================================
+   TABLET GRANDE / ESCRITORIO
+   ========================================================= */
+
+@media (min-width: 768px) {
+
+  /* =======================================================
+     FORMULARIO EN 3 COLUMNAS
+     ======================================================= */
+
+  .historial-filter-grid {
+    grid-template-columns:
+      minmax(180px, 0.95fr)
+      minmax(260px, 1.35fr)
+      minmax(210px, 1fr);
+
+    gap: 1.25rem;
+  }
+
+
+  /* =======================================================
+     FECHAS EN UNA FILA
+     ======================================================= */
+
   .historial-date-range {
-    max-width: 500px;
+    grid-template-columns:
+      minmax(0, 1fr)
+      auto
+      minmax(0, 1fr);
+
+    gap: 0.8rem;
+  }
+
+
+  .historial-date-separator {
+    min-width: 1rem;
+  }
+}
+
+
+/* =========================================================
+   ESCRITORIO
+   ========================================================= */
+
+@media (min-width: 992px) {
+
+  /* El formulario usa prácticamente todo el ancho disponible
+     de la tarjeta, como en el diseño de referencia. */
+
+  .historial-search-form {
+    max-width: 100%;
+  }
+
+
+  .historial-filter-grid {
+    gap: 1.4rem;
+  }
+
+
+  .historial-date-group {
+    margin-top: 1.35rem;
+  }
+
+
+  .historial-submit-wrap {
+    margin-top: 1.3rem;
+  }
+
+
+  .historial-result-section
+  + .historial-result-section {
+    margin-top: 2.25rem;
+  }
+}
+
+
+/* =========================================================
+   PANTALLAS GRANDES
+   ========================================================= */
+
+@media (min-width: 1200px) {
+
+  .historial-search-card,
+  .historial-results-card {
+    width: 100%;
+  }
+
+
+  .historial-table
+  tbody
+  td {
+    font-size: 0.85rem;
   }
 }

@@ -1,143 +1,1095 @@
 const pool = require("../../config/db");
 
-function normOrder(v) {
-  const s = String(v || "DESC").toUpperCase();
-  return s === "ASC" ? "ASC" : "DESC";
+
+/* =========================================================
+   CONSTANTES
+   ========================================================= */
+
+const BUSQUEDAS_PERMITIDAS = new Set([
+  "codigo",
+  "tipo",
+]);
+
+const ORDENES_PERMITIDOS = new Set([
+  "ASC",
+  "DESC",
+]);
+
+const DEFAULT_LIMIT = 10;
+const MAX_LIMIT = 100;
+
+const MIN_SEARCH_LENGTH = 2;
+const MAX_SEARCH_LENGTH = 200;
+
+
+/* =========================================================
+   ERROR DE VALIDACIÓN
+   ========================================================= */
+
+function crearErrorValidacion(
+  message,
+  code = "VALIDATION_ERROR"
+) {
+  const error =
+    new Error(message);
+
+  error.statusCode = 400;
+  error.type = "validation";
+  error.code = code;
+
+  return error;
 }
 
-async function consultarHistorial(filtros, opciones = {}) {
-  const {
-    buscarPor,      // "codigo" | "tipo"
-    valorBusqueda,  // string
-    fechaInicio,    // YYYY-MM-DD
-    fechaFin,       // YYYY-MM-DD
-    order,          // "ASC" | "DESC"
-  } = filtros;
 
-  const { paginado = true, limit = 10, offset = 0 } = opciones;
-  const safeOrder = normOrder(order);
+/* =========================================================
+   NORMALIZAR BUSCAR POR
+   ========================================================= */
 
-  const client = await pool.connect();
-  try {
-    let where = `
-      WHERE r.fecha_recoleccion::date BETWEEN $1::date AND $2::date
-    `;
-    const paramsBase = [fechaInicio, fechaFin];
+function normalizarBuscarPor(valor) {
+  const buscarPor =
+    String(valor || "")
+      .trim()
+      .toLowerCase();
 
-    if (buscarPor === "codigo") {
-      paramsBase.push(valorBusqueda);
-      where += ` AND c.codigo ILIKE '%' || $3 || '%' `;
-    } else {
-      paramsBase.push(valorBusqueda);
-      where += ` AND tr.nombre ILIKE '%' || $3 || '%' `;
-    }
 
-    const countSql = `
-      SELECT COUNT(*)::int AS total
-        FROM recolecciones r
-        JOIN contenedores c ON c.id_contenedor = r.contenedor_id
-        LEFT JOIN tipos_residuo tr ON tr.id = c.id_tipo_residuo
-      ${where}
-    `;
-    const countRes = await client.query(countSql, paramsBase);
-    const total = countRes.rows?.[0]?.total || 0;
-
-    if (total === 0) return { total: 0, detalle: [], pesaje: [] };
-
-    const pagSql = paginado ? ` LIMIT $4 OFFSET $5 ` : ``;
-
-    const detalleSql = `
-      SELECT
-        r.id AS recoleccion_id,
-        c.codigo AS codigo_contenedor,
-
-        -- ✅ FORMATO FECHA (Guatemala): DD/MM/YY HH:MM
-        to_char(r.fecha_recoleccion AT TIME ZONE 'America/Guatemala', 'DD/MM/YY HH24:MI') AS fecha_recoleccion_fmt,
-
-        d.nombre AS distrito,
-        tr.nombre AS tipo_residuo,
-        r.numero_recibo,
-        r.responsable,
-        er.nombre AS empresa_recolectora,
-        r.porcentaje_pendiente,
-        r.cantidad_libras_pendientes,
-        r.observaciones
-      FROM recolecciones r
-      JOIN contenedores c ON c.id_contenedor = r.contenedor_id
-      LEFT JOIN tipos_residuo tr ON tr.id = c.id_tipo_residuo
-      LEFT JOIN distritos d ON d.id = r.distrito_id
-      LEFT JOIN empresas_recolectoras er ON er.id = r.empresa_id
-      ${where}
-      ORDER BY r.fecha_recoleccion ${safeOrder}, r.id ${safeOrder}
-      ${pagSql}
-    `;
-
-    const detalleParams = paginado ? [...paramsBase, limit, offset] : paramsBase;
-    const detRes = await client.query(detalleSql, detalleParams);
-    const detalleRows = detRes.rows || [];
-
-    const detalle = detalleRows.map((r) => ({
-      recoleccion_id: Number(r.recoleccion_id),
-      codigo: r.codigo_contenedor,
-      fecha: r.fecha_recoleccion_fmt, // ✅ ya viene dd/mm/yy hh:mm
-      distrito: r.distrito,
-      tipo_residuo: r.tipo_residuo,
-      numero_recibo: r.numero_recibo,
-      responsable: r.responsable,
-      empresa_recolectora: r.empresa_recolectora,
-      porcentaje_pendiente: r.porcentaje_pendiente,
-      cantidad_libras_pendientes: r.cantidad_libras_pendientes,
-      observaciones: r.observaciones,
-    }));
-
-    const ids = detalleRows.map((r) => Number(r.recoleccion_id)).filter(Boolean);
-
-    let pesaje = [];
-    if (ids.length > 0) {
-      const pesajeSql = `
-        SELECT
-          h.recoleccion_id,
-          h.total_en_libras,
-          h.porcentaje_recolectado,
-          h.porcentaje_llenado,
-          h.costo_por_libra_aplicado,
-          h.total_costo_q
-        FROM historial_calculo_costos h
-        WHERE h.recoleccion_id = ANY($1::int[])
-      `;
-      const pesajeRes = await client.query(pesajeSql, [ids]);
-
-      const pesajeMap = new Map();
-      for (const row of pesajeRes.rows || []) pesajeMap.set(Number(row.recoleccion_id), row);
-
-      pesaje = detalleRows.map((r) => {
-        const k = Number(r.recoleccion_id);
-        const p = pesajeMap.get(k);
-
-        return {
-          recoleccion_id: k,
-          total_en_libras: p ? p.total_en_libras : null,
-          porcentaje_recolectado: p ? p.porcentaje_recolectado : null,
-          porcentaje_llenado: p ? p.porcentaje_llenado : null,
-          costo_por_libra_aplicado: p ? p.costo_por_libra_aplicado : null,
-          total_costo_q: p ? p.total_costo_q : null,
-        };
-      });
-    } else {
-      pesaje = detalleRows.map((r) => ({
-        recoleccion_id: Number(r.recoleccion_id),
-        total_en_libras: null,
-        porcentaje_recolectado: null,
-        porcentaje_llenado: null,
-        costo_por_libra_aplicado: null,
-        total_costo_q: null,
-      }));
-    }
-
-    return { total, detalle, pesaje };
-  } finally {
-    client.release();
+  if (
+    !BUSQUEDAS_PERMITIDAS.has(
+      buscarPor
+    )
+  ) {
+    throw crearErrorValidacion(
+      "El tipo de búsqueda debe ser 'codigo' o 'tipo'."
+    );
   }
+
+
+  return buscarPor;
 }
 
-module.exports = { consultarHistorial };
+
+/* =========================================================
+   NORMALIZAR TEXTO DE BÚSQUEDA
+   ========================================================= */
+
+function normalizarValorBusqueda(valor) {
+  const texto =
+    String(valor || "")
+      .trim();
+
+
+  if (
+    texto.length <
+    MIN_SEARCH_LENGTH
+  ) {
+    throw crearErrorValidacion(
+      `La búsqueda debe tener al menos ${MIN_SEARCH_LENGTH} caracteres.`
+    );
+  }
+
+
+  if (
+    texto.length >
+    MAX_SEARCH_LENGTH
+  ) {
+    throw crearErrorValidacion(
+      `La búsqueda no puede superar ${MAX_SEARCH_LENGTH} caracteres.`
+    );
+  }
+
+
+  return texto;
+}
+
+
+/* =========================================================
+   FECHA
+   ========================================================= */
+
+function normalizarFechaISO(
+  valor,
+  campo
+) {
+  const fecha =
+    String(valor || "")
+      .trim();
+
+
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(
+      fecha
+    )
+  ) {
+    throw crearErrorValidacion(
+      `${campo} debe tener formato YYYY-MM-DD.`
+    );
+  }
+
+
+  const fechaUtc =
+    new Date(
+      `${fecha}T00:00:00.000Z`
+    );
+
+
+  if (
+    Number.isNaN(
+      fechaUtc.getTime()
+    ) ||
+    fechaUtc
+      .toISOString()
+      .slice(0, 10) !== fecha
+  ) {
+    throw crearErrorValidacion(
+      `${campo} contiene una fecha inválida.`
+    );
+  }
+
+
+  return fecha;
+}
+
+
+/* =========================================================
+   ORDEN
+   ========================================================= */
+
+function normalizarOrden(valor) {
+  if (
+    valor === undefined ||
+    valor === null ||
+    String(valor).trim() === ""
+  ) {
+    return "DESC";
+  }
+
+
+  const order =
+    String(valor)
+      .trim()
+      .toUpperCase();
+
+
+  if (
+    !ORDENES_PERMITIDOS.has(
+      order
+    )
+  ) {
+    throw crearErrorValidacion(
+      "El orden debe ser 'asc' o 'desc'."
+    );
+  }
+
+
+  return order;
+}
+
+
+/* =========================================================
+   FILTROS
+   ========================================================= */
+
+function normalizarFiltros(
+  filtros = {}
+) {
+  const buscarPor =
+    normalizarBuscarPor(
+      filtros.buscarPor
+    );
+
+
+  const valorBusqueda =
+    normalizarValorBusqueda(
+      filtros.valorBusqueda
+    );
+
+
+  const fechaInicio =
+    normalizarFechaISO(
+      filtros.fechaInicio,
+      "fechaInicio"
+    );
+
+
+  const fechaFin =
+    normalizarFechaISO(
+      filtros.fechaFin,
+      "fechaFin"
+    );
+
+
+  if (
+    fechaInicio >
+    fechaFin
+  ) {
+    throw crearErrorValidacion(
+      "La fecha de inicio no puede ser mayor que la fecha final."
+    );
+  }
+
+
+  const order =
+    normalizarOrden(
+      filtros.order
+    );
+
+
+  return {
+    buscarPor,
+    valorBusqueda,
+    fechaInicio,
+    fechaFin,
+    order,
+  };
+}
+
+
+/* =========================================================
+   FILTROS CANÓNICOS
+   ========================================================= */
+
+function crearFiltrosAplicados(
+  filtrosSeguros
+) {
+  return {
+    buscarPor:
+      filtrosSeguros.buscarPor,
+
+    valorBusqueda:
+      filtrosSeguros.valorBusqueda,
+
+    fechaInicio:
+      filtrosSeguros.fechaInicio,
+
+    fechaFin:
+      filtrosSeguros.fechaFin,
+
+    order:
+      filtrosSeguros.order
+        .toLowerCase(),
+  };
+}
+
+
+/* =========================================================
+   PAGINACIÓN
+   ========================================================= */
+
+function normalizarPaginacion(
+  opciones = {}
+) {
+  const paginado =
+    opciones.paginado !== false;
+
+
+  if (!paginado) {
+    return {
+      paginado: false,
+      limit: null,
+      offset: null,
+    };
+  }
+
+
+  const limitRecibido =
+    Number(
+      opciones.limit
+    );
+
+
+  const offsetRecibido =
+    Number(
+      opciones.offset
+    );
+
+
+  const limit =
+    Number.isSafeInteger(
+      limitRecibido
+    ) &&
+    limitRecibido > 0
+      ? Math.min(
+          limitRecibido,
+          MAX_LIMIT
+        )
+      : DEFAULT_LIMIT;
+
+
+  const offset =
+    Number.isSafeInteger(
+      offsetRecibido
+    ) &&
+    offsetRecibido >= 0
+      ? offsetRecibido
+      : 0;
+
+
+  return {
+    paginado: true,
+    limit,
+    offset,
+  };
+}
+
+
+/* =========================================================
+   FILTRO SQL
+
+   Respeta estrictamente la opción seleccionada.
+
+   codigo → c.codigo
+   tipo   → tr.nombre
+   ========================================================= */
+
+function construirFiltroSQL({
+  buscarPor,
+  fechaInicio,
+  fechaFin,
+  valorBusqueda,
+}) {
+  const params = [
+    fechaInicio,
+    fechaFin,
+    valorBusqueda,
+  ];
+
+
+  let where = `
+    WHERE r.fecha_recoleccion >= $1::date
+
+      AND r.fecha_recoleccion <
+        (
+          $2::date +
+          INTERVAL '1 day'
+        )
+  `;
+
+
+  if (
+    buscarPor === "codigo"
+  ) {
+    where += `
+      AND c.codigo
+        ILIKE '%' || $3 || '%'
+    `;
+  }
+
+
+  if (
+    buscarPor === "tipo"
+  ) {
+    where += `
+      AND tr.nombre
+        ILIKE '%' || $3 || '%'
+    `;
+  }
+
+
+  return {
+    where,
+    params,
+  };
+}
+
+
+/* =========================================================
+   DETECTAR SI EL TEXTO PERTENECE AL OTRO CRITERIO
+
+   IMPORTANTE:
+
+   Esta función NO determina si una búsqueda es válida.
+
+   Solamente sirve para detectar:
+
+   Código + Bioinfeccioso
+
+   o
+
+   Tipo Residuo + CNT-001
+
+   Normalizamos:
+   - mayúsculas
+   - espacios
+   - guiones
+   - ciertos signos
+   - tildes
+
+   para evitar falsos negativos.
+   ========================================================= */
+
+async function detectarCriterioAlternativo({
+  buscarPor,
+  valorBusqueda,
+}) {
+  const sql = `
+    SELECT
+
+      EXISTS (
+        SELECT 1
+
+        FROM contenedores c
+
+        WHERE
+          regexp_replace(
+            translate(
+              LOWER(
+                COALESCE(
+                  c.codigo,
+                  ''
+                )
+              ),
+              'áéíóúüñ',
+              'aeiouun'
+            ),
+            '[^a-z0-9]',
+            '',
+            'g'
+          )
+
+          LIKE
+
+          '%' ||
+
+          regexp_replace(
+            translate(
+              LOWER($1),
+              'áéíóúüñ',
+              'aeiouun'
+            ),
+            '[^a-z0-9]',
+            '',
+            'g'
+          )
+
+          || '%'
+      ) AS existe_codigo,
+
+
+      EXISTS (
+        SELECT 1
+
+        FROM tipos_residuo tr
+
+        WHERE
+          regexp_replace(
+            translate(
+              LOWER(
+                COALESCE(
+                  tr.nombre,
+                  ''
+                )
+              ),
+              'áéíóúüñ',
+              'aeiouun'
+            ),
+            '[^a-z0-9]',
+            '',
+            'g'
+          )
+
+          LIKE
+
+          '%' ||
+
+          regexp_replace(
+            translate(
+              LOWER($1),
+              'áéíóúüñ',
+              'aeiouun'
+            ),
+            '[^a-z0-9]',
+            '',
+            'g'
+          )
+
+          || '%'
+      ) AS existe_tipo
+  `;
+
+
+  const { rows } =
+    await pool.query(
+      sql,
+      [
+        valorBusqueda,
+      ]
+    );
+
+
+  const resultado =
+    rows?.[0] || {};
+
+
+  const existeCodigo =
+    resultado.existe_codigo ===
+    true;
+
+
+  const existeTipo =
+    resultado.existe_tipo ===
+    true;
+
+
+  /* =======================================================
+     EL USUARIO ELIGIÓ CÓDIGO
+
+     Solo nos interesa saber si escribió algo
+     perteneciente a Tipo Residuo.
+     ======================================================= */
+
+  if (
+    buscarPor === "codigo" &&
+    !existeCodigo &&
+    existeTipo
+  ) {
+    throw crearErrorValidacion(
+      "Seleccionó 'Código', pero el valor ingresado corresponde a un Tipo de Residuo. Cambie la opción 'Buscar por' a 'Tipo Residuo'.",
+      "SEARCH_TYPE_MISMATCH"
+    );
+  }
+
+
+  /* =======================================================
+     EL USUARIO ELIGIÓ TIPO
+
+     Solo nos interesa saber si escribió un código.
+     ======================================================= */
+
+  if (
+    buscarPor === "tipo" &&
+    !existeTipo &&
+    existeCodigo
+  ) {
+    throw crearErrorValidacion(
+      "Seleccionó 'Tipo Residuo', pero el valor ingresado corresponde a un Código. Cambie la opción 'Buscar por' a 'Código'.",
+      "SEARCH_TYPE_MISMATCH"
+    );
+  }
+
+
+  /*
+    Si no pertenece claramente al criterio contrario,
+    NO generamos alerta.
+
+    El resultado simplemente será:
+    "No se encontraron registros".
+  */
+}
+
+
+/* =========================================================
+   CONTAR HISTORIAL
+   ========================================================= */
+
+async function contarHistorial({
+  where,
+  params,
+}) {
+  const sql = `
+    SELECT
+      COUNT(*)::int AS total
+
+    FROM recolecciones r
+
+    JOIN contenedores c
+      ON c.id_contenedor =
+         r.contenedor_id
+
+    LEFT JOIN tipos_residuo tr
+      ON tr.id =
+         c.id_tipo_residuo
+
+    ${where}
+  `;
+
+
+  const { rows } =
+    await pool.query(
+      sql,
+      params
+    );
+
+
+  return Number(
+    rows?.[0]?.total ||
+    0
+  );
+}
+
+
+/* =========================================================
+   DETALLE
+   ========================================================= */
+
+async function consultarDetalle({
+  where,
+  params,
+  order,
+  paginacion,
+}) {
+  const paginacionSQL =
+    paginacion.paginado
+      ? "LIMIT $4 OFFSET $5"
+      : "";
+
+
+  const sql = `
+    SELECT
+      r.id
+        AS recoleccion_id,
+
+      c.codigo
+        AS codigo,
+
+      to_char(
+        r.fecha_recoleccion,
+        'DD/MM/YY HH24:MI'
+      ) AS fecha,
+
+      d.nombre
+        AS distrito,
+
+      tr.nombre
+        AS tipo_residuo,
+
+      r.numero_recibo,
+
+      r.responsable,
+
+      er.nombre
+        AS empresa_recolectora,
+
+      r.porcentaje_pendiente,
+
+      r.cantidad_libras_pendientes,
+
+      r.observaciones
+
+    FROM recolecciones r
+
+    JOIN contenedores c
+      ON c.id_contenedor =
+         r.contenedor_id
+
+    LEFT JOIN tipos_residuo tr
+      ON tr.id =
+         c.id_tipo_residuo
+
+    LEFT JOIN distritos d
+      ON d.id =
+         r.distrito_id
+
+    LEFT JOIN empresas_recolectoras er
+      ON er.id =
+         r.empresa_id
+
+    ${where}
+
+    ORDER BY
+      r.fecha_recoleccion ${order},
+      r.id ${order}
+
+    ${paginacionSQL}
+  `;
+
+
+  const queryParams =
+    paginacion.paginado
+      ? [
+          ...params,
+          paginacion.limit,
+          paginacion.offset,
+        ]
+      : params;
+
+
+  const { rows } =
+    await pool.query(
+      sql,
+      queryParams
+    );
+
+
+  return rows || [];
+}
+
+
+/* =========================================================
+   MAPEAR DETALLE
+   ========================================================= */
+
+function mapearDetalle(
+  rows = []
+) {
+  return rows.map(
+    (row) => ({
+      recoleccion_id:
+        Number(
+          row.recoleccion_id
+        ),
+
+      codigo:
+        row.codigo,
+
+      fecha:
+        row.fecha,
+
+      distrito:
+        row.distrito,
+
+      tipo_residuo:
+        row.tipo_residuo,
+
+      numero_recibo:
+        row.numero_recibo,
+
+      responsable:
+        row.responsable,
+
+      empresa_recolectora:
+        row.empresa_recolectora,
+
+      porcentaje_pendiente:
+        row.porcentaje_pendiente,
+
+      cantidad_libras_pendientes:
+        row.cantidad_libras_pendientes,
+
+      observaciones:
+        row.observaciones,
+    })
+  );
+}
+
+
+/* =========================================================
+   PESAJE
+   ========================================================= */
+
+async function consultarPesajes(
+  recoleccionIds
+) {
+  if (
+    !recoleccionIds.length
+  ) {
+    return [];
+  }
+
+
+  const sql = `
+    SELECT
+      h.recoleccion_id,
+      h.total_en_libras,
+      h.porcentaje_recolectado,
+      h.porcentaje_llenado,
+      h.costo_por_libra_aplicado,
+      h.total_costo_q
+
+    FROM historial_calculo_costos h
+
+    WHERE h.recoleccion_id =
+      ANY($1::int[])
+  `;
+
+
+  const { rows } =
+    await pool.query(
+      sql,
+      [
+        recoleccionIds,
+      ]
+    );
+
+
+  return rows || [];
+}
+
+
+/* =========================================================
+   MAPEAR PESAJE
+   ========================================================= */
+
+function mapearPesajes(
+  detalleRows,
+  pesajeRows
+) {
+  const pesajePorRecoleccion =
+    new Map();
+
+
+  for (
+    const row
+    of pesajeRows
+  ) {
+    pesajePorRecoleccion.set(
+      Number(
+        row.recoleccion_id
+      ),
+      row
+    );
+  }
+
+
+  return detalleRows.map(
+    (row) => {
+
+      const recoleccionId =
+        Number(
+          row.recoleccion_id
+        );
+
+
+      const pesaje =
+        pesajePorRecoleccion.get(
+          recoleccionId
+        );
+
+
+      return {
+        recoleccion_id:
+          recoleccionId,
+
+        total_en_libras:
+          pesaje
+            ?.total_en_libras ??
+          null,
+
+        porcentaje_recolectado:
+          pesaje
+            ?.porcentaje_recolectado ??
+          null,
+
+        porcentaje_llenado:
+          pesaje
+            ?.porcentaje_llenado ??
+          null,
+
+        costo_por_libra_aplicado:
+          pesaje
+            ?.costo_por_libra_aplicado ??
+          null,
+
+        total_costo_q:
+          pesaje
+            ?.total_costo_q ??
+          null,
+      };
+    }
+  );
+}
+
+
+/* =========================================================
+   SERVICE PRINCIPAL
+   ========================================================= */
+
+async function consultarHistorial(
+  filtros,
+  opciones = {}
+) {
+  /* =======================================================
+     1. FILTROS
+     ======================================================= */
+
+  const filtrosSeguros =
+    normalizarFiltros(
+      filtros
+    );
+
+
+  /* =======================================================
+     2. PAGINACIÓN
+     ======================================================= */
+
+  const paginacion =
+    normalizarPaginacion(
+      opciones
+    );
+
+
+  /* =======================================================
+     3. FILTROS PARA SNAPSHOT
+     ======================================================= */
+
+  const filtrosAplicados =
+    crearFiltrosAplicados(
+      filtrosSeguros
+    );
+
+
+  /* =======================================================
+     4. SQL SEGÚN CRITERIO SELECCIONADO
+     ======================================================= */
+
+  const {
+    where,
+    params,
+  } =
+    construirFiltroSQL(
+      filtrosSeguros
+    );
+
+
+  /* =======================================================
+     5. TOTAL
+
+     Primero respetamos literalmente la opción elegida.
+
+     Código → solo código.
+     Tipo   → solo tipo.
+     ======================================================= */
+
+  const total =
+    await contarHistorial({
+      where,
+      params,
+    });
+
+
+  /* =======================================================
+     6. SIN RESULTADOS
+
+     Solo AQUÍ comprobamos si probablemente usó
+     el criterio contrario.
+
+     Esto evita el problema anterior donde elegir
+     Tipo Residuo podía producir una alerta antes de
+     realizar correctamente la búsqueda.
+     ======================================================= */
+
+  if (
+    total === 0
+  ) {
+
+    await detectarCriterioAlternativo({
+      buscarPor:
+        filtrosSeguros.buscarPor,
+
+      valorBusqueda:
+        filtrosSeguros.valorBusqueda,
+    });
+
+
+    return {
+      total: 0,
+
+      detalle: [],
+
+      pesaje: [],
+
+      filtrosAplicados,
+    };
+  }
+
+
+  /* =======================================================
+     7. PÁGINA FUERA DE RANGO
+     ======================================================= */
+
+  if (
+    paginacion.paginado &&
+    paginacion.offset >= total
+  ) {
+    return {
+      total,
+
+      detalle: [],
+
+      pesaje: [],
+
+      filtrosAplicados,
+    };
+  }
+
+
+  /* =======================================================
+     8. DETALLE
+     ======================================================= */
+
+  const detalleRows =
+    await consultarDetalle({
+      where,
+      params,
+
+      order:
+        filtrosSeguros.order,
+
+      paginacion,
+    });
+
+
+  if (
+    !detalleRows.length
+  ) {
+    return {
+      total,
+
+      detalle: [],
+
+      pesaje: [],
+
+      filtrosAplicados,
+    };
+  }
+
+
+  /* =======================================================
+     9. IDS
+     ======================================================= */
+
+  const recoleccionIds =
+    detalleRows
+      .map(
+        (row) =>
+          Number(
+            row.recoleccion_id
+          )
+      )
+      .filter(
+        (id) =>
+          Number.isSafeInteger(
+            id
+          ) &&
+          id > 0
+      );
+
+
+  /* =======================================================
+     10. PESAJE
+     ======================================================= */
+
+  const pesajeRows =
+    await consultarPesajes(
+      recoleccionIds
+    );
+
+
+  /* =======================================================
+     11. RESPUESTA
+     ======================================================= */
+
+  return {
+    total,
+
+    detalle:
+      mapearDetalle(
+        detalleRows
+      ),
+
+    pesaje:
+      mapearPesajes(
+        detalleRows,
+        pesajeRows
+      ),
+
+    filtrosAplicados,
+  };
+}
+
+
+/* =========================================================
+   EXPORTACIÓN
+   ========================================================= */
+
+module.exports = {
+  consultarHistorial,
+};

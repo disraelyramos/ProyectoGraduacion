@@ -1,362 +1,1180 @@
-const pool = require("../../config/db");
-const crypto = require("crypto");
-// backend/src/controllers/HistorialRecoleccion/HistorialdeRecoleccion.controller.js
+const {
+  consultarHistorial,
+} = require(
+  "../../services/HistorialRecoleccion/HistorialRecoleccion.service"
+);
 
-const { consultarHistorial } = require("../../services/HistorialRecoleccion/HistorialRecoleccion.service");
 const {
   crearSnapshot,
   obtenerSnapshotValido,
-} = require("../../services/HistorialRecoleccion/ExportSnapshot.service");
+} = require(
+  "../../services/HistorialRecoleccion/ExportSnapshot.service"
+);
 
 const {
   registrarAuditoriaExportacion,
-} = require("../../services/HistorialRecoleccion/AuditoriaExportaciones.service");
+} = require(
+  "../../services/HistorialRecoleccion/AuditoriaExportaciones.service"
+);
 
 const {
   buildHistorialRecoleccionPdfBuffer,
-} = require("../../exports/pdf/historialRecoleccion.pdf");
+} = require(
+  "../../exports/pdf/historialRecoleccion.pdf"
+);
 
 const {
   buildHistorialRecoleccionExcelBuffer,
-} = require("../../exports/excel/historialRecoleccion.excel");
+} = require(
+  "../../exports/excel/historialRecoleccion.excel"
+);
 
-// ===============================
-// Constantes del módulo
-// ===============================
-const MODULO = "HISTORIAL_RECOLECCION";
-const REPORTE = "consulta_resultados";
 
-// ===============================
-// Helpers
-// ===============================
-function requireAuth(req, res) {
-  if (!req.user || !req.user.id_usuario) {
-    res.status(401).json({ message: "Usuario no autenticado" });
-    return false;
-  }
-  return true;
-}
+/* =========================================================
+   CONSTANTES DEL MÓDULO
+   ========================================================= */
 
-function toInt(v) {
-  const n = Number.parseInt(String(v), 10);
-  return Number.isFinite(n) ? n : null;
-}
+const MODULO =
+  "HISTORIAL_RECOLECCION";
 
-function normOrder(v) {
-  const s = String(v || "desc").toLowerCase();
-  return s === "asc" ? "ASC" : "DESC";
-}
+const REPORTE =
+  "consulta_resultados";
 
-function isValidISODate(d) {
-  if (!d) return false;
-  const s = String(d).trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
-  const dt = new Date(s + "T00:00:00");
-  return !Number.isNaN(dt.getTime());
-}
 
-function normSearchValue(v) {
-  const s = String(v || "").trim();
-  return s.length > 200 ? s.slice(0, 200) : s;
-}
+/*
+  El tamaño de página pertenece al backend.
 
-function getIp(req) {
-  return (req.headers["x-forwarded-for"]?.split(",")[0] || req.ip || "").trim();
-}
+  El frontend no puede modificarlo enviando limit.
+*/
 
-// ===============================
-// GET: Historial de recolección
-// Route: GET /api/historial-recoleccion
-// ===============================
-exports.obtenerHistorial = async (req, res) => {
-  if (!requireAuth(req, res)) return;
+const PAGE_SIZE = 10;
 
-  const buscarPor = String(req.query?.buscarPor || "").trim().toLowerCase();
-  const valorBusqueda = normSearchValue(req.query?.valorBusqueda);
-  const fechaInicio = String(req.query?.fechaInicio || "").trim();
-  const fechaFin = String(req.query?.fechaFin || "").trim();
 
-  const page = toInt(req.query?.page) || 1;
-  const limit = toInt(req.query?.limit) || 10;
-  const order = normOrder(req.query?.order);
+/* =========================================================
+   UUID
+   ========================================================= */
 
-  if (!buscarPor || !valorBusqueda || !fechaInicio || !fechaFin) {
-    return res.status(400).json({
-      message: "Debe completar todos los campos de búsqueda.",
-      type: "validation",
-    });
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+
+/* =========================================================
+   USUARIO AUTENTICADO
+   ========================================================= */
+
+function obtenerUsuarioAutenticado(
+  req
+) {
+  const idUsuario =
+    Number(
+      req.user?.id_usuario
+    );
+
+
+  if (
+    !Number.isSafeInteger(
+      idUsuario
+    ) ||
+    idUsuario <= 0
+  ) {
+    return null;
   }
 
-  if (!["codigo", "tipo"].includes(buscarPor)) {
-    return res.status(400).json({
-      message: "Buscar por inválido. Use 'codigo' o 'tipo'.",
-      type: "validation",
-    });
+
+  return {
+    ...req.user,
+
+    id_usuario:
+      idUsuario,
+  };
+}
+
+
+/* =========================================================
+   PÁGINA
+
+   La página viene de HTTP.
+
+   Si no viene:
+   página 1.
+
+   Si viene manipulada:
+   error 400.
+   ========================================================= */
+
+function normalizarPagina(
+  valor
+) {
+  if (
+    valor === undefined ||
+    valor === null ||
+    String(valor).trim() === ""
+  ) {
+    return 1;
   }
 
-  if (!isValidISODate(fechaInicio) || !isValidISODate(fechaFin)) {
-    return res.status(400).json({
-      message: "Formato de fecha inválido. Use YYYY-MM-DD.",
-      type: "validation",
-    });
+
+  const page =
+    Number(valor);
+
+
+  if (
+    !Number.isSafeInteger(
+      page
+    ) ||
+    page < 1
+  ) {
+    const error =
+      new Error(
+        "La página solicitada es inválida."
+      );
+
+    error.statusCode = 400;
+    error.type = "validation";
+    error.code =
+      "INVALID_PAGE";
+
+    throw error;
   }
 
-  const dIni = new Date(fechaInicio + "T00:00:00");
-  const dFin = new Date(fechaFin + "T23:59:59");
 
-  if (dIni > dFin) {
-    return res.status(400).json({
-      message: "La fecha de inicio no puede ser mayor que la fecha final.",
-      type: "validation",
-    });
+  return page;
+}
+
+
+/* =========================================================
+   PREPARAR EXPORTACIÓN
+
+   IMPORTANTE:
+
+   true:
+   el usuario presionó "Ver"
+   → se crea un nuevo snapshot.
+
+   false:
+   el usuario cambió de página
+   → NO se crea ni renueva snapshot.
+
+   El frontend solo comunica la intención.
+   Backend sigue generando el exportId y su TTL.
+   ========================================================= */
+
+function normalizarPrepararExportacion(
+  valor
+) {
+  return (
+    String(valor ?? "")
+      .trim()
+      .toLowerCase() === "true"
+  );
+}
+
+
+/* =========================================================
+   FILTROS DE ENTRADA
+
+   Controller únicamente transporta.
+
+   HistorialRecoleccion.service.js valida:
+   - buscarPor
+   - valorBusqueda
+   - fechas
+   - orden
+   ========================================================= */
+
+function obtenerFiltrosEntrada(
+  req
+) {
+  return {
+    buscarPor:
+      req.query?.buscarPor,
+
+    valorBusqueda:
+      req.query?.valorBusqueda,
+
+    fechaInicio:
+      req.query?.fechaInicio,
+
+    fechaFin:
+      req.query?.fechaFin,
+
+    order:
+      req.query?.order,
+  };
+}
+
+
+/* =========================================================
+   EXPORT ID
+   ========================================================= */
+
+function normalizarExportId(
+  valor
+) {
+  const exportId =
+    String(valor || "")
+      .trim()
+      .toLowerCase();
+
+
+  if (
+    !UUID_REGEX.test(
+      exportId
+    )
+  ) {
+    return null;
   }
 
-  if (valorBusqueda.length < 2) {
-    return res.status(400).json({
-      message: "La búsqueda debe tener al menos 2 caracteres.",
-      type: "validation",
-    });
+
+  return exportId;
+}
+
+
+/* =========================================================
+   IP
+   ========================================================= */
+
+function obtenerIp(req) {
+  const ip =
+    String(
+      req.ip || ""
+    ).trim();
+
+
+  return ip || null;
+}
+
+
+/* =========================================================
+   USER AGENT
+   ========================================================= */
+
+function obtenerUserAgent(
+  req
+) {
+  const userAgent =
+    String(
+      req.get?.(
+        "user-agent"
+      ) ||
+      req.headers
+        ?.["user-agent"] ||
+      ""
+    ).trim();
+
+
+  if (!userAgent) {
+    return null;
   }
 
-  const safeLimit = Math.min(Math.max(limit, 1), 100);
-  const safePage = Math.max(page, 1);
-  const offset = (safePage - 1) * safeLimit;
 
-  try {
-    const filtros = { buscarPor, valorBusqueda, fechaInicio, fechaFin, order };
+  return userAgent.slice(
+    0,
+    500
+  );
+}
 
-    const { total, detalle, pesaje } = await consultarHistorial(filtros, {
-      paginado: true,
-      limit: safeLimit,
-      offset,
+
+/* =========================================================
+   ERROR CONTROLADO
+
+   Ya no limitamos únicamente a status 400.
+
+   Ahora pueden llegar, por ejemplo:
+
+   400 SEARCH_TYPE_MISMATCH
+   410 EXPORT_SNAPSHOT_EXPIRADO
+   ========================================================= */
+
+function esErrorControlado(
+  err
+) {
+  const statusCode =
+    Number(
+      err?.statusCode
+    );
+
+
+  return (
+    err?.type ===
+      "validation" &&
+    Number.isInteger(
+      statusCode
+    ) &&
+    statusCode >= 400 &&
+    statusCode < 500
+  );
+}
+
+
+/* =========================================================
+   RESPUESTA DE ERROR
+
+   Conservamos:
+   - message
+   - type
+   - code
+
+   El frontend puede decidir cómo presentar cada caso.
+   ========================================================= */
+
+function responderError(
+  res,
+  err,
+  contexto
+) {
+  if (
+    esErrorControlado(
+      err
+    )
+  ) {
+    const statusCode =
+      Number(
+        err.statusCode
+      );
+
+
+    return res
+      .status(
+        statusCode
+      )
+      .json({
+        message:
+          err.message,
+
+        type:
+          err.type,
+
+        ...(err.code
+          ? {
+              code:
+                err.code,
+            }
+          : {}),
+      });
+  }
+
+
+  console.error(
+    `Error ${contexto}:`,
+    err
+  );
+
+
+  return res
+    .status(500)
+    .json({
+      message:
+        "Error interno del servidor",
+    });
+}
+
+
+/* =========================================================
+   AUDITORÍA DE EXPORTACIÓN
+   ========================================================= */
+
+async function registrarAuditoria({
+  req,
+  usuario,
+  formato,
+  exportId,
+  filtros,
+  total = 0,
+  detalle = [],
+  pesaje = [],
+  estado,
+  errorMensaje = null,
+}) {
+  await registrarAuditoriaExportacion({
+    usuario_id:
+      usuario.id_usuario,
+
+    usuario:
+      usuario.usuario ||
+      "N/A",
+
+    rol:
+      usuario.rol ||
+      "N/A",
+
+    modulo:
+      MODULO,
+
+    reporte:
+      REPORTE,
+
+    formato,
+
+    export_id:
+      exportId,
+
+    filtros_json:
+      filtros || {
+        exportId,
+      },
+
+    total_registros:
+      total,
+
+    resumen_json:
+      estado === "GENERADO"
+        ? {
+            filas_detalle:
+              detalle.length,
+
+            filas_pesaje:
+              pesaje.length,
+          }
+        : null,
+
+    estado,
+
+    error_mensaje:
+      errorMensaje,
+
+    ip_origen:
+      obtenerIp(
+        req
+      ),
+
+    user_agent:
+      obtenerUserAgent(
+        req
+      ),
+  });
+}
+
+
+/* =========================================================
+   OBTENER DATOS DE EXPORTACIÓN
+
+   exportId
+      ↓
+   snapshot del usuario
+      ↓
+   filtros guardados
+      ↓
+   Historial Service vuelve a validarlos
+      ↓
+   consulta completa sin paginación
+
+   Si el snapshot venció,
+   ExportSnapshot.service lanza:
+
+   status 410
+   code EXPORT_SNAPSHOT_EXPIRADO
+   ========================================================= */
+
+async function obtenerDatosExportacion({
+  exportId,
+  usuarioId,
+}) {
+  const snapshot =
+    await obtenerSnapshotValido({
+      exportId,
+
+      usuarioId,
+
+      modulo:
+        MODULO,
     });
 
-    if (total === 0) {
+
+  if (!snapshot) {
+    return null;
+  }
+
+
+  const resultado =
+    await consultarHistorial(
+      snapshot.filtros_json ||
+        {},
+      {
+        paginado:
+          false,
+      }
+    );
+
+
+  return {
+    total:
+      resultado.total,
+
+    detalle:
+      resultado.detalle,
+
+    pesaje:
+      resultado.pesaje,
+
+    filtros:
+      resultado
+        .filtrosAplicados,
+  };
+}
+
+
+/* =========================================================
+   HISTORIAL
+
+   GET /api/historial-recoleccion
+
+   El frontend enviará:
+
+   prepararExportacion=true
+   únicamente al presionar "Ver".
+
+   En paginación:
+   prepararExportacion=false
+   ========================================================= */
+
+exports.obtenerHistorial =
+  async (req, res) => {
+
+    const usuario =
+      obtenerUsuarioAutenticado(
+        req
+      );
+
+
+    if (!usuario) {
+      return res
+        .status(401)
+        .json({
+          message:
+            "Usuario no autenticado.",
+        });
+    }
+
+
+    try {
+
+      /* ===================================================
+         PÁGINA
+         =================================================== */
+
+      const page =
+        normalizarPagina(
+          req.query?.page
+        );
+
+
+      const offset =
+        (
+          page - 1
+        ) * PAGE_SIZE;
+
+
+      /* ===================================================
+         ¿SE DEBE CREAR SNAPSHOT?
+         =================================================== */
+
+      const prepararExportacion =
+        normalizarPrepararExportacion(
+          req.query
+            ?.prepararExportacion
+        );
+
+
+      /* ===================================================
+         FILTROS
+         =================================================== */
+
+      const filtrosEntrada =
+        obtenerFiltrosEntrada(
+          req
+        );
+
+
+      /* ===================================================
+         SERVICE
+         =================================================== */
+
+      const resultado =
+        await consultarHistorial(
+          filtrosEntrada,
+          {
+            paginado:
+              true,
+
+            limit:
+              PAGE_SIZE,
+
+            offset,
+          }
+        );
+
+
+      const {
+        total,
+        detalle,
+        pesaje,
+        filtrosAplicados,
+      } = resultado;
+
+
+      /* ===================================================
+         SIN RESULTADOS
+
+         Si el usuario eligió el criterio incorrecto,
+         el Service ya habrá lanzado SEARCH_TYPE_MISMATCH
+         antes de llegar aquí.
+         =================================================== */
+
+      if (
+        total === 0
+      ) {
+        return res.json({
+          message:
+            "No se encontraron registros con los criterios seleccionados.",
+
+          total: 0,
+
+          page,
+
+          limit:
+            PAGE_SIZE,
+
+          order:
+            filtrosAplicados.order,
+
+          data: {
+            detalle: [],
+            pesaje: [],
+          },
+        });
+      }
+
+
+      /* ===================================================
+         SNAPSHOT
+
+         Solo se crea cuando prepararExportacion=true.
+
+         PAGINAR NO RENUEVA EL TTL.
+         =================================================== */
+
+      let snapshotMeta =
+        null;
+
+
+      if (
+        prepararExportacion
+      ) {
+        snapshotMeta =
+          await crearSnapshot({
+            usuarioId:
+              usuario.id_usuario,
+
+            modulo:
+              MODULO,
+
+            filtros:
+              filtrosAplicados,
+          });
+      }
+
+
+      /* ===================================================
+         RESPUESTA
+         =================================================== */
+
       return res.json({
-        message: "No hay datos para este rango de fechas.",
-        total: 0,
-        page: safePage,
-        limit: safeLimit,
-        data: { detalle: [], pesaje: [] },
+        message:
+          "Historial obtenido correctamente.",
+
+        total,
+
+        page,
+
+        limit:
+          PAGE_SIZE,
+
+        order:
+          filtrosAplicados.order,
+
+        data: {
+          detalle,
+          pesaje,
+        },
+
+
+        /*
+          Estas propiedades solo se incluyen
+          cuando realmente se creó un snapshot.
+        */
+
+        ...(snapshotMeta
+          ? {
+              export_id:
+                snapshotMeta
+                  .exportId,
+
+              export_expires_at:
+                snapshotMeta
+                  .expiresAt,
+
+              export_expires_in_seconds:
+                snapshotMeta
+                  .expiresInSeconds,
+            }
+          : {}),
       });
+
+
+    } catch (err) {
+
+      return responderError(
+        res,
+        err,
+        "obtenerHistorial"
+      );
+
+    }
+  };
+
+
+/* =========================================================
+   EXPORTAR PDF
+
+   GET
+   /api/historial-recoleccion/export/pdf?exportId=...
+   ========================================================= */
+
+exports.exportarPdf =
+  async (req, res) => {
+
+    const usuario =
+      obtenerUsuarioAutenticado(
+        req
+      );
+
+
+    if (!usuario) {
+      return res
+        .status(401)
+        .json({
+          message:
+            "Usuario no autenticado.",
+        });
     }
 
-    const export_id = await crearSnapshot({
-      usuarioId: req.user.id_usuario,
-      modulo: MODULO,
-      filtros: {
-        buscarPor,
-        valorBusqueda,
-        fechaInicio,
-        fechaFin,
-        order: order === "ASC" ? "asc" : "desc",
-      },
-    });
 
-    return res.json({
-      message: "Historial obtenido correctamente.",
-      export_id,
-      total,
-      page: safePage,
-      limit: safeLimit,
-      order: order === "ASC" ? "asc" : "desc",
-      data: { detalle, pesaje },
-    });
-  } catch (err) {
-    console.error("Error obtenerHistorial:", err);
-    return res.status(500).json({ message: "Error interno del servidor" });
-  }
-};
+    const exportId =
+      normalizarExportId(
+        req.query?.exportId
+      );
 
-// ===============================
-// Export PDF (inline)
-// Route: GET /api/historial-recoleccion/export/pdf?exportId=...
-// ===============================
-exports.exportarPdf = async (req, res) => {
-  if (!requireAuth(req, res)) return;
 
-  const exportId = String(req.query?.exportId || "").trim();
-  if (!exportId) {
-    return res.status(400).json({ message: "exportId es requerido.", type: "validation" });
-  }
+    if (!exportId) {
+      return res
+        .status(400)
+        .json({
+          message:
+            "exportId inválido.",
 
-  let filtros = null;
+          type:
+            "validation",
 
-  try {
-    const snap = await obtenerSnapshotValido({
-      exportId,
-      usuarioId: req.user.id_usuario,
-      modulo: MODULO,
-    });
-
-    if (!snap) {
-      return res.status(400).json({
-        message: "Exportación expirada o inválida. Presione 'Ver' nuevamente.",
-        type: "validation",
-      });
+          code:
+            "EXPORT_SNAPSHOT_INVALIDO",
+        });
     }
 
-    filtros = snap.filtros_json || {};
-    const order = normOrder(filtros?.order);
 
-    const { total, detalle, pesaje } = await consultarHistorial(
-      {
-        buscarPor: String(filtros.buscarPor || "").toLowerCase(),
-        valorBusqueda: normSearchValue(filtros.valorBusqueda),
-        fechaInicio: String(filtros.fechaInicio || ""),
-        fechaFin: String(filtros.fechaFin || ""),
-        order,
-      },
-      { paginado: false }
-    );
+    let filtros =
+      null;
 
-    const pdfBuffer = await buildHistorialRecoleccionPdfBuffer({
-      filtros,
-      detalle,
-      pesaje,
-      generadoPor: req.user,
-      total,
-    });
-
-    await registrarAuditoriaExportacion({
-      usuario_id: req.user.id_usuario,
-      usuario: req.user.usuario,
-      rol: req.user.rol,
-      modulo: MODULO,
-      reporte: REPORTE,
-      formato: "PDF",
-      export_id: exportId,
-      filtros_json: filtros,
-      total_registros: total,
-      resumen_json: { filas_detalle: detalle.length, filas_pesaje: pesaje.length },
-      estado: "GENERADO",
-      error_mensaje: null,
-      ip_origen: getIp(req),
-      user_agent: req.headers["user-agent"] || null,
-    });
-
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `inline; filename="historial_recoleccion.pdf"`);
-    return res.status(200).send(pdfBuffer);
-  } catch (err) {
-    console.error("Error exportarPdf:", err);
 
     try {
-      await registrarAuditoriaExportacion({
-        usuario_id: req.user?.id_usuario || 0,
-        usuario: req.user?.usuario || "N/A",
-        rol: req.user?.rol || "N/A",
-        modulo: MODULO,
-        reporte: REPORTE,
-        formato: "PDF",
-        export_id: exportId || "N/A",
-        filtros_json: filtros || { exportId },
-        total_registros: 0,
-        resumen_json: null,
-        estado: "FALLIDO",
-        error_mensaje: "Error al generar PDF",
-        ip_origen: getIp(req),
-        user_agent: req.headers["user-agent"] || null,
+
+      /* ===================================================
+         DATOS DESDE SNAPSHOT
+         =================================================== */
+
+      const datos =
+        await obtenerDatosExportacion({
+          exportId,
+
+          usuarioId:
+            usuario.id_usuario,
+        });
+
+
+      /* ===================================================
+         SNAPSHOT NO ENCONTRADO
+
+         Si estaba vencido no llega aquí:
+         ExportSnapshot.service lanza 410.
+         =================================================== */
+
+      if (!datos) {
+        return res
+          .status(400)
+          .json({
+            message:
+              "La exportación no existe o ya no está disponible. Presione 'Ver' nuevamente.",
+
+            type:
+              "validation",
+
+            code:
+              "EXPORT_SNAPSHOT_INVALIDO",
+          });
+      }
+
+
+      filtros =
+        datos.filtros;
+
+
+      /* ===================================================
+         GENERAR PDF
+         =================================================== */
+
+      const pdfBuffer =
+        await buildHistorialRecoleccionPdfBuffer({
+          filtros:
+            datos.filtros,
+
+          detalle:
+            datos.detalle,
+
+          pesaje:
+            datos.pesaje,
+
+          generadoPor:
+            usuario,
+
+          total:
+            datos.total,
+        });
+
+
+      /* ===================================================
+         AUDITORÍA EXITOSA
+         =================================================== */
+
+      await registrarAuditoria({
+        req,
+        usuario,
+
+        formato:
+          "PDF",
+
+        exportId,
+
+        filtros:
+          datos.filtros,
+
+        total:
+          datos.total,
+
+        detalle:
+          datos.detalle,
+
+        pesaje:
+          datos.pesaje,
+
+        estado:
+          "GENERADO",
       });
-    } catch (_) {}
 
-    return res.status(500).json({ message: "Error interno del servidor" });
-  }
-};
 
-// ===============================
-// Export Excel (attachment)
-// Route: GET /api/historial-recoleccion/export/excel?exportId=...
-// ===============================
-exports.exportarExcel = async (req, res) => {
-  if (!requireAuth(req, res)) return;
+      /* ===================================================
+         RESPUESTA PDF
+         =================================================== */
 
-  const exportId = String(req.query?.exportId || "").trim();
-  if (!exportId) {
-    return res.status(400).json({ message: "exportId es requerido.", type: "validation" });
-  }
+      res.setHeader(
+        "Content-Type",
+        "application/pdf"
+      );
 
-  let filtros = null;
 
-  try {
-    const snap = await obtenerSnapshotValido({
-      exportId,
-      usuarioId: req.user.id_usuario,
-      modulo: MODULO,
-    });
+      res.setHeader(
+        "Content-Disposition",
+        'inline; filename="historial_recoleccion.pdf"'
+      );
 
-    if (!snap) {
-      return res.status(400).json({
-        message: "Exportación expirada o inválida. Presione 'Ver' nuevamente.",
-        type: "validation",
-      });
+
+      return res
+        .status(200)
+        .send(
+          pdfBuffer
+        );
+
+
+    } catch (err) {
+
+      /* ===================================================
+         AUDITORÍA FALLIDA
+         =================================================== */
+
+      try {
+
+        await registrarAuditoria({
+          req,
+          usuario,
+
+          formato:
+            "PDF",
+
+          exportId,
+
+          filtros:
+            filtros || {
+              exportId,
+            },
+
+          estado:
+            "FALLIDO",
+
+          errorMensaje:
+            err?.message ||
+            "Error al generar PDF",
+        });
+
+      } catch (
+        auditoriaError
+      ) {
+
+        console.error(
+          "Error registrando auditoría PDF:",
+          auditoriaError
+        );
+
+      }
+
+
+      /* ===================================================
+         RESPUESTA
+
+         Aquí se conserva, por ejemplo:
+
+         410
+         EXPORT_SNAPSHOT_EXPIRADO
+         =================================================== */
+
+      return responderError(
+        res,
+        err,
+        "exportarPdf"
+      );
+    }
+  };
+
+
+/* =========================================================
+   EXPORTAR EXCEL
+
+   GET
+   /api/historial-recoleccion/export/excel?exportId=...
+   ========================================================= */
+
+exports.exportarExcel =
+  async (req, res) => {
+
+    const usuario =
+      obtenerUsuarioAutenticado(
+        req
+      );
+
+
+    if (!usuario) {
+      return res
+        .status(401)
+        .json({
+          message:
+            "Usuario no autenticado.",
+        });
     }
 
-    filtros = snap.filtros_json || {};
-    const order = normOrder(filtros?.order);
 
-    const { total, detalle, pesaje } = await consultarHistorial(
-      {
-        buscarPor: String(filtros.buscarPor || "").toLowerCase(),
-        valorBusqueda: normSearchValue(filtros.valorBusqueda),
-        fechaInicio: String(filtros.fechaInicio || ""),
-        fechaFin: String(filtros.fechaFin || ""),
-        order,
-      },
-      { paginado: false }
-    );
+    const exportId =
+      normalizarExportId(
+        req.query?.exportId
+      );
 
-    const excelBuffer = await buildHistorialRecoleccionExcelBuffer({
-      filtros,
-      detalle,
-      pesaje,
-      generadoPor: req.user,
-      total,
-    });
 
-    await registrarAuditoriaExportacion({
-      usuario_id: req.user.id_usuario,
-      usuario: req.user.usuario,
-      rol: req.user.rol,
-      modulo: MODULO,
-      reporte: REPORTE,
-      formato: "EXCEL",
-      export_id: exportId,
-      filtros_json: filtros,
-      total_registros: total,
-      resumen_json: { filas_detalle: detalle.length, filas_pesaje: pesaje.length },
-      estado: "GENERADO",
-      error_mensaje: null,
-      ip_origen: getIp(req),
-      user_agent: req.headers["user-agent"] || null,
-    });
+    if (!exportId) {
+      return res
+        .status(400)
+        .json({
+          message:
+            "exportId inválido.",
 
-    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.setHeader("Content-Disposition", `attachment; filename="historial_recoleccion.xlsx"`);
+          type:
+            "validation",
 
-    return res.status(200).send(Buffer.from(excelBuffer));
-  } catch (err) {
-    console.error("Error exportarExcel:", err);
+          code:
+            "EXPORT_SNAPSHOT_INVALIDO",
+        });
+    }
+
+
+    let filtros =
+      null;
+
 
     try {
-      await registrarAuditoriaExportacion({
-        usuario_id: req.user?.id_usuario || 0,
-        usuario: req.user?.usuario || "N/A",
-        rol: req.user?.rol || "N/A",
-        modulo: MODULO,
-        reporte: REPORTE,
-        formato: "EXCEL",
-        export_id: exportId || "N/A",
-        filtros_json: filtros || { exportId },
-        total_registros: 0,
-        resumen_json: null,
-        estado: "FALLIDO",
-        error_mensaje: "Error al generar Excel",
-        ip_origen: getIp(req),
-        user_agent: req.headers["user-agent"] || null,
-      });
-    } catch (_) {}
 
-    return res.status(500).json({ message: "Error interno del servidor" });
-  }
-};
+      /* ===================================================
+         DATOS DESDE SNAPSHOT
+         =================================================== */
+
+      const datos =
+        await obtenerDatosExportacion({
+          exportId,
+
+          usuarioId:
+            usuario.id_usuario,
+        });
+
+
+      if (!datos) {
+        return res
+          .status(400)
+          .json({
+            message:
+              "La exportación no existe o ya no está disponible. Presione 'Ver' nuevamente.",
+
+            type:
+              "validation",
+
+            code:
+              "EXPORT_SNAPSHOT_INVALIDO",
+          });
+      }
+
+
+      filtros =
+        datos.filtros;
+
+
+      /* ===================================================
+         GENERAR EXCEL
+         =================================================== */
+
+      const excelBuffer =
+        await buildHistorialRecoleccionExcelBuffer({
+          filtros:
+            datos.filtros,
+
+          detalle:
+            datos.detalle,
+
+          pesaje:
+            datos.pesaje,
+
+          generadoPor:
+            usuario,
+
+          total:
+            datos.total,
+        });
+
+
+      /* ===================================================
+         AUDITORÍA EXITOSA
+         =================================================== */
+
+      await registrarAuditoria({
+        req,
+        usuario,
+
+        formato:
+          "EXCEL",
+
+        exportId,
+
+        filtros:
+          datos.filtros,
+
+        total:
+          datos.total,
+
+        detalle:
+          datos.detalle,
+
+        pesaje:
+          datos.pesaje,
+
+        estado:
+          "GENERADO",
+      });
+
+
+      /* ===================================================
+         RESPUESTA EXCEL
+         =================================================== */
+
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      );
+
+
+      res.setHeader(
+        "Content-Disposition",
+        'attachment; filename="historial_recoleccion.xlsx"'
+      );
+
+
+      return res
+        .status(200)
+        .send(
+          Buffer.from(
+            excelBuffer
+          )
+        );
+
+
+    } catch (err) {
+
+      /* ===================================================
+         AUDITORÍA FALLIDA
+         =================================================== */
+
+      try {
+
+        await registrarAuditoria({
+          req,
+          usuario,
+
+          formato:
+            "EXCEL",
+
+          exportId,
+
+          filtros:
+            filtros || {
+              exportId,
+            },
+
+          estado:
+            "FALLIDO",
+
+          errorMensaje:
+            err?.message ||
+            "Error al generar Excel",
+        });
+
+      } catch (
+        auditoriaError
+      ) {
+
+        console.error(
+          "Error registrando auditoría Excel:",
+          auditoriaError
+        );
+
+      }
+
+
+      return responderError(
+        res,
+        err,
+        "exportarExcel"
+      );
+    }
+  };

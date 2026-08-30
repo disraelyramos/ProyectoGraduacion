@@ -1,13 +1,72 @@
-import React, { useMemo } from "react";
-import { Table, Card, Button } from "react-bootstrap";
-import { FaFilePdf, FaFileExcel } from "react-icons/fa";
+import React, {
+  useMemo,
+} from "react";
+
+import {
+  Table,
+  Card,
+  Button,
+} from "react-bootstrap";
+
+import {
+  FaFilePdf,
+  FaFileExcel,
+  FaChartBar,
+} from "react-icons/fa";
+
 import "../../styles/historial-recoleccion.css";
+
 import AppPagination from "../../components/common/AppPagination";
 
-const fmt = (v, suffix = "") => {
-  if (v === null || v === undefined || v === "") return "-";
-  return `${v}${suffix}`;
-};
+
+/* =========================================================
+   FORMATO DE VALORES
+   ========================================================= */
+
+function fmt(
+  value,
+  suffix = ""
+) {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
+    return "-";
+  }
+
+  return `${value}${suffix}`;
+}
+
+
+function fmtMoney(
+  value,
+  decimals = 2
+) {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
+    return "-";
+  }
+
+  const number =
+    Number(value);
+
+  if (!Number.isFinite(number)) {
+    return value;
+  }
+
+  return `Q${number.toFixed(
+    decimals
+  )}`;
+}
+
+
+/* =========================================================
+   COMPONENTE
+   ========================================================= */
 
 const HistorialEnTablas = ({
   loading,
@@ -15,306 +74,542 @@ const HistorialEnTablas = ({
   pesaje,
   page,
   total,
-  limit,
+  pageSize,
   onPageChange,
   canExport,
   onExportPdf,
   onExportExcel,
 }) => {
-  const showingFrom = total === 0 ? 0 : (page - 1) * limit + 1;
-  const showingTo = total === 0 ? 0 : Math.min(page * limit, total);
 
-  const pesajeById = useMemo(() => {
-    const m = new Map();
+  /* =======================================================
+     RANGO MOSTRADO
+     ======================================================= */
 
-    (pesaje || []).forEach((p) =>
-      m.set(Number(p.recoleccion_id), p)
-    );
+  const showingFrom =
+    total === 0
+      ? 0
+      : (
+          (page - 1) *
+          pageSize
+        ) + 1;
 
-    return m;
-  }, [pesaje]);
 
-  const emptyDetalle =
-    !loading && (detalle || []).length === 0;
+  const showingTo =
+    total === 0
+      ? 0
+      : Math.min(
+          page * pageSize,
+          total
+        );
+
+
+  /* =======================================================
+     PESAJE POR RECOLECCIÓN
+     ======================================================= */
+
+  const pesajeById =
+    useMemo(() => {
+
+      const map =
+        new Map();
+
+      for (
+        const registro
+        of pesaje || []
+      ) {
+
+        const id =
+          Number(
+            registro.recoleccion_id
+          );
+
+        if (
+          Number.isSafeInteger(id)
+        ) {
+          map.set(
+            id,
+            registro
+          );
+        }
+      }
+
+      return map;
+
+    }, [pesaje]);
+
+
+  const sinResultados =
+    !loading &&
+    (detalle || []).length === 0;
+
+
+  /* =======================================================
+     VISTA
+     ======================================================= */
 
   return (
+
     <div className="historial-tables">
 
-      {/* TABLA 1 */}
-      <Card className="app-card historial-table-card">
-        <Card.Body className="app-card-body">
+      <Card className="app-card historial-results-card">
 
-          <div className="historial-table-header">
+        <Card.Body className="app-card-body historial-results-body">
 
-            <h2 className="app-subtitle">
-              Datos de Registro de Recolección
-            </h2>
+
+          {/* =================================================
+              CABECERA GENERAL
+              ================================================= */}
+
+          <div className="historial-results-header">
+
+            <div className="historial-results-title-wrap">
+
+              <FaChartBar
+                className="historial-results-title-icon"
+                aria-hidden="true"
+              />
+
+              <h2 className="historial-results-title">
+                Resultados de la búsqueda
+              </h2>
+
+            </div>
+
 
             <div className="historial-export-actions">
 
               <Button
                 variant="danger"
                 size="sm"
-                className="app-btn app-btn--compact"
+                className="app-btn app-btn--compact historial-export-btn"
                 onClick={onExportPdf}
                 disabled={!canExport}
                 title={
                   !canExport
-                    ? "Presione 'Ver' y asegúrese de tener resultados"
-                    : "Ver PDF"
+                    ? "Realice una búsqueda con resultados para exportar."
+                    : "Exportar resultados a PDF"
                 }
               >
+
                 <FaFilePdf
-                  className="me-1"
+                  className="me-2"
                   aria-hidden="true"
                 />
-                PDF
+
+                Exportar PDF
+
               </Button>
+
 
               <Button
                 variant="success"
                 size="sm"
-                className="app-btn app-btn--compact"
+                className="app-btn app-btn--compact historial-export-btn"
                 onClick={onExportExcel}
                 disabled={!canExport}
                 title={
                   !canExport
-                    ? "Presione 'Ver' y asegúrese de tener resultados"
-                    : "Descargar Excel"
+                    ? "Realice una búsqueda con resultados para exportar."
+                    : "Exportar resultados a Excel"
                 }
               >
+
                 <FaFileExcel
-                  className="me-1"
+                  className="me-2"
                   aria-hidden="true"
                 />
-                Excel
+
+                Exportar Excel
+
               </Button>
 
             </div>
 
           </div>
 
-          <div className="app-divider" />
 
-          <div className="app-table-scroll">
+          <div className="historial-results-divider" />
 
-            <Table
-              striped
-              bordered
-              hover
-              className="custom-table historial-table historial-table--detail"
-            >
 
-              <thead className="sticky-head">
-                <tr>
-                  <th>Código</th>
-                  <th>Fecha</th>
-                  <th>Distrito</th>
-                  <th>Tipo de Residuo</th>
-                  <th>Número de Recibo</th>
-                  <th>Responsable</th>
-                  <th>Empresa Recolectora</th>
-                  <th>% DSH Pendientes</th>
-                  <th>Cantidad en Libras Pendientes</th>
-                  <th>Observación</th>
-                </tr>
-              </thead>
+          {/* =================================================
+              DATOS DE RECOLECCIÓN
+              ================================================= */}
 
-              <tbody>
+          <section className="historial-result-section">
 
-                {(detalle || []).map((r) => (
-                  <tr key={r.recoleccion_id}>
+            <h3 className="historial-table-title">
+              Datos de Registro de Recolección
+            </h3>
 
-                    <td>{fmt(r.codigo)}</td>
 
-                    <td>{fmt(r.fecha)}</td>
+            <div className="app-table-scroll">
 
-                    <td>{fmt(r.distrito)}</td>
+              <Table
+                bordered
+                hover
+                className="custom-table historial-table historial-table--detail"
+              >
 
-                    <td>{fmt(r.tipo_residuo)}</td>
+                <thead className="sticky-head">
 
-                    <td>{fmt(r.numero_recibo)}</td>
-
-                    <td>{fmt(r.responsable)}</td>
-
-                    <td>
-                      {fmt(r.empresa_recolectora)}
-                    </td>
-
-                    <td>
-                      {fmt(
-                        r.porcentaje_pendiente,
-                        "%"
-                      )}
-                    </td>
-
-                    <td>
-                      {fmt(
-                        r.cantidad_libras_pendientes
-                      )}
-                    </td>
-
-                    <td>
-                      {fmt(r.observaciones)}
-                    </td>
-
-                  </tr>
-                ))}
-
-                {emptyDetalle && (
                   <tr>
-                    <td
-                      colSpan={10}
-                      className="historial-table-state"
-                    >
-                      Sin resultados para mostrar.
-                    </td>
+
+                    <th>
+                      Código
+                    </th>
+
+                    <th>
+                      Fecha
+                    </th>
+
+                    <th>
+                      Distrito
+                    </th>
+
+                    <th>
+                      Tipo de Residuo
+                    </th>
+
+                    <th>
+                      No. recibo
+                    </th>
+
+                    <th>
+                      Responsable
+                    </th>
+
+                    <th>
+                      Empresa
+                    </th>
+
+                    <th>
+                      % Pend.
+                    </th>
+
+                    <th>
+                      Lbs Pend.
+                    </th>
+
+                    <th>
+                      Observaciones
+                    </th>
+
                   </tr>
-                )}
 
-                {loading && (
-                  <tr>
-                    <td
-                      colSpan={10}
-                      className="historial-table-state"
-                    >
-                      Cargando...
-                    </td>
-                  </tr>
-                )}
+                </thead>
 
-              </tbody>
 
-            </Table>
+                <tbody>
 
-          </div>
+                  {(detalle || []).map(
+                    (registro) => (
 
-        </Card.Body>
-      </Card>
+                      <tr
+                        key={
+                          registro.recoleccion_id
+                        }
+                      >
 
-      {/* TABLA 2 */}
-      <Card className="app-card historial-table-card">
+                        <td>
+                          {fmt(
+                            registro.codigo
+                          )}
+                        </td>
 
-        <Card.Body className="app-card-body">
+                        <td>
+                          {fmt(
+                            registro.fecha
+                          )}
+                        </td>
 
-          <div className="historial-table-header">
+                        <td>
+                          {fmt(
+                            registro.distrito
+                          )}
+                        </td>
 
-            <h2 className="app-subtitle">
-              Control de Pesaje
-            </h2>
+                        <td>
+                          {fmt(
+                            registro.tipo_residuo
+                          )}
+                        </td>
 
-          </div>
+                        <td>
+                          {fmt(
+                            registro.numero_recibo
+                          )}
+                        </td>
 
-          <div className="app-divider" />
+                        <td>
+                          {fmt(
+                            registro.responsable
+                          )}
+                        </td>
 
-          <div className="app-table-scroll">
+                        <td>
+                          {fmt(
+                            registro.empresa_recolectora
+                          )}
+                        </td>
 
-            <Table
-              striped
-              bordered
-              hover
-              className="custom-table historial-table historial-table--weight"
-            >
+                        <td className="historial-cell-number">
+                          {fmt(
+                            registro.porcentaje_pendiente,
+                            "%"
+                          )}
+                        </td>
 
-              <thead className="sticky-head">
-                <tr>
-                  <th>Total (lb)</th>
-                  <th>% Recolectado</th>
-                  <th>% Llenado Actual</th>
-                  <th>Costo por Libra</th>
-                  <th>Costo Total</th>
-                </tr>
-              </thead>
+                        <td className="historial-cell-number">
+                          {fmt(
+                            registro.cantidad_libras_pendientes
+                          )}
+                        </td>
 
-              <tbody>
+                        <td>
+                          {fmt(
+                            registro.observaciones
+                          )}
+                        </td>
 
-                {(detalle || []).map((r) => {
+                      </tr>
 
-                  const p = pesajeById.get(
-                    Number(r.recoleccion_id)
-                  );
+                    )
+                  )}
 
-                  return (
-                    <tr
-                      key={`pesaje-${r.recoleccion_id}`}
-                    >
-                      <td>
-                        {fmt(p?.total_en_libras)}
-                      </td>
 
-                      <td>
-                        {fmt(
-                          p?.porcentaje_recolectado,
-                          "%"
-                        )}
-                      </td>
+                  {sinResultados && (
 
-                      <td>
-                        {fmt(
-                          p?.porcentaje_llenado,
-                          "%"
-                        )}
-                      </td>
+                    <tr>
 
-                      <td>
-                        {fmt(
-                          p?.costo_por_libra_aplicado
-                        )}
-                      </td>
-
-                      <td>
-                        {fmt(p?.total_costo_q)}
+                      <td
+                        colSpan={10}
+                        className="historial-table-state"
+                      >
+                        Sin resultados para mostrar.
                       </td>
 
                     </tr>
-                  );
-                })}
 
-                {emptyDetalle && (
+                  )}
+
+
+                  {loading && (
+
+                    <tr>
+
+                      <td
+                        colSpan={10}
+                        className="historial-table-state"
+                      >
+                        Cargando resultados...
+                      </td>
+
+                    </tr>
+
+                  )}
+
+                </tbody>
+
+              </Table>
+
+            </div>
+
+          </section>
+
+
+          {/* =================================================
+              CONTROL DE PESAJE
+              ================================================= */}
+
+          <section className="historial-result-section">
+
+            <h3 className="historial-table-title">
+              Control de Pesaje
+            </h3>
+
+
+            <div className="app-table-scroll">
+
+              <Table
+                bordered
+                hover
+                className="custom-table historial-table historial-table--weight"
+              >
+
+                <thead className="sticky-head">
+
                   <tr>
-                    <td
-                      colSpan={5}
-                      className="historial-table-state"
-                    >
-                      Sin resultados para mostrar.
-                    </td>
+
+                    <th>
+                      Total (lb)
+                    </th>
+
+                    <th>
+                      % Recolectado
+                    </th>
+
+                    <th>
+                      % Llenado Actual
+                    </th>
+
+                    <th>
+                      Costo por Libra
+                    </th>
+
+                    <th>
+                      Costo Total
+                    </th>
+
                   </tr>
-                )}
 
-                {loading && (
-                  <tr>
-                    <td
-                      colSpan={5}
-                      className="historial-table-state"
-                    >
-                      Cargando...
-                    </td>
-                  </tr>
-                )}
+                </thead>
 
-              </tbody>
 
-            </Table>
+                <tbody>
 
-          </div>
+                  {(detalle || []).map(
+                    (registro) => {
 
-          {/* PAGINACIÓN */}
+                      const pesajeRegistro =
+                        pesajeById.get(
+                          Number(
+                            registro.recoleccion_id
+                          )
+                        );
+
+
+                      return (
+
+                        <tr
+                          key={
+                            `pesaje-${registro.recoleccion_id}`
+                          }
+                        >
+
+                          <td className="historial-cell-number">
+                            {fmt(
+                              pesajeRegistro
+                                ?.total_en_libras
+                            )}
+                          </td>
+
+                          <td className="historial-cell-number">
+                            {fmt(
+                              pesajeRegistro
+                                ?.porcentaje_recolectado,
+                              "%"
+                            )}
+                          </td>
+
+                          <td className="historial-cell-number">
+                            {fmt(
+                              pesajeRegistro
+                                ?.porcentaje_llenado,
+                              "%"
+                            )}
+                          </td>
+
+                          <td className="historial-cell-number">
+                            {fmtMoney(
+                              pesajeRegistro
+                                ?.costo_por_libra_aplicado,
+                              4
+                            )}
+                          </td>
+
+                          <td className="historial-cell-number">
+                            {fmtMoney(
+                              pesajeRegistro
+                                ?.total_costo_q,
+                              2
+                            )}
+                          </td>
+
+                        </tr>
+
+                      );
+                    }
+                  )}
+
+
+                  {sinResultados && (
+
+                    <tr>
+
+                      <td
+                        colSpan={5}
+                        className="historial-table-state"
+                      >
+                        Sin resultados para mostrar.
+                      </td>
+
+                    </tr>
+
+                  )}
+
+
+                  {loading && (
+
+                    <tr>
+
+                      <td
+                        colSpan={5}
+                        className="historial-table-state"
+                      >
+                        Cargando resultados...
+                      </td>
+
+                    </tr>
+
+                  )}
+
+                </tbody>
+
+              </Table>
+
+            </div>
+
+          </section>
+
+
+          {/* =================================================
+              PAGINACIÓN GENERAL
+              ================================================= */}
+
           <div className="historial-pagination-bar">
 
             <div className="historial-pagination-info">
-              Mostrando {showingFrom}-{showingTo} de {total}
+
+              Mostrando{" "}
+              <strong>
+                {showingFrom}
+              </strong>
+              {" "}a{" "}
+              <strong>
+                {showingTo}
+              </strong>
+              {" "}de{" "}
+              <strong>
+                {total}
+              </strong>
+              {" "}registros
+
             </div>
+
 
             <div className="historial-pagination-control">
 
               <AppPagination
                 page={page}
                 total={total}
-                limit={limit}
+                limit={pageSize}
                 disabled={
-                  loading || total === 0
+                  loading ||
+                  total === 0
                 }
-                onChange={onPageChange}
+                onChange={
+                  onPageChange
+                }
               />
 
             </div>
@@ -328,5 +623,6 @@ const HistorialEnTablas = ({
     </div>
   );
 };
+
 
 export default HistorialEnTablas;

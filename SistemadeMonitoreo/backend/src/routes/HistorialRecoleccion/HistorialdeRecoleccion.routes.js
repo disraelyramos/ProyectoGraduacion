@@ -1,17 +1,38 @@
 const express = require("express");
+
 const router = express.Router();
 
-const authMiddleware = require("../../middlewares/auth.middleware");
-const controller = require("../../controllers/HistorialRecoleccion/HistorialdeRecoleccion.controller");
+const authMiddleware = require(
+  "../../middlewares/auth.middleware"
+);
 
-router.get("/", authMiddleware, controller.obtenerHistorial);
+const controller = require(
+  "../../controllers/HistorialRecoleccion/HistorialdeRecoleccion.controller"
+);
 
-// Export (un solo archivo que incluye ambas tablas)
-router.get("/export/pdf", authMiddleware, controller.exportarPdf);
-router.get("/export/excel", authMiddleware, controller.exportarExcel);
 
-router.get("/export/pdf", authMiddleware, controller.exportarPdf);
-router.get("/export/excel", authMiddleware, controller.exportarExcel);
+router.use(authMiddleware);
+
+
+// Consulta paginada del historial
+router.get(
+  "/",
+  controller.obtenerHistorial
+);
+
+
+// PDF
+router.get(
+  "/export/pdf",
+  controller.exportarPdf
+);
+
+
+// Excel
+router.get(
+  "/export/excel",
+  controller.exportarExcel
+);
 
 
 module.exports = router;

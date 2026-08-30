@@ -17,6 +17,7 @@
     "exceljs": "^4.4.0",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
+    "pdfmake": "^0.3.11",
     "pg": "^8.16.3",
     "puppeteer": "^24.37.3",
     "xss": "^1.0.15"
