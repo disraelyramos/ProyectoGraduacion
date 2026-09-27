@@ -9,21 +9,31 @@ const {
 
 
 /* =========================================================
-   BEARER TOKEN
+   OBTENER BEARER TOKEN
    ========================================================= */
 
-function obtenerBearerToken(req) {
+function obtenerBearerToken(
+  req
+) {
+
   const authorization =
     req.headers?.authorization;
 
 
-  if (!authorization) {
+  if (
+    typeof authorization !==
+      "string" ||
+    !authorization
+  ) {
+
     return null;
   }
 
 
   const partes =
-    authorization.split(" ");
+    authorization
+      .trim()
+      .split(/\s+/);
 
 
   if (
@@ -31,11 +41,45 @@ function obtenerBearerToken(req) {
     partes[0] !== "Bearer" ||
     !partes[1]
   ) {
+
     return null;
   }
 
 
   return partes[1];
+}
+
+
+/* =========================================================
+   OBTENER ID DEL USUARIO AUTENTICADO
+
+   IMPORTANTE:
+   Este dato viene de authMiddleware después de validar
+   el JWT.
+
+   NO se obtiene desde req.body.
+   ========================================================= */
+
+function obtenerUsuarioIdAutenticado(
+  req
+) {
+
+  const id =
+    Number(
+      req.user?.id_usuario
+    );
+
+
+  if (
+    !Number.isSafeInteger(id) ||
+    id <= 0
+  ) {
+
+    return null;
+  }
+
+
+  return id;
 }
 
 
@@ -48,6 +92,7 @@ function responderError(
   error,
   contexto
 ) {
+
   const status =
     Number.isInteger(
       error?.statusCode
@@ -56,7 +101,15 @@ function responderError(
       : 500;
 
 
-  if (status >= 500) {
+  /*
+   * Los errores internos se registran
+   * únicamente en backend.
+   */
+
+  if (
+    status >= 500
+  ) {
+
     console.error(
       contexto,
       error
@@ -64,31 +117,57 @@ function responderError(
   }
 
 
+  /*
+   * Si AuthError ya contiene una respuesta pública,
+   * se respeta.
+   */
+
+  if (
+    error?.publicData
+  ) {
+
+    return res
+      .status(status)
+      .json(
+        error.publicData
+      );
+  }
+
+
   return res
     .status(status)
-    .json(
-      error?.publicData ||
-      {
-        message:
-          status >= 500
-            ? "Error en el servidor."
-            : error.message,
-      }
-    );
+    .json({
+      message:
+        status >= 500
+          ? "Error en el servidor."
+          : (
+              error?.message ||
+              "No fue posible procesar la solicitud."
+            ),
+    });
 }
 
 
 /* =========================================================
    LOGIN
+
+   Endpoint público.
+
+   El frontend envía usuario y contraseña, pero el Service
+   es quien valida realmente los datos y las credenciales.
    ========================================================= */
 
 exports.login =
-  async (req, res) => {
+  async (
+    req,
+    res
+  ) => {
 
     try {
 
       const resultado =
         await login({
+
           usuario:
             req.body?.usuario,
 
@@ -97,42 +176,55 @@ exports.login =
         });
 
 
-      return res.json(
-        resultado
-      );
+      return res
+        .status(200)
+        .json(
+          resultado
+        );
 
 
-    } catch (error) {
+    } catch (
+      error
+    ) {
 
       return responderError(
         res,
         error,
         "Error en login:"
       );
-
     }
   };
 
 
 /* =========================================================
    LOGOUT
+
+   Ruta protegida por authMiddleware.
+
+   El token se obtiene del header Authorization.
    ========================================================= */
 
 exports.logout =
-  async (req, res) => {
+  async (
+    req,
+    res
+  ) => {
 
     try {
 
       const token =
-        obtenerBearerToken(req);
+        obtenerBearerToken(
+          req
+        );
 
 
       if (!token) {
+
         return res
-          .status(400)
+          .status(401)
           .json({
             message:
-              "Authorization Bearer requerido.",
+              "Sesión no válida.",
           });
       }
 
@@ -143,72 +235,144 @@ exports.logout =
         });
 
 
-      return res.json(
-        resultado
-      );
+      return res
+        .status(200)
+        .json(
+          resultado
+        );
 
 
-    } catch (error) {
+    } catch (
+      error
+    ) {
 
       return responderError(
         res,
         error,
         "Error en logout:"
       );
-
     }
   };
 
 
 /* =========================================================
-   CAMBIO OBLIGATORIO
+   CAMBIO OBLIGATORIO DE CONTRASEÑA
+
+   Ruta protegida por authMiddleware.
+
+   IMPORTANTE:
+   La identidad se obtiene únicamente de:
+
+   req.user.id_usuario
+
+   El frontend NO decide qué usuario se modifica.
    ========================================================= */
 
 exports.cambiarPasswordObligatorio =
-  async (req, res) => {
+  async (
+    req,
+    res
+  ) => {
 
     try {
 
+      const usuarioId =
+        obtenerUsuarioIdAutenticado(
+          req
+        );
+
+
+      if (!usuarioId) {
+
+        return res
+          .status(401)
+          .json({
+            message:
+              "Sesión no válida. Inicie sesión nuevamente.",
+          });
+      }
+
+
+      /*
+       * Solo se envía al Service:
+       *
+       * - usuarioId obtenido del JWT validado
+       * - nueva contraseña recibida
+       *
+       * NO usuario del frontend.
+       */
+
       const resultado =
         await cambiarPasswordObligatorio({
-          usuario:
-            req.body?.usuario,
+
+          usuarioId,
 
           nueva:
             req.body?.nueva,
         });
 
 
-      return res.json(
-        resultado
-      );
+      return res
+        .status(200)
+        .json(
+          resultado
+        );
 
 
-    } catch (error) {
+    } catch (
+      error
+    ) {
 
       return responderError(
         res,
         error,
         "Error cambio obligatorio:"
       );
-
     }
   };
 
 
 /* =========================================================
-   RECONFIRMACIÓN
+   RECONFIRMACIÓN POR VENCIMIENTO
+
+   Ruta protegida por authMiddleware.
+
+   La identidad se obtiene únicamente desde el JWT.
+
+   El frontend únicamente proporciona:
+   - contraseña actual
+   - contraseña nueva
    ========================================================= */
 
 exports.reconfirmarPassword =
-  async (req, res) => {
+  async (
+    req,
+    res
+  ) => {
 
     try {
 
+      const usuarioId =
+        obtenerUsuarioIdAutenticado(
+          req
+        );
+
+
+      if (!usuarioId) {
+
+        return res
+          .status(401)
+          .json({
+            message:
+              "Sesión no válida. Inicie sesión nuevamente.",
+          });
+      }
+
+
       const resultado =
         await reconfirmarPassword({
-          usuario:
-            req.body?.usuario,
+
+          usuarioId,
 
           actual:
             req.body?.actual,
@@ -218,18 +382,21 @@ exports.reconfirmarPassword =
         });
 
 
-      return res.json(
-        resultado
-      );
+      return res
+        .status(200)
+        .json(
+          resultado
+        );
 
 
-    } catch (error) {
+    } catch (
+      error
+    ) {
 
       return responderError(
         res,
         error,
         "Error reconfirmación:"
       );
-
     }
   };

@@ -1,70 +1,76 @@
-// frontend/src/utils/apiClient.js
-
 import axios from "axios";
 
+import {
+  showSessionExpiredAlert,
+} from "./alerts";
 
-/* =========================================================
-   URL DEL BACKEND
-   =========================================================
-   Se configura en el .env del FRONTEND.
 
-   Desarrollo:
-   VITE_API_URL=http://localhost:3001
-
-   Producción:
-   VITE_API_URL=https://tu-backend.up.railway.app
-
-   IMPORTANTE:
-   No colocar /api dentro de VITE_API_URL.
-   ========================================================= */
+// ======================================================
+// URL DEL BACKEND
+// ======================================================
+//
+// Se configura desde el .env del FRONTEND.
+//
+// VITE_API_URL debe contener la URL del backend,
+// sin /api al final.
+//
+// No se queman direcciones locales ni de producción.
+// ======================================================
 
 const API_URL =
   import.meta.env.VITE_API_URL;
 
 
-/* =========================================================
-   VALIDAR CONFIGURACIÓN
-   ========================================================= */
+// ======================================================
+// VALIDAR CONFIGURACIÓN
+// ======================================================
 
-if (!API_URL) {
+if (
+  !API_URL ||
+  typeof API_URL !== "string" ||
+  !API_URL.trim()
+) {
+
   throw new Error(
     "Falta configurar VITE_API_URL en el archivo .env del frontend."
   );
 }
 
 
-/* =========================================================
-   NORMALIZAR URL
-   Evita terminar con //api
-   ========================================================= */
+// ======================================================
+// NORMALIZAR URL
+// ======================================================
 
 const BACKEND_URL =
-  API_URL.replace(
-    /\/+$/,
-    ""
-  );
+  API_URL.trim().replace(/\/+$/, "");
 
 
-/* =========================================================
-   CLIENTE AXIOS
-   ========================================================= */
+// ======================================================
+// CLIENTE AXIOS
+// ======================================================
 
-const apiClient =
-  axios.create({
+const apiClient = axios.create({
 
-    baseURL:
-      `${BACKEND_URL}/api`,
+  baseURL:
+    `${BACKEND_URL}/api`,
 
-    timeout:
-      15000,
+  timeout:
+    15000,
 
-  });
+});
 
 
-/* =========================================================
-   INTERCEPTOR DE REQUEST
-   Adjunta automáticamente el token JWT.
-   ========================================================= */
+// ======================================================
+// INTERCEPTOR DE REQUEST
+// ======================================================
+//
+// Adjunta automáticamente el JWT.
+//
+// Los componentes no necesitan repetir:
+//
+// localStorage.getItem("token")
+// Authorization: Bearer ...
+// ======================================================
 
 apiClient.interceptors.request.use(
 
@@ -78,31 +84,37 @@ apiClient.interceptors.request.use(
 
     if (token) {
 
-      config.headers =
-        config.headers || {};
-
-
       config.headers.Authorization =
         `Bearer ${token}`;
     }
 
 
     return config;
+
   },
 
-
   (error) =>
-    Promise.reject(
-      error
-    )
+    Promise.reject(error)
 
 );
 
 
-/* =========================================================
-   INTERCEPTOR DE RESPONSE
-   Manejo centralizado de autenticación.
-   ========================================================= */
+// ======================================================
+// INTERCEPTOR DE RESPONSE
+// ======================================================
+//
+// 401:
+// Sesión no válida.
+// Se muestra una sola alerta y el usuario
+// regresa al login después de pulsar Aceptar.
+//
+// 403:
+// Usuario autenticado sin permisos.
+// No se elimina el token.
+//
+// Los demás errores se entregan al componente
+// para utilizar showBackendAlert.
+// ======================================================
 
 apiClient.interceptors.response.use(
 
@@ -117,42 +129,55 @@ apiClient.interceptors.response.use(
 
 
     /*
-     * Se conserva el comportamiento actual:
-     * 401 / 403 limpian la sesión.
+     * Verificamos si esta solicitud utilizó
+     * un token de autenticación.
      *
-     * No modificamos esta lógica durante
-     * la migración visual/configuración.
+     * Esto evita tratar un error 401 de un
+     * inicio de sesión sin token como si fuera
+     * una sesión que acaba de caducar.
      */
 
+    const tokenEnviado =
+      error?.config?.headers?.get?.(
+        "Authorization"
+      ) ||
+      error?.config?.headers
+        ?.Authorization;
+
+
+    // ==================================================
+    // SESIÓN CADUCADA
+    // ==================================================
+
     if (
-      status === 401 ||
-      status === 403
+      status === 401 &&
+      tokenEnviado
     ) {
 
-      localStorage.removeItem(
-        "token"
-      );
-
-
       /*
-       * Evita redirección repetitiva
-       * si ya estamos en Login.
+       * alerts.js ya controla que no se
+       * abran múltiples modales de sesión.
+       *
+       * También elimina el token y redirige
+       * únicamente después de Aceptar.
        */
 
-      if (
-        window.location.pathname !==
-        "/"
-      ) {
-
-        window.location.href =
-          "/";
-      }
+      showSessionExpiredAlert();
     }
+
+
+    /*
+     * No interceptamos el 403 para cerrar sesión.
+     *
+     * El componente mostrará el mensaje
+     * correspondiente con showBackendAlert.
+     */
 
 
     return Promise.reject(
       error
     );
+
   }
 
 );

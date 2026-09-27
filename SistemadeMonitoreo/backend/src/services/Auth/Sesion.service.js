@@ -1,11 +1,8 @@
-const jwt =
-  require("jsonwebtoken");
+const jwt = require("jsonwebtoken");
 
-const pool =
-  require("../../config/db");
+const pool = require("../../config/db");
 
-const authConfig =
-  require("../../config/auth.config");
+const authConfig = require("../../config/auth.config");
 
 const {
   crearErrorHttp,
@@ -30,9 +27,7 @@ function obtenerDb(client) {
    ========================================================= */
 
 function normalizarToken(valor) {
-  const token =
-    String(valor || "")
-      .trim();
+  const token = String(valor || "").trim();
 
   if (!token) {
     throw crearErrorHttp(
@@ -50,8 +45,7 @@ function normalizarToken(valor) {
    ========================================================= */
 
 function normalizarUsuarioId(valor) {
-  const id =
-    Number(valor);
+  const id = Number(valor);
 
   if (
     !Number.isSafeInteger(id) ||
@@ -73,20 +67,11 @@ function normalizarUsuarioId(valor) {
 
 function crearPayloadUsuario(usuario) {
   return {
-    id_usuario:
-      usuario.id_usuario,
-
-    usuario:
-      usuario.usuario,
-
-    nombre:
-      usuario.nombre,
-
-    rol_id:
-      usuario.rol_id,
-
-    rol:
-      usuario.rol,
+    id_usuario: usuario.id_usuario,
+    usuario: usuario.usuario,
+    nombre: usuario.nombre,
+    rol_id: usuario.rol_id,
+    rol: usuario.rol,
   };
 }
 
@@ -97,20 +82,14 @@ function crearPayloadUsuario(usuario) {
    JWT_EXPIRES_IN viene exclusivamente de .env.
    ========================================================= */
 
-function generarTokenSesion(
-  usuario
-) {
-  const payload =
-    crearPayloadUsuario(
-      usuario
-    );
+function generarTokenSesion(usuario) {
+  const payload = crearPayloadUsuario(usuario);
 
   return jwt.sign(
     payload,
     authConfig.jwtSecret,
     {
-      expiresIn:
-        authConfig.jwtExpiresIn,
+      expiresIn: authConfig.jwtExpiresIn,
     }
   );
 }
@@ -121,8 +100,7 @@ function generarTokenSesion(
    ========================================================= */
 
 function verificarTokenJwt(token) {
-  const tokenSeguro =
-    normalizarToken(token);
+  const tokenSeguro = normalizarToken(token);
 
   return jwt.verify(
     tokenSeguro,
@@ -143,18 +121,16 @@ function verificarTokenJwt(token) {
 async function limpiarSesionesExpiradas({
   client = null,
 } = {}) {
-  const db =
-    obtenerDb(client);
+  const db = obtenerDb(client);
 
-  const resultado =
-    await db.query(`
-      UPDATE sesiones
+  const resultado = await db.query(`
+    UPDATE sesiones
 
-      SET activo = FALSE
+    SET activo = FALSE
 
-      WHERE activo = TRUE
-        AND fecha_expiracion <= NOW()
-    `);
+    WHERE activo = TRUE
+      AND fecha_expiracion <= NOW()
+  `);
 
   return resultado.rowCount || 0;
 }
@@ -168,28 +144,24 @@ async function desactivarSesionesUsuario({
   client = null,
   usuarioId,
 }) {
-  const db =
-    obtenerDb(client);
+  const db = obtenerDb(client);
 
   const usuarioSeguro =
-    normalizarUsuarioId(
-      usuarioId
-    );
+    normalizarUsuarioId(usuarioId);
 
-  const resultado =
-    await db.query(
-      `
-        UPDATE sesiones
+  const resultado = await db.query(
+    `
+      UPDATE sesiones
 
-        SET activo = FALSE
+      SET activo = FALSE
 
-        WHERE id_usuario = $1
-          AND activo = TRUE
-      `,
-      [
-        usuarioSeguro,
-      ]
-    );
+      WHERE id_usuario = $1
+        AND activo = TRUE
+    `,
+    [
+      usuarioSeguro,
+    ]
+  );
 
   return resultado.rowCount || 0;
 }
@@ -219,36 +191,25 @@ async function crearSesion({
     );
   }
 
-
-  const db =
-    obtenerDb(client);
+  const db = obtenerDb(client);
 
   const usuarioId =
-    normalizarUsuarioId(
-      usuario.id_usuario
-    );
-
+    normalizarUsuarioId(usuario.id_usuario);
 
   /*
-    Una sola sesión vigente por usuario,
-    si la política .env así lo establece.
-  */
+   * Una sola sesión vigente por usuario,
+   * si la política .env así lo establece.
+   */
 
-  if (
-    authConfig.singleSessionPerUser
-  ) {
+  if (authConfig.singleSessionPerUser) {
     await desactivarSesionesUsuario({
       client,
       usuarioId,
     });
   }
 
-
   const token =
-    generarTokenSesion(
-      usuario
-    );
-
+    generarTokenSesion(usuario);
 
   await db.query(
     `
@@ -278,7 +239,6 @@ async function crearSesion({
     ]
   );
 
-
   return token;
 }
 
@@ -289,60 +249,52 @@ async function crearSesion({
    Operación atómica:
 
    Si la sesión:
-   - existe
-   - está activa
-   - no venció
+   - existe;
+   - está activa;
+   - no venció;
 
    entonces renueva fecha_expiracion.
 
-   Así no manejamos fechas con el reloj de Node.
    PostgreSQL es la fuente del tiempo.
    ========================================================= */
 
-async function validarYRenovarSesion(
-  token
-) {
-  const tokenSeguro =
-    normalizarToken(token);
+async function validarYRenovarSesion(token) {
+  const tokenSeguro = normalizarToken(token);
 
+  const { rows } = await pool.query(
+    `
+      UPDATE sesiones
 
-  const { rows } =
-    await pool.query(
-      `
-        UPDATE sesiones
+      SET fecha_expiracion =
+        NOW() + (
+          $2::int *
+          INTERVAL '1 minute'
+        )
 
-        SET fecha_expiracion =
-          NOW() + (
-            $2::int *
-            INTERVAL '1 minute'
-          )
+      WHERE token = $1
+        AND activo = TRUE
+        AND fecha_expiracion > NOW()
 
-        WHERE token = $1
-          AND activo = TRUE
-          AND fecha_expiracion > NOW()
-
-        RETURNING
-          id,
-          id_usuario,
-          fecha_expiracion,
-          activo
-      `,
-      [
-        tokenSeguro,
-        authConfig.sessionInactivityMin,
-      ]
-    );
-
+      RETURNING
+        id,
+        id_usuario,
+        fecha_expiracion,
+        activo
+    `,
+    [
+      tokenSeguro,
+      authConfig.sessionInactivityMin,
+    ]
+  );
 
   if (rows.length > 0) {
     return rows[0];
   }
 
-
   /*
-    Si estaba vencida pero todavía figuraba TRUE,
-    corregimos su estado.
-  */
+   * Si estaba vencida pero todavía figuraba TRUE,
+   * corregimos su estado.
+   */
 
   await pool.query(
     `
@@ -359,8 +311,54 @@ async function validarYRenovarSesion(
     ]
   );
 
-
   return null;
+}
+
+
+/* =========================================================
+   VALIDAR SESIÓN SIN RENOVAR INACTIVIDAD
+
+   Se utilizará en consultas automáticas del frontend.
+
+   Verifica que la sesión:
+   - exista;
+   - esté activa;
+   - no haya vencido.
+
+   IMPORTANTE:
+
+   NO modifica fecha_expiracion.
+
+   Así, consultar periódicamente el nivel de los
+   contenedores no mantiene la sesión abierta
+   indefinidamente.
+   ========================================================= */
+
+async function validarSesionSinRenovar(token) {
+  const tokenSeguro = normalizarToken(token);
+
+  const { rows } = await pool.query(
+    `
+      SELECT
+        id,
+        id_usuario,
+        fecha_expiracion,
+        activo
+
+      FROM sesiones
+
+      WHERE token = $1
+        AND activo = TRUE
+        AND fecha_expiracion > NOW()
+
+      LIMIT 1
+    `,
+    [
+      tokenSeguro,
+    ]
+  );
+
+  return rows[0] || null;
 }
 
 
@@ -372,28 +370,22 @@ async function validarYRenovarSesion(
    Conservamos el registro histórico.
    ========================================================= */
 
-async function cerrarSesionPorToken(
-  token
-) {
-  const tokenSeguro =
-    normalizarToken(token);
+async function cerrarSesionPorToken(token) {
+  const tokenSeguro = normalizarToken(token);
 
+  const resultado = await pool.query(
+    `
+      UPDATE sesiones
 
-  const resultado =
-    await pool.query(
-      `
-        UPDATE sesiones
+      SET activo = FALSE
 
-        SET activo = FALSE
-
-        WHERE token = $1
-          AND activo = TRUE
-      `,
-      [
-        tokenSeguro,
-      ]
-    );
-
+      WHERE token = $1
+        AND activo = TRUE
+    `,
+    [
+      tokenSeguro,
+    ]
+  );
 
   return resultado.rowCount || 0;
 }
@@ -410,6 +402,7 @@ module.exports = {
   verificarTokenJwt,
 
   validarYRenovarSesion,
+  validarSesionSinRenovar,
 
   cerrarSesionPorToken,
 

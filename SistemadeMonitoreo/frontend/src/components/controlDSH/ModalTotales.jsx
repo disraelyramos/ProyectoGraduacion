@@ -38,6 +38,38 @@ const ESTADO_UI = {
 
 
 // ======================================================
+// ESTADOS DEL MODULO
+// ======================================================
+
+const ESTADO_MEDICION = {
+
+  OBTENIENDO_LECTURA:
+    "OBTENIENDO_LECTURA",
+
+  PENDIENTE:
+    "PENDIENTE",
+
+  MIDIENDO:
+    "MIDIENDO",
+
+  ESTABILIZANDO:
+    "ESTABILIZANDO",
+
+  MOVIMIENTO_DETECTADO:
+    "MOVIMIENTO_DETECTADO",
+
+  COMPLETADO:
+    "COMPLETADO",
+
+  ERROR:
+    "ERROR",
+
+  TIMEOUT:
+    "TIMEOUT",
+};
+
+
+// ======================================================
 // COMPONENTE
 // ======================================================
 
@@ -67,11 +99,104 @@ const ModalTotales = ({
 
 
   // ====================================================
+  // ESTADO ACTUAL DEL MODULO
+  // ====================================================
+
+  const [
+    estadoMedicion,
+    setEstadoMedicion,
+  ] = useState(
+    ESTADO_MEDICION
+      .OBTENIENDO_LECTURA
+  );
+
+
+  const [
+    mensajeMedicion,
+    setMensajeMedicion,
+  ] = useState(
+    "Preparando medición de peso..."
+  );
+
+
+  // ====================================================
   // PROTECCIÓN CONTRA DOBLE SOLICITUD
   // ====================================================
 
   const solicitudEnCursoRef =
     useRef(false);
+
+
+  // ====================================================
+  // CONTROL DEL POLLING
+  // ====================================================
+
+  const pollingActivoRef =
+    useRef(false);
+
+
+  const pollingTimerRef =
+    useRef(null);
+
+
+  /*
+   * Conserva el último estado conocido.
+   *
+   * Esto también permite distinguir un TIMEOUT
+   * reportado por el backend de otros errores.
+   */
+  const ultimoEstadoRef =
+    useRef(null);
+
+
+  // ====================================================
+  // DETENER POLLING
+  // ====================================================
+
+  const detenerPolling = () => {
+
+    pollingActivoRef.current =
+      false;
+
+
+    if (
+      pollingTimerRef.current
+    ) {
+
+      clearTimeout(
+        pollingTimerRef.current
+      );
+
+
+      pollingTimerRef.current =
+        null;
+    }
+  };
+
+
+  // ====================================================
+  // LIMPIEZA AL DESMONTAR
+  // ====================================================
+
+  useEffect(() => {
+
+    return () => {
+
+      pollingActivoRef.current =
+        false;
+
+
+      if (
+        pollingTimerRef.current
+      ) {
+
+        clearTimeout(
+          pollingTimerRef.current
+        );
+      }
+    };
+
+  }, []);
 
 
   // ====================================================
@@ -85,8 +210,15 @@ const ModalTotales = ({
     }
 
 
+    detenerPolling();
+
+
     solicitudEnCursoRef.current =
       false;
+
+
+    ultimoEstadoRef.current =
+      null;
 
 
     setEstadoUI(
@@ -96,6 +228,17 @@ const ModalTotales = ({
 
     setResultadoVisual(
       null
+    );
+
+
+    setEstadoMedicion(
+      ESTADO_MEDICION
+        .OBTENIENDO_LECTURA
+    );
+
+
+    setMensajeMedicion(
+      "Preparando medición de peso..."
     );
 
   }, [show]);
@@ -114,6 +257,323 @@ const ModalTotales = ({
     estadoUI ===
       ESTADO_UI.RESULTADO &&
     resultadoVisual !== null;
+
+
+  const movimientoDetectado =
+    estadoMedicion ===
+    ESTADO_MEDICION
+      .MOVIMIENTO_DETECTADO;
+
+
+  // ====================================================
+  // TEXTO PRINCIPAL DEL ESTADO
+  // ====================================================
+
+  const tituloEstado =
+    useMemo(() => {
+
+      switch (
+        estadoMedicion
+      ) {
+
+        case ESTADO_MEDICION
+          .PENDIENTE:
+
+          return (
+            "Esperando módulo de pesaje..."
+          );
+
+
+        case ESTADO_MEDICION
+          .MIDIENDO:
+
+          return (
+            "Calculando peso..."
+          );
+
+
+        case ESTADO_MEDICION
+          .ESTABILIZANDO:
+
+          return (
+            "Estabilizando contenedor..."
+          );
+
+
+        case ESTADO_MEDICION
+          .MOVIMIENTO_DETECTADO:
+
+          return (
+            "Movimiento detectado"
+          );
+
+
+        case ESTADO_MEDICION
+          .COMPLETADO:
+
+          return (
+            "Peso obtenido correctamente"
+          );
+
+
+        case ESTADO_MEDICION
+          .TIMEOUT:
+
+          return (
+            "Tiempo de espera agotado"
+          );
+
+
+        case ESTADO_MEDICION
+          .ERROR:
+
+          return (
+            "Error durante la medición"
+          );
+
+
+        case ESTADO_MEDICION
+          .OBTENIENDO_LECTURA:
+
+        default:
+
+          return (
+            "Preparando medición de peso..."
+          );
+      }
+
+    }, [
+      estadoMedicion,
+    ]);
+
+
+  // ====================================================
+  // MENSAJE SECUNDARIO
+  // ====================================================
+
+  const detalleEstado =
+    useMemo(() => {
+
+      if (
+        mensajeMedicion
+      ) {
+
+        return mensajeMedicion;
+      }
+
+
+      switch (
+        estadoMedicion
+      ) {
+
+        case ESTADO_MEDICION
+          .ESTABILIZANDO:
+
+          return (
+            "Mantenga el contenedor completamente quieto."
+          );
+
+
+        case ESTADO_MEDICION
+          .MOVIMIENTO_DETECTADO:
+
+          return (
+            "Mantenga el contenedor completamente quieto. La estabilización se reiniciará automáticamente."
+          );
+
+
+        case ESTADO_MEDICION
+          .MIDIENDO:
+
+          return (
+            "El sistema está obteniendo la medición de peso."
+          );
+
+
+        default:
+
+          return (
+            "Espere mientras el sistema obtiene una medición válida."
+          );
+      }
+
+    }, [
+      estadoMedicion,
+      mensajeMedicion,
+    ]);
+
+
+  // ====================================================
+  // CONSULTAR ESTADO ACTUAL DEL BACKEND
+  // ====================================================
+
+  const consultarEstadoMedicion =
+    async () => {
+
+      try {
+
+        const res =
+          await apiClient.get(
+
+            "/control-dsh/registro-pesaje/calculo/estado",
+
+            {
+              timeout:
+                5000,
+            }
+          );
+
+
+        const data =
+          res?.data;
+
+
+        if (
+          !data ||
+          typeof data !==
+            "object"
+        ) {
+
+          return;
+        }
+
+
+        const estado =
+          String(
+            data
+              ?.estado_medicion ||
+            ""
+          )
+            .trim()
+            .toUpperCase();
+
+
+        if (!estado) {
+          return;
+        }
+
+
+        ultimoEstadoRef.current =
+          estado;
+
+
+        // ===============================================
+        // ACTUALIZAR ESTADO VISUAL
+        // ===============================================
+
+        switch (
+          estado
+        ) {
+
+          case ESTADO_MEDICION
+            .OBTENIENDO_LECTURA:
+
+          case ESTADO_MEDICION
+            .PENDIENTE:
+
+          case ESTADO_MEDICION
+            .MIDIENDO:
+
+          case ESTADO_MEDICION
+            .ESTABILIZANDO:
+
+          case ESTADO_MEDICION
+            .MOVIMIENTO_DETECTADO:
+
+          case ESTADO_MEDICION
+            .COMPLETADO:
+
+          case ESTADO_MEDICION
+            .ERROR:
+
+          case ESTADO_MEDICION
+            .TIMEOUT:
+
+            setEstadoMedicion(
+              estado
+            );
+
+
+            setMensajeMedicion(
+              data
+                ?.mensaje ||
+              ""
+            );
+
+            break;
+
+
+          default:
+
+            break;
+        }
+
+
+      } catch (
+        error
+      ) {
+
+        /*
+         * El polling es informativo.
+         *
+         * No mostramos alertas aquí porque
+         * la petición principal /calculo
+         * es quien controla el resultado
+         * final y los errores.
+         */
+      }
+    };
+
+
+  // ====================================================
+  // INICIAR POLLING
+  // ====================================================
+
+  const iniciarPolling =
+    () => {
+
+      detenerPolling();
+
+
+      pollingActivoRef.current =
+        true;
+
+
+      const ejecutar =
+        async () => {
+
+          if (
+            !pollingActivoRef.current
+          ) {
+
+            return;
+          }
+
+
+          await consultarEstadoMedicion();
+
+
+          if (
+            !pollingActivoRef.current
+          ) {
+
+            return;
+          }
+
+
+          pollingTimerRef.current =
+            setTimeout(
+              ejecutar,
+              700
+            );
+        };
+
+
+      /*
+       * Primera consulta inmediatamente.
+       */
+      ejecutar();
+    };
 
 
   // ====================================================
@@ -162,6 +622,7 @@ const ModalTotales = ({
       if (
         solicitudEnCursoRef.current
       ) {
+
         return;
       }
 
@@ -170,14 +631,36 @@ const ModalTotales = ({
         true;
 
 
+      ultimoEstadoRef.current =
+        null;
+
+
       setResultadoVisual(
         null
+      );
+
+
+      setEstadoMedicion(
+        ESTADO_MEDICION
+          .OBTENIENDO_LECTURA
+      );
+
+
+      setMensajeMedicion(
+        "Preparando medición de peso..."
       );
 
 
       setEstadoUI(
         ESTADO_UI.PROCESANDO
       );
+
+
+      // =================================================
+      // EMPEZAR A CONSULTAR ESTADOS
+      // =================================================
+
+      iniciarPolling();
 
 
       try {
@@ -206,14 +689,30 @@ const ModalTotales = ({
             {},
 
             {
+              /*
+               * El timeout principal del backend
+               * debe decidir cuándo finaliza la
+               * medición.
+               *
+               * 130 segundos permite que el backend
+               * con timeout de 120 segundos responda
+               * primero.
+               */
               timeout:
-                20000,
+                130000,
             }
           );
 
 
         // ===============================================
-        // VALIDAR RESPUESTA VISUAL
+        // DETENER POLLING
+        // ===============================================
+
+        detenerPolling();
+
+
+        // ===============================================
+        // VALIDAR RESPUESTA
         // ===============================================
 
         const data =
@@ -233,7 +732,22 @@ const ModalTotales = ({
 
 
         // ===============================================
-        // GUARDAR SOLO PARA MOSTRAR
+        // MOSTRAR COMPLETADO
+        // ===============================================
+
+        setEstadoMedicion(
+          ESTADO_MEDICION
+            .COMPLETADO
+        );
+
+
+        setMensajeMedicion(
+          "Peso obtenido correctamente."
+        );
+
+
+        // ===============================================
+        // GUARDAR RESULTADO VISUAL
         // ===============================================
 
         setResultadoVisual(
@@ -248,8 +762,56 @@ const ModalTotales = ({
 
       } catch (err) {
 
+        detenerPolling();
+
+
+        const ultimoEstado =
+          ultimoEstadoRef.current;
+
+
         // ===============================================
-        // TIMEOUT
+        // TIMEOUT DEL MODULO REPORTADO POR BACKEND
+        // ===============================================
+
+        if (
+          ultimoEstado ===
+          ESTADO_MEDICION.TIMEOUT
+        ) {
+
+          setEstadoUI(
+            ESTADO_UI.ESPERANDO
+          );
+
+
+          setEstadoMedicion(
+            ESTADO_MEDICION
+              .OBTENIENDO_LECTURA
+          );
+
+
+          setMensajeMedicion(
+            "Preparando medición de peso..."
+          );
+
+
+          await showBackendAlert({
+
+            status:
+              504,
+
+            data: {
+              message:
+                "El sistema de pesaje no respondió dentro del tiempo esperado.",
+            },
+          });
+
+
+          return;
+        }
+
+
+        // ===============================================
+        // TIMEOUT DE AXIOS
         // ===============================================
 
         const esTimeout =
@@ -263,6 +825,17 @@ const ModalTotales = ({
 
           setEstadoUI(
             ESTADO_UI.ESPERANDO
+          );
+
+
+          setEstadoMedicion(
+            ESTADO_MEDICION
+              .OBTENIENDO_LECTURA
+          );
+
+
+          setMensajeMedicion(
+            "Preparando medición de peso..."
           );
 
 
@@ -321,6 +894,17 @@ const ModalTotales = ({
         );
 
 
+        setEstadoMedicion(
+          ESTADO_MEDICION
+            .OBTENIENDO_LECTURA
+        );
+
+
+        setMensajeMedicion(
+          "Preparando medición de peso..."
+        );
+
+
         await showBackendAlert({
 
           status:
@@ -340,6 +924,9 @@ const ModalTotales = ({
 
       } finally {
 
+        detenerPolling();
+
+
         solicitudEnCursoRef.current =
           false;
       }
@@ -349,19 +936,6 @@ const ModalTotales = ({
   // ====================================================
   // CONTINUAR A FOTO 4
   // ====================================================
-  //
-  // NO:
-  //
-  // - alerta de éxito
-  // - pasar resultadoVisual
-  // - pasar peso
-  // - pasar costo
-  // - pasar IDs
-  //
-  // Solamente cambiamos de vista.
-  //
-  // Foto 4 consultará nuevamente al backend.
-  // ====================================================
 
   const handleContinuar = () => {
 
@@ -370,17 +944,11 @@ const ModalTotales = ({
       calculando ||
       solicitudEnCursoRef.current
     ) {
+
       return;
     }
 
 
-    /*
-     * Foto 3 ya terminó correctamente.
-     *
-     * El cálculo ya está guardado en BD.
-     *
-     * Avanzamos DIRECTAMENTE a Foto 4.
-     */
     handleShowRecoleccion?.();
   };
 
@@ -618,51 +1186,109 @@ const ModalTotales = ({
             "
           >
 
-            <Spinner
-              animation="border"
-              role="status"
-              className="mb-3"
-            >
+            {/* ======================================= */}
+            {/* MOVIMIENTO DETECTADO                   */}
+            {/* ======================================= */}
 
-              <span
-                className="visually-hidden"
+            {movimientoDetectado ? (
+
+              <Alert
+                variant="warning"
+                className="
+                  text-start
+                  mb-4
+                "
               >
 
-                Procesando medición...
+                <Alert.Heading>
 
-              </span>
+                  ⚠ Movimiento detectado
 
-            </Spinner>
+                </Alert.Heading>
 
 
-            <h6
-              className="mb-3"
-            >
+                <div>
 
-              Procesando medición de peso...
+                  {detalleEstado}
 
-            </h6>
+                </div>
+
+
+                <div
+                  className="
+                    mt-2
+                    fw-semibold
+                  "
+                >
+
+                  La medición se reanudará
+                  automáticamente cuando el
+                  contenedor permanezca quieto.
+
+                </div>
+
+              </Alert>
+
+            ) : (
+
+              <>
+
+                <Spinner
+                  animation="border"
+                  role="status"
+                  className="mb-3"
+                >
+
+                  <span
+                    className="visually-hidden"
+                  >
+
+                    {tituloEstado}
+
+                  </span>
+
+                </Spinner>
+
+
+                <h6
+                  className="mb-3"
+                >
+
+                  {tituloEstado}
+
+                </h6>
+
+              </>
+            )}
 
 
             <ProgressBar
               animated
               striped
               now={100}
+
+              variant={
+                movimientoDetectado
+                  ? "warning"
+                  : undefined
+              }
             />
 
 
-            <small
-              className="
-                text-muted
-                d-block
-                mt-3
-              "
-            >
+            {!movimientoDetectado && (
 
-              Espere mientras el sistema obtiene
-              una medición válida.
+              <small
+                className="
+                  text-muted
+                  d-block
+                  mt-3
+                "
+              >
 
-            </small>
+                {detalleEstado}
+
+              </small>
+            )}
 
           </div>
         )}

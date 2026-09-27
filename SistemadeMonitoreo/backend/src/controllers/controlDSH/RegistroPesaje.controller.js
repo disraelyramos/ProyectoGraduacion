@@ -386,22 +386,41 @@ exports.guardarCalculo =
 
 
 // ======================================================
-// FOTO 4
-// OBTENER DATOS INICIALES
+// FOTO 3
+// CONSULTAR ESTADO DE MEDICION
 // ======================================================
-//
-// Frontend entra a Foto 4.
-//
-// Backend obtiene:
-//
-// - proceso EN_PROCESO
-// - contenedor
-// - responsable
-// - fecha servidor
-//
-// y verifica que Foto 3 ya tenga
-// cálculo válido.
-// ======================================================
+
+exports.consultarEstadoCalculo =
+  async (req, res) => {
+
+    try {
+
+      const resultado =
+        await registroPesajeService
+          .consultarEstadoCalculo({
+
+            idUsuario:
+              req.user
+                ?.id_usuario,
+          });
+
+
+      return res
+        .status(200)
+        .json(
+          resultado
+        );
+
+
+    } catch (error) {
+
+      return responderErrorService(
+        res,
+        error,
+        "consultarEstadoCalculo"
+      );
+    }
+  };
 
 exports.obtenerDatosRecoleccion =
   async (req, res) => {

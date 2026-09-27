@@ -29,11 +29,19 @@ const {
 
 /* =========================================================
    NORMALIZAR USUARIO
+
+   Se utiliza solamente donde realmente corresponde,
+   por ejemplo durante el login.
+
+   La identidad de un usuario autenticado NO se toma
+   desde el frontend.
    ========================================================= */
 
-function normalizarUsuario(valor) {
-  return typeof valor ===
-    "string"
+function normalizarUsuario(
+  valor
+) {
+
+  return typeof valor === "string"
     ? xss(valor).trim()
     : "";
 }
@@ -42,26 +50,65 @@ function normalizarUsuario(valor) {
 /* =========================================================
    NORMALIZAR PASSWORD
 
-   No aplicamos xss sobre la contraseña porque modificaría
-   el valor real introducido por el usuario.
+   IMPORTANTE:
+   No se aplica:
+   - trim()
+   - xss()
+
+   La contraseña debe conservar exactamente el valor
+   proporcionado.
    ========================================================= */
 
-function normalizarPassword(valor) {
-  return typeof valor ===
-    "string"
+function normalizarPassword(
+  valor
+) {
+
+  return typeof valor === "string"
     ? valor
     : "";
 }
 
 
 /* =========================================================
-   CONSULTAR USUARIO
+   NORMALIZAR ID DEL USUARIO AUTENTICADO
+
+   Este valor debe proceder de authMiddleware / JWT.
+   ========================================================= */
+
+function normalizarUsuarioId(
+  valor
+) {
+
+  const id =
+    Number(
+      valor
+    );
+
+
+  if (
+    !Number.isSafeInteger(id) ||
+    id <= 0
+  ) {
+
+    return null;
+  }
+
+
+  return id;
+}
+
+
+/* =========================================================
+   CONSULTAR USUARIO PARA LOGIN
    ========================================================= */
 
 async function buscarUsuario(
   usuario
 ) {
-  const { rows } =
+
+  const {
+    rows,
+  } =
     await pool.query(
       `
         SELECT
@@ -99,18 +146,30 @@ async function buscarUsuario(
     );
 
 
-  return rows?.[0] || null;
+  return (
+    rows?.[0] ||
+    null
+  );
 }
 
 
 /* =========================================================
-   USUARIO PARA CAMBIO DE CONTRASEÑA
+   CONSULTAR USUARIO AUTENTICADO PARA PASSWORD
+
+   IMPORTANTE:
+   La búsqueda se realiza exclusivamente mediante
+   id_usuario obtenido del JWT validado.
+
+   NO se utiliza usuario enviado desde React.
    ========================================================= */
 
-async function buscarUsuarioPassword(
-  usuario
+async function buscarUsuarioPasswordPorId(
+  usuarioId
 ) {
-  const { rows } =
+
+  const {
+    rows,
+  } =
     await pool.query(
       `
         SELECT
@@ -121,6 +180,7 @@ async function buscarUsuarioPassword(
           u.estado_id,
           u.debe_cambiar_password,
           u.fecha_ultimo_cambio,
+          u.ultimo_login,
 
           r.id AS rol_id,
           r.nombre AS rol
@@ -130,17 +190,20 @@ async function buscarUsuarioPassword(
         JOIN roles r
           ON u.rol_id = r.id
 
-        WHERE u.usuario = $1
+        WHERE u.id_usuario = $1
 
         LIMIT 1
       `,
       [
-        usuario,
+        usuarioId,
       ]
     );
 
 
-  return rows?.[0] || null;
+  return (
+    rows?.[0] ||
+    null
+  );
 }
 
 
@@ -151,9 +214,11 @@ async function buscarUsuarioPassword(
 async function registrarIntentoFallido(
   usuario
 ) {
+
   const intentos =
     Number(
-      usuario.intentos_fallidos || 0
+      usuario.intentos_fallidos ||
+      0
     ) + 1;
 
 
@@ -161,7 +226,10 @@ async function registrarIntentoFallido(
     intentos >=
     authConfig.loginMaxAttempts
   ) {
-    const { rows } =
+
+    const {
+      rows,
+    } =
       await pool.query(
         `
           UPDATE usuarios
@@ -189,7 +257,9 @@ async function registrarIntentoFallido(
 
     throw crearErrorHttp(
       403,
+
       `Usuario bloqueado por ${authConfig.loginBlockMinutes} minuto(s).`,
+
       {
         bloqueado_hasta:
           rows?.[0]?.bloqueado_hasta ||
@@ -229,10 +299,12 @@ async function login({
   usuario,
   contrasena,
 }) {
+
   const usuarioSeguro =
     normalizarUsuario(
       usuario
     );
+
 
   const passwordSeguro =
     normalizarPassword(
@@ -244,6 +316,7 @@ async function login({
     !usuarioSeguro ||
     !passwordSeguro
   ) {
+
     throw crearErrorHttp(
       400,
       "Usuario y contraseña requeridos."
@@ -258,6 +331,7 @@ async function login({
 
 
   if (!user) {
+
     throw crearErrorHttp(
       401,
       "Credenciales inválidas."
@@ -265,10 +339,19 @@ async function login({
   }
 
 
-  if (user.esta_bloqueado) {
+  /* =======================================================
+     USUARIO BLOQUEADO TEMPORALMENTE
+     ======================================================= */
+
+  if (
+    user.esta_bloqueado
+  ) {
+
     throw crearErrorHttp(
       403,
+
       "Usuario bloqueado temporalmente.",
+
       {
         bloqueado_hasta:
           user.bloqueado_hasta,
@@ -277,13 +360,24 @@ async function login({
   }
 
 
-  if (user.estado_id !== 1) {
+  /* =======================================================
+     ESTADO DEL USUARIO
+     ======================================================= */
+
+  if (
+    user.estado_id !== 1
+  ) {
+
     throw crearErrorHttp(
       403,
       "Usuario inactivo o bloqueado."
     );
   }
 
+
+  /* =======================================================
+     VALIDAR CONTRASEÑA
+     ======================================================= */
 
   const passwordCorrecta =
     await bcrypt.compare(
@@ -292,36 +386,47 @@ async function login({
     );
 
 
-  if (!passwordCorrecta) {
+  if (
+    !passwordCorrecta
+  ) {
+
     await registrarIntentoFallido(
       user
     );
   }
 
 
-  /*
-    Limpieza oportunista de sesiones vencidas.
-  */
+  /* =======================================================
+     LIMPIAR SESIONES EXPIRADAS
+     ======================================================= */
 
   await limpiarSesionesExpiradas();
 
 
   /* =======================================================
      CAMBIO OBLIGATORIO
+
+     Tiene prioridad sobre vencimiento por antigüedad.
      ======================================================= */
 
   if (
-    user.debe_cambiar_password
+    user.debe_cambiar_password === true
   ) {
+
     const token =
       await crearSesion({
-        usuario: user,
+        usuario:
+          user,
       });
 
 
     return {
-      requiereCambio: true,
-      tipo: "obligatoria",
+      requiereCambio:
+        true,
+
+      tipo:
+        "obligatoria",
+
       token,
     };
   }
@@ -332,17 +437,25 @@ async function login({
      ======================================================= */
 
   if (
-    passwordExpirada(user)
+    passwordExpirada(
+      user
+    )
   ) {
+
     const token =
       await crearSesion({
-        usuario: user,
+        usuario:
+          user,
       });
 
 
     return {
-      requiereCambio: true,
-      tipo: "reconfirmacion",
+      requiereCambio:
+        true,
+
+      tipo:
+        "reconfirmacion",
+
       token,
     };
   }
@@ -363,27 +476,40 @@ async function login({
     );
 
 
-    await client.query(
-      `
-        UPDATE usuarios
+    const resultadoUpdate =
+      await client.query(
+        `
+          UPDATE usuarios
 
-        SET
-          intentos_fallidos = 0,
-          bloqueado_hasta = NULL,
-          ultimo_login = NOW()
+          SET
+            intentos_fallidos = 0,
+            bloqueado_hasta = NULL,
+            ultimo_login = NOW()
 
-        WHERE id_usuario = $1
-      `,
-      [
-        user.id_usuario,
-      ]
-    );
+          WHERE id_usuario = $1
+        `,
+        [
+          user.id_usuario,
+        ]
+      );
+
+
+    if (
+      resultadoUpdate.rowCount !== 1
+    ) {
+
+      throw crearErrorHttp(
+        500,
+        "No fue posible actualizar la sesión del usuario."
+      );
+    }
 
 
     const token =
       await crearSesion({
         client,
-        usuario: user,
+        usuario:
+          user,
       });
 
 
@@ -399,6 +525,7 @@ async function login({
       token,
 
       usuario: {
+
         id:
           user.id_usuario,
 
@@ -421,18 +548,33 @@ async function login({
     };
 
 
-  } catch (error) {
+  } catch (
+    error
+  ) {
 
-    await client.query(
-      "ROLLBACK"
-    );
+    try {
+
+      await client.query(
+        "ROLLBACK"
+      );
+
+    } catch (
+      rollbackError
+    ) {
+
+      console.error(
+        "Error ejecutando rollback en login:",
+        rollbackError
+      );
+    }
+
 
     throw error;
+
 
   } finally {
 
     client.release();
-
   }
 }
 
@@ -444,6 +586,19 @@ async function login({
 async function logout({
   token,
 }) {
+
+  if (
+    typeof token !== "string" ||
+    !token
+  ) {
+
+    throw crearErrorHttp(
+      400,
+      "Token de sesión requerido."
+    );
+  }
+
+
   const cantidad =
     await cerrarSesionPorToken(
       token
@@ -460,17 +615,24 @@ async function logout({
 
 
 /* =========================================================
-   CAMBIO OBLIGATORIO
+   CAMBIO OBLIGATORIO DE CONTRASEÑA
+
+   usuarioId:
+   proviene de req.user.id_usuario después de authMiddleware.
+
+   NO se recibe usuario desde frontend.
    ========================================================= */
 
 async function cambiarPasswordObligatorio({
-  usuario,
+  usuarioId,
   nueva,
 }) {
-  const usuarioSeguro =
-    normalizarUsuario(
-      usuario
+
+  const id =
+    normalizarUsuarioId(
+      usuarioId
     );
+
 
   const nuevaSegura =
     normalizarPassword(
@@ -478,32 +640,51 @@ async function cambiarPasswordObligatorio({
     );
 
 
-  if (
-    !usuarioSeguro ||
-    !nuevaSegura
-  ) {
+  /* =======================================================
+     VALIDAR IDENTIDAD AUTENTICADA
+     ======================================================= */
+
+  if (!id) {
+
     throw crearErrorHttp(
-      400,
-      "Usuario y nueva contraseña requeridos."
+      401,
+      "Sesión no válida."
     );
   }
 
 
+  if (!nuevaSegura) {
+
+    throw crearErrorHttp(
+      400,
+      "La nueva contraseña es requerida."
+    );
+  }
+
+
+  /* =======================================================
+     OBTENER USUARIO DESDE LA IDENTIDAD DEL JWT
+     ======================================================= */
+
   const user =
-    await buscarUsuarioPassword(
-      usuarioSeguro
+    await buscarUsuarioPasswordPorId(
+      id
     );
 
 
   if (!user) {
+
     throw crearErrorHttp(
-      404,
-      "Usuario no encontrado."
+      401,
+      "Sesión no válida."
     );
   }
 
 
-  if (user.estado_id !== 1) {
+  if (
+    user.estado_id !== 1
+  ) {
+
     throw crearErrorHttp(
       403,
       "Usuario inactivo o bloqueado."
@@ -511,7 +692,32 @@ async function cambiarPasswordObligatorio({
   }
 
 
+  /* =======================================================
+     COMPROBAR QUE REALMENTE TIENE CAMBIO OBLIGATORIO
+
+     El frontend NO puede decidir esto.
+     ======================================================= */
+
+  if (
+    user.debe_cambiar_password !==
+      true
+  ) {
+
+    throw crearErrorHttp(
+      403,
+      "El usuario no tiene un cambio obligatorio de contraseña pendiente."
+    );
+  }
+
+
+  /* =======================================================
+     VALIDAR POLÍTICA E HISTORIAL
+
+     Password.service vuelve a validar la contraseña.
+     ======================================================= */
+
   await validarPasswordNoRepetida({
+
     usuarioId:
       user.id_usuario,
 
@@ -522,6 +728,10 @@ async function cambiarPasswordObligatorio({
       nuevaSegura,
   });
 
+
+  /* =======================================================
+     ACTUALIZAR
+     ======================================================= */
 
   const client =
     await pool.connect();
@@ -535,8 +745,12 @@ async function cambiarPasswordObligatorio({
 
 
     await actualizarPassword({
+
       client,
-      usuario: user,
+
+      usuario:
+        user,
+
       nuevaPassword:
         nuevaSegura,
     });
@@ -544,8 +758,11 @@ async function cambiarPasswordObligatorio({
 
     const token =
       await crearSesion({
+
         client,
-        usuario: user,
+
+        usuario:
+          user,
       });
 
 
@@ -562,40 +779,67 @@ async function cambiarPasswordObligatorio({
     };
 
 
-  } catch (error) {
+  } catch (
+    error
+  ) {
 
-    await client.query(
-      "ROLLBACK"
-    );
+    try {
+
+      await client.query(
+        "ROLLBACK"
+      );
+
+    } catch (
+      rollbackError
+    ) {
+
+      console.error(
+        "Error ejecutando rollback en cambio obligatorio:",
+        rollbackError
+      );
+    }
+
 
     throw error;
+
 
   } finally {
 
     client.release();
-
   }
 }
 
 
 /* =========================================================
-   RECONFIRMACIÓN
+   RECONFIRMACIÓN POR VENCIMIENTO
+
+   usuarioId:
+   proviene de req.user.id_usuario después de authMiddleware.
+
+   El frontend solo envía:
+   - actual
+   - nueva
+
+   La identidad NO viene del frontend.
    ========================================================= */
 
 async function reconfirmarPassword({
-  usuario,
+  usuarioId,
   actual,
   nueva,
 }) {
-  const usuarioSeguro =
-    normalizarUsuario(
-      usuario
+
+  const id =
+    normalizarUsuarioId(
+      usuarioId
     );
+
 
   const actualSegura =
     normalizarPassword(
       actual
     );
+
 
   const nuevaSegura =
     normalizarPassword(
@@ -603,39 +847,106 @@ async function reconfirmarPassword({
     );
 
 
-  if (
-    !usuarioSeguro ||
-    !actualSegura ||
-    !nuevaSegura
-  ) {
+  /* =======================================================
+     VALIDAR IDENTIDAD
+     ======================================================= */
+
+  if (!id) {
+
     throw crearErrorHttp(
-      400,
-      "Usuario, contraseña actual y nueva son requeridos."
+      401,
+      "Sesión no válida."
     );
   }
 
 
+  if (
+    !actualSegura ||
+    !nuevaSegura
+  ) {
+
+    throw crearErrorHttp(
+      400,
+      "La contraseña actual y la nueva contraseña son requeridas."
+    );
+  }
+
+
+  /* =======================================================
+     BUSCAR USUARIO MEDIANTE ID DEL JWT
+     ======================================================= */
+
   const user =
-    await buscarUsuarioPassword(
-      usuarioSeguro
+    await buscarUsuarioPasswordPorId(
+      id
     );
 
 
   if (!user) {
+
     throw crearErrorHttp(
-      404,
-      "Usuario no encontrado."
+      401,
+      "Sesión no válida."
     );
   }
 
 
-  if (user.estado_id !== 1) {
+  /* =======================================================
+     ESTADO
+     ======================================================= */
+
+  if (
+    user.estado_id !== 1
+  ) {
+
     throw crearErrorHttp(
       403,
       "Usuario inactivo o bloqueado."
     );
   }
 
+
+  /* =======================================================
+     NO PERMITIR SALTAR CAMBIO OBLIGATORIO
+     ======================================================= */
+
+  if (
+    user.debe_cambiar_password ===
+      true
+  ) {
+
+    throw crearErrorHttp(
+      403,
+      "Debe completar el cambio obligatorio de contraseña."
+    );
+  }
+
+
+  /* =======================================================
+     VERIFICAR QUE REALMENTE ESTÁ VENCIDA
+
+     El backend vuelve a calcular los 30 días.
+
+     No confía en que el frontend lo haya enviado
+     a esta pantalla correctamente.
+     ======================================================= */
+
+  if (
+    !passwordExpirada(
+      user
+    )
+  ) {
+
+    throw crearErrorHttp(
+      403,
+      "La contraseña no requiere actualización por vencimiento."
+    );
+  }
+
+
+  /* =======================================================
+     VALIDAR CONTRASEÑA ACTUAL
+     ======================================================= */
 
   const correcta =
     await bcrypt.compare(
@@ -645,6 +956,7 @@ async function reconfirmarPassword({
 
 
   if (!correcta) {
+
     throw crearErrorHttp(
       401,
       "La contraseña actual es incorrecta."
@@ -652,7 +964,14 @@ async function reconfirmarPassword({
   }
 
 
+  /* =======================================================
+     VALIDAR NUEVA CONTRASEÑA
+
+     Incluye política + historial.
+     ======================================================= */
+
   await validarPasswordNoRepetida({
+
     usuarioId:
       user.id_usuario,
 
@@ -663,6 +982,10 @@ async function reconfirmarPassword({
       nuevaSegura,
   });
 
+
+  /* =======================================================
+     ACTUALIZAR
+     ======================================================= */
 
   const client =
     await pool.connect();
@@ -676,8 +999,12 @@ async function reconfirmarPassword({
 
 
     await actualizarPassword({
+
       client,
-      usuario: user,
+
+      usuario:
+        user,
+
       nuevaPassword:
         nuevaSegura,
     });
@@ -685,8 +1012,11 @@ async function reconfirmarPassword({
 
     const token =
       await crearSesion({
+
         client,
-        usuario: user,
+
+        usuario:
+          user,
       });
 
 
@@ -703,26 +1033,44 @@ async function reconfirmarPassword({
     };
 
 
-  } catch (error) {
+  } catch (
+    error
+  ) {
 
-    await client.query(
-      "ROLLBACK"
-    );
+    try {
+
+      await client.query(
+        "ROLLBACK"
+      );
+
+    } catch (
+      rollbackError
+    ) {
+
+      console.error(
+        "Error ejecutando rollback en reconfirmación:",
+        rollbackError
+      );
+    }
+
 
     throw error;
+
 
   } finally {
 
     client.release();
-
   }
 }
 
 
+/* =========================================================
+   EXPORTACIONES
+   ========================================================= */
+
 module.exports = {
   login,
   logout,
-
   cambiarPasswordObligatorio,
   reconfirmarPassword,
 };

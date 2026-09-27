@@ -1,131 +1,193 @@
-const pool = require("../config/db");
-
-const medicionesService = require(
-  "./controlDSH/mediciones/Mediciones.service"
+const pool = require(
+  "../config/db"
 );
+
+const nivelCache = require(
+  "./controlDSH/mediciones/NivelActualCache.service"
+);
+
 
 // ======================================================
 // LISTAR CONTENEDORES
 // ======================================================
 
 async function listarContenedores() {
+
   /*
    * Aquí obtenemos únicamente la información
    * estructural/configurada del contenedor.
    *
-   * El nivel actual NO se toma directamente
-   * desde esta consulta.
+   * IMPORTANTE:
+   *
+   * El nivel actual NO se obtiene aquí desde:
+   *
+   * - BaseDatosMediciones.service
+   * - ModuloMediciones.service
+   * - Mediciones.service
+   *
+   * El nivel actual ya debe encontrarse en el
+   * caché administrado por:
+   *
+   * NivelMonitor.service
+   *          ↓
+   * NivelActualCache.service
+   *
+   * De esta forma, consultar /contenedores
+   * NO provoca una nueva medición.
    */
-  const { rows } = await pool.query(`
-    SELECT
-      c.id_contenedor,
-      c.codigo,
-      c.id_tipo_residuo,
-      c.estado_id,
-      c.capacidad_max_litros,
-      c.capacidad_max_lb,
-      c.estado_actual_lb,
+  const { rows } =
+    await pool.query(
+      `
+        SELECT
+          c.id_contenedor,
+          c.codigo,
+          c.id_tipo_residuo,
+          c.estado_id,
+          c.capacidad_max_litros,
+          c.capacidad_max_lb,
+          c.estado_actual_lb,
 
-      u.id_ubicacion,
-      u.nombre AS ubicacion,
+          u.id_ubicacion,
+          u.nombre AS ubicacion,
 
-      tr.nombre AS tipo_residuo,
+          tr.nombre AS tipo_residuo,
 
-      TO_CHAR(
-        c.fecha_registro,
-        'YYYY-MM-DD'
-      ) AS fecha_registro,
+          TO_CHAR(
+            c.fecha_registro,
+            'YYYY-MM-DD'
+          ) AS fecha_registro,
 
-      ec.nombre AS estado
+          ec.nombre AS estado
 
-    FROM contenedores c
+        FROM contenedores c
 
-    JOIN ubicaciones u
-      ON c.id_ubicacion =
-         u.id_ubicacion
+        JOIN ubicaciones u
+          ON c.id_ubicacion =
+             u.id_ubicacion
 
-    JOIN tipos_residuo tr
-      ON c.id_tipo_residuo =
-         tr.id
+        JOIN tipos_residuo tr
+          ON c.id_tipo_residuo =
+             tr.id
 
-    JOIN estados_contenedor ec
-      ON c.estado_id =
-         ec.id
+        JOIN estados_contenedor ec
+          ON c.estado_id =
+             ec.id
 
-    ORDER BY
-      c.id_contenedor DESC
-  `);
+        ORDER BY
+          c.id_contenedor DESC
+      `
+    );
+
 
   /*
-   * Cada contenedor obtiene su nivel mediante
-   * la capa intercambiable.
+   * El listado estructural ya viene de BD.
    *
-   * HOY:
-   * BaseDatosMediciones.service
-   *
-   * FUTURO:
-   * ModuloMediciones.service
+   * Aquí únicamente agregamos el último
+   * nivel conocido de cada contenedor.
    */
   const contenedores =
-    await Promise.all(
-      rows.map(
-        async (contenedor) => {
-          const medicionNivel =
-            await medicionesService.obtenerNivelActual({
-              contenedorId:
-                contenedor.id_contenedor,
-            });
+    rows.map(
+      (contenedor) => {
 
-          const porcentaje =
-            Number(
-              medicionNivel?.valor
-            );
+        const nivel =
+          nivelCache.obtenerNivel(
+            contenedor
+              .id_contenedor
+          );
 
-          const nivelActual =
-            Number.isFinite(
-              porcentaje
-            )
-              ? Math.min(
-                  100,
-                  Math.max(
-                    0,
-                    porcentaje
-                  )
-                )
-              : 0;
 
-          return {
-            ...contenedor,
+        /*
+         * Un valor puede existir en caché,
+         * pero estar vencido.
+         *
+         * Ejemplo:
+         *
+         * porcentaje = 52
+         * vigente = false
+         *
+         * En ese caso NO lo mostramos
+         * como si fuera una medición actual.
+         */
+        const nivelVigente =
+          nivel?.vigente ===
+          true;
 
-            /*
-             * COMPATIBILIDAD:
-             *
-             * Conservamos este nombre porque
-             * otras pantallas actualmente
-             * podrían utilizarlo.
-             *
-             * Pero su valor ya viene del
-             * proveedor de mediciones.
-             */
-            estado_actual_litros:
-              nivelActual,
 
-            /*
-             * También devolvemos el nombre
-             * semánticamente correcto.
-             *
-             * Podemos migrar el frontend
-             * posteriormente sin urgencia.
-             */
-            porcentaje_llenado:
-              nivelActual,
-          };
-        }
-      )
+        const porcentaje =
+          nivelVigente
+            ? Number(
+                nivel
+                  .porcentaje
+              )
+            : null;
+
+
+        return {
+
+          ...contenedor,
+
+
+          // ==============================================
+          // COMPATIBILIDAD CON FRONTEND ACTUAL
+          // ==============================================
+          //
+          // NuevoRegistro.jsx actualmente utiliza:
+          //
+          // estado_actual_litros
+          //
+          // Por eso conservamos temporalmente
+          // este nombre.
+          // ==============================================
+
+          estado_actual_litros:
+            porcentaje,
+
+
+          // ==============================================
+          // NOMBRE SEMÁNTICO CORRECTO
+          // ==============================================
+
+          porcentaje_llenado:
+            porcentaje,
+
+
+          // ==============================================
+          // ESTADO DEL NIVEL
+          // ==============================================
+
+          nivel_disponible:
+            nivelVigente,
+
+
+          /*
+           * Fecha de la última actualización
+           * recibida por el caché.
+           */
+          nivel_actualizado_en:
+            nivel
+              ?.fechaActualizacion ||
+            null,
+
+
+          /*
+           * Permite conocer si actualmente
+           * la medición provino de:
+           *
+           * base_datos
+           * modulo
+           */
+          nivel_proveedor:
+            nivel
+              ?.proveedor ||
+            null,
+        };
+      }
     );
+
 
   return contenedores;
 }
+
 
 // ======================================================
 // EXPORTACIONES

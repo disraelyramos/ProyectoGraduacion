@@ -35,3 +35,11 @@ Thumbs.db
 
 .vscode/
 .idea/
+
+# ======================================================
+# SCRIPTS LOCALES DE PRUEBA
+# ======================================================
+
+/backend/scripts/probarProcesadorEnvios.js
+/backend/scripts/probarResultadoEnvios.js
+/backend/scripts/probarWhatsApp.js

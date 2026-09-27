@@ -93,6 +93,7 @@ async function obtenerNivelActual({
 // ======================================================
 
 async function obtenerPesoActual({
+  procesoId,
   contenedorId,
   db,
 }) {
@@ -111,6 +112,7 @@ async function obtenerPesoActual({
 
   return proveedor
     .obtenerPesoActual({
+      procesoId,
       contenedorId,
       db,
     });

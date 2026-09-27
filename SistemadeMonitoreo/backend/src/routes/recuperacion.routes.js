@@ -1,11 +1,32 @@
-const express = require("express");
-const router = express.Router();
-const recCtrl = require("../controllers/recuperacion.controller");
+const express =
+  require(
+    "express"
+  );
 
-// Endpoint para solicitar recuperación de contraseña
-router.post("/solicitar", recCtrl.solicitarRecuperacion);
+const router =
+  express.Router();
 
-// Endpoint para restablecer contraseña
-router.post("/restablecer", recCtrl.restablecerContrasena);
+const recCtrl =
+  require(
+    "../controllers/recuperacion.controller"
+  );
 
-module.exports = router;
+
+/* =========================================================
+   RECUPERACIÓN
+   ========================================================= */
+
+router.post(
+  "/solicitar",
+  recCtrl.solicitarRecuperacion
+);
+
+
+router.post(
+  "/restablecer",
+  recCtrl.restablecerContrasena
+);
+
+
+module.exports =
+  router;

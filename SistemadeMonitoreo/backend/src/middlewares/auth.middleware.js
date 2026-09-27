@@ -1,6 +1,7 @@
 const {
   verificarTokenJwt,
   validarYRenovarSesion,
+  validarSesionSinRenovar,
   cerrarSesionPorToken,
 } = require(
   "../services/Auth/Sesion.service"
@@ -8,38 +9,19 @@ const {
 
 
 /* =========================================================
-   TOKEN BEARER
-
-   El middleware únicamente extrae el token del request.
-
-   La validación del JWT y la sesión pertenecen al Service.
+   OBTENER TOKEN BEARER
    ========================================================= */
 
 function obtenerBearerToken(req) {
-  const authorization =
-    String(
-      req.headers?.authorization || ""
-    ).trim();
+
+  const authorization = String(
+    req.headers?.authorization || ""
+  ).trim();
 
 
-  if (!authorization) {
-    return null;
-  }
-
-
-  /*
-    Acepta:
-
-      Bearer TOKEN
-      Bearer     TOKEN
-
-    No distingue mayúsculas/minúsculas en "Bearer".
-  */
-
-  const match =
-    authorization.match(
-      /^Bearer\s+(.+)$/i
-    );
+  const match = authorization.match(
+    /^Bearer\s+(.+)$/i
+  );
 
 
   if (!match) {
@@ -47,28 +29,18 @@ function obtenerBearerToken(req) {
   }
 
 
-  const token =
-    String(
-      match[1] || ""
-    ).trim();
-
-
-  return token || null;
+  return String(
+    match[1] || ""
+  ).trim() || null;
 }
 
 
 /* =========================================================
-   CERRAR SESIÓN DE FORMA SEGURA
-
-   Se utiliza cuando el JWT llegó a su límite absoluto.
-
-   Si la actualización en BD falla, no ocultamos
-   el error original del JWT.
+   CERRAR SESIÓN SEGURA
    ========================================================= */
 
-async function cerrarSesionSegura(
-  token
-) {
+async function cerrarSesionSegura(token) {
+
   try {
 
     await cerrarSesionPorToken(
@@ -78,8 +50,8 @@ async function cerrarSesionSegura(
   } catch (error) {
 
     console.error(
-      "No fue posible cerrar la sesión asociada al token:",
-      error
+      "No fue posible cerrar la sesión:",
+      error.message
     );
 
   }
@@ -87,59 +59,50 @@ async function cerrarSesionSegura(
 
 
 /* =========================================================
-   MIDDLEWARE DE AUTENTICACIÓN
+   CREAR MIDDLEWARE DE AUTENTICACIÓN
 
-   RESPONSABILIDAD:
+   renovarSesion = true:
+     Verifica y renueva la inactividad.
 
-   1. Obtener Bearer token.
-   2. Verificar JWT mediante Sesion.service.
-   3. Validar sesión en PostgreSQL.
-   4. Renovar ventana de inactividad.
-   5. Construir req.user.
+   renovarSesion = false:
+     Verifica sin renovar la inactividad.
 
-   NO maneja:
-   - SQL directamente.
-   - SESSION_INACTIVITY_MIN.
-   - JWT_SECRET.
-   - JWT_EXPIRES_IN.
-   - lógica de creación de sesiones.
-
-   Esas responsabilidades pertenecen a:
-   Sesion.service.js + auth.config.js + .env
+   Ambos mantienen:
+     - Verificación JWT.
+     - Validación contra PostgreSQL.
+     - Consistencia del usuario.
+     - req.user.
    ========================================================= */
 
-module.exports =
-  async (req, res, next) => {
+function crearMiddleware({
+  renovarSesion = true,
+} = {}) {
 
-    /* =====================================================
-       1. OBTENER TOKEN
-       ===================================================== */
+  return async (req, res, next) => {
+
+    // ==================================================
+    // 1. OBTENER TOKEN
+    // ==================================================
 
     const token =
-      obtenerBearerToken(
-        req
-      );
+      obtenerBearerToken(req);
 
 
     if (!token) {
-      return res
-        .status(401)
-        .json({
-          message:
-            "Token de autenticación requerido.",
-        });
+
+      return res.status(401).json({
+
+        message:
+          "Token de autenticación requerido.",
+
+      });
+
     }
 
 
-    /* =====================================================
-       2. VERIFICAR JWT
-
-       JWT_EXPIRES_IN representa el límite absoluto
-       configurado desde .env.
-
-       Ejemplo:
-       JWT_EXPIRES_IN=12h
-       ===================================================== */
+    // ==================================================
+    // 2. VERIFICAR JWT
+    // ==================================================
 
     let decoded;
 
@@ -147,16 +110,9 @@ module.exports =
     try {
 
       decoded =
-        verificarTokenJwt(
-          token
-        );
-
+        verificarTokenJwt(token);
 
     } catch (error) {
-
-      /* ---------------------------------------------------
-         TOKEN VENCIDO POR LÍMITE ABSOLUTO
-         --------------------------------------------------- */
 
       if (
         error?.name ===
@@ -168,92 +124,79 @@ module.exports =
         );
 
 
-        return res
-          .status(401)
-          .json({
-            message:
-              "La sesión alcanzó su tiempo máximo. Inicie sesión nuevamente.",
-          });
+        return res.status(401).json({
+
+          message:
+            "La sesión alcanzó su tiempo máximo. Inicie sesión nuevamente.",
+
+        });
+
       }
 
 
-      /* ---------------------------------------------------
-         JWT MALFORMADO / FIRMA INVÁLIDA / ETC.
-         --------------------------------------------------- */
+      return res.status(401).json({
 
-      return res
-        .status(401)
-        .json({
-          message:
-            "Token de autenticación inválido.",
-        });
+        message:
+          "Token de autenticación inválido.",
+
+      });
+
     }
 
 
-    /* =====================================================
-       3. VALIDAR SESIÓN + RENOVAR INACTIVIDAD
-
-       Sesion.service ejecuta una operación atómica:
-
-         UPDATE sesiones
-         SET fecha_expiracion = NOW() + ...
-         WHERE token = ...
-           AND activo = TRUE
-           AND fecha_expiracion > NOW()
-
-       Si devuelve null:
-       - expiró por inactividad,
-       - fue cerrada,
-       - fue reemplazada por otra sesión,
-       - o no existe.
-       ===================================================== */
+    // ==================================================
+    // 3. VALIDAR SESIÓN
+    // ==================================================
 
     let sesion;
 
 
     try {
 
-      sesion =
-        await validarYRenovarSesion(
-          token
-        );
+      sesion = renovarSesion
+
+        ? await validarYRenovarSesion(
+            token
+          )
+
+        : await validarSesionSinRenovar(
+            token
+          );
 
 
     } catch (error) {
 
       console.error(
-        "Error verificando la sesión en base de datos:",
-        error
+        "Error verificando sesión:",
+        error.message
       );
 
 
-      return res
-        .status(500)
-        .json({
-          message:
-            "Error al validar la sesión.",
-        });
+      return res.status(500).json({
+
+        message:
+          "Error al validar la sesión.",
+
+      });
+
     }
 
 
     if (!sesion) {
-      return res
-        .status(401)
-        .json({
-          message:
-            "Sesión expirada por inactividad o cerrada.",
-        });
+
+      return res.status(401).json({
+
+        message:
+          "Sesión expirada por inactividad o cerrada.",
+
+      });
+
     }
 
 
-    /* =====================================================
-       4. VERIFICAR CONSISTENCIA JWT ↔ SESIÓN
-
-       El id_usuario almacenado en PostgreSQL debe coincidir
-       con el id_usuario firmado dentro del JWT.
-
-       No confiamos únicamente en ninguno de los dos.
-       ===================================================== */
+    // ==================================================
+    // 4. CONSISTENCIA JWT Y POSTGRESQL
+    // ==================================================
 
     const usuarioJwt =
       Number(
@@ -268,14 +211,12 @@ module.exports =
 
 
     if (
-      !Number.isSafeInteger(
-        usuarioJwt
-      ) ||
+      !Number.isSafeInteger(usuarioJwt) ||
       usuarioJwt <= 0 ||
-      !Number.isSafeInteger(
-        usuarioSesion
-      ) ||
+
+      !Number.isSafeInteger(usuarioSesion) ||
       usuarioSesion <= 0 ||
+
       usuarioJwt !== usuarioSesion
     ) {
 
@@ -284,32 +225,22 @@ module.exports =
       );
 
 
-      return res
-        .status(401)
-        .json({
-          message:
-            "La sesión no es válida.",
-        });
+      return res.status(401).json({
+
+        message:
+          "La sesión no es válida.",
+
+      });
+
     }
 
 
-    /* =====================================================
-       5. IDENTIDAD DEL REQUEST
-
-       Conservamos exactamente el contrato que utilizan
-       actualmente los Controllers del sistema:
-
-       req.user.id_usuario
-       req.user.usuario
-       req.user.nombre
-       req.user.rol_id
-       req.user.rol
-
-       id_usuario se obtiene de la sesión de PostgreSQL.
-       Los demás metadatos vienen del JWT firmado.
-       ===================================================== */
+    // ==================================================
+    // 5. IDENTIDAD DEL USUARIO
+    // ==================================================
 
     req.user = {
+
       id_usuario:
         usuarioSesion,
 
@@ -324,12 +255,42 @@ module.exports =
 
       rol:
         decoded.rol,
+
     };
 
 
-    /* =====================================================
-       6. CONTINUAR
-       ===================================================== */
-
     return next();
+
   };
+
+}
+
+
+/* =========================================================
+   EXPORTACIONES
+
+   Uso normal:
+     authenticateToken
+
+   Uso sin renovación:
+     authenticateToken.sinRenovar
+   ========================================================= */
+
+const authenticateToken =
+  crearMiddleware({
+
+    renovarSesion: true,
+
+  });
+
+
+authenticateToken.sinRenovar =
+  crearMiddleware({
+
+    renovarSesion: false,
+
+  });
+
+
+module.exports =
+  authenticateToken;

@@ -4,6 +4,10 @@ const medicionesService = require(
   "./mediciones/Mediciones.service"
 );
 
+const nivelCache = require(
+  "./mediciones/NivelActualCache.service"
+);
+
 
 // ======================================================
 // CONSTANTES
@@ -36,6 +40,9 @@ const ESTADO_MEDICION = {
   ESTABILIZANDO:
     "ESTABILIZANDO",
 
+  MOVIMIENTO_DETECTADO:
+    "MOVIMIENTO_DETECTADO",
+
   ESTABLE:
     "ESTABLE",
 
@@ -48,17 +55,6 @@ const ESTADO_MEDICION = {
 
 
 const TIPOS_DSH = [1, 2];
-
-
-/*
- * Namespace propio para los advisory locks
- * de cálculo de peso.
- *
- * Evita mezclar estos locks con otros
- * posibles locks del sistema.
- */
-const ADVISORY_LOCK_CALCULO =
-  32003;
 
 
 // ======================================================
@@ -288,89 +284,6 @@ async function bloquearUsuario(
     throw new RegistroPesajeError(
       401,
       "Usuario no válido"
-    );
-  }
-}
-
-
-// ======================================================
-// BLOQUEO DE FOTO 3
-// ======================================================
-
-async function adquirirBloqueoCalculo(
-  client,
-  procesoId
-) {
-
-  const { rows } =
-    await client.query(
-      `
-        SELECT
-          pg_try_advisory_lock(
-            $1::int,
-            $2::int
-          ) AS adquirido
-      `,
-      [
-        ADVISORY_LOCK_CALCULO,
-        procesoId,
-      ]
-    );
-
-
-  const adquirido =
-    rows[0]
-      ?.adquirido === true;
-
-
-  if (!adquirido) {
-
-    throw new RegistroPesajeError(
-      409,
-      "Ya existe una medición de peso en curso para este proceso.",
-      {
-        codigo:
-          "CALCULO_EN_CURSO",
-
-        estado_medicion:
-          ESTADO_MEDICION
-            .OBTENIENDO_LECTURA,
-      }
-    );
-  }
-
-
-  return true;
-}
-
-
-async function liberarBloqueoCalculo(
-  client,
-  procesoId
-) {
-
-  try {
-
-    await client.query(
-      `
-        SELECT
-          pg_advisory_unlock(
-            $1::int,
-            $2::int
-          )
-      `,
-      [
-        ADVISORY_LOCK_CALCULO,
-        procesoId,
-      ]
-    );
-
-
-  } catch (error) {
-
-    console.error(
-      "Error liberando bloqueo de cálculo:",
-      error.message
     );
   }
 }
@@ -612,6 +525,15 @@ async function obtenerContenedorPorId(
 // ======================================================
 // CREAR PROCESO
 // ======================================================
+//
+// IMPORTANTE:
+//
+// El porcentaje de llenado se guarda AQUÍ,
+// exactamente cuando inicia el proceso.
+//
+// Después ya no será reemplazado por una
+// medición posterior.
+// ======================================================
 
 async function crearProceso(
   client,
@@ -619,6 +541,7 @@ async function crearProceso(
     contenedorId,
     tipoResiduoId,
     usuarioId,
+    porcentajeLlenado,
   }
 ) {
 
@@ -630,6 +553,7 @@ async function crearProceso(
           contenedor_id,
           id_tipo_residuo,
           calculado_por,
+          porcentaje_llenado,
           calculado_en,
           estado_proceso
         )
@@ -638,14 +562,16 @@ async function crearProceso(
           $1,
           $2,
           $3,
+          $4,
           NOW(),
-          $4
+          $5
         )
 
         RETURNING
           id,
           contenedor_id,
           id_tipo_residuo,
+          porcentaje_llenado,
           calculado_en,
           estado_proceso
       `,
@@ -653,6 +579,11 @@ async function crearProceso(
         contenedorId,
         tipoResiduoId,
         usuarioId,
+
+        Number(
+          porcentajeLlenado
+            .toFixed(2)
+        ),
 
         ESTADO_PROCESO
           .EN_PROCESO,
@@ -904,17 +835,6 @@ async function registrarHistorialCosto(
 // ======================================================
 // GUARDAR COSTO CONFIRMADO EN EL PROCESO
 // ======================================================
-//
-// Esto permite saber:
-//
-// COSTO
-//    ↓
-// CALCULO
-//    ↓
-// RECOLECCION
-//
-// sin crear una columna nueva.
-// ======================================================
 
 async function guardarCostoEnProceso(
   client,
@@ -995,15 +915,6 @@ async function guardarCostoEnProceso(
 
 // ======================================================
 // RESPUESTA DE FOTO 3
-// ======================================================
-//
-// Solo devuelve información necesaria para mostrar.
-//
-// lectura_id
-// costo_vigente_id
-// historial_calculo_id
-//
-// permanecen internos.
 // ======================================================
 
 function construirRespuestaCalculo({
@@ -1135,13 +1046,6 @@ async function consultarProcesoActivo({
 
     proceso: {
 
-      /*
-       * Temporalmente se mantiene porque
-       * cancelar todavía usa este identificador.
-       *
-       * Cuando migremos Cancelar al Service,
-       * también desaparecerá del frontend.
-       */
       historial_calculo_id:
         Number(
           proceso.id
@@ -1189,6 +1093,21 @@ async function consultarProcesoActivo({
 
 // ======================================================
 // FOTO 1 - INICIAR PROCESO
+// ======================================================
+//
+// El nivel de llenado se obtiene desde el CACHE.
+//
+// NO:
+// Mediciones.service -> proveedor.
+//
+// SÍ:
+// NivelActualCache.service.
+//
+// Después de obtenerlo, se guarda en:
+//
+// historial_calculo_costos.porcentaje_llenado
+//
+// y queda fijo para todo el proceso.
 // ======================================================
 
 async function iniciarProceso({
@@ -1248,19 +1167,11 @@ async function iniciarProceso({
     );
 
 
-    // ==================================================
-    // 1. Bloquear usuario
-    // ==================================================
-
     await bloquearUsuario(
       client,
       usuarioId
     );
 
-
-    // ==================================================
-    // 2. Evitar otro EN_PROCESO
-    // ==================================================
 
     const procesoActivo =
       await buscarProcesoActivo(
@@ -1332,10 +1243,6 @@ async function iniciarProceso({
     }
 
 
-    // ==================================================
-    // 3. Contenedor
-    // ==================================================
-
     const contenedor =
       await obtenerContenedorPorTipo(
         client,
@@ -1368,27 +1275,22 @@ async function iniciarProceso({
 
 
     // ==================================================
-    // 4. Nivel actual
+    // NIVEL ACTUAL DESDE CACHE
     // ==================================================
 
-    const medicionNivel =
-      await medicionesService
-        .obtenerNivelActual({
-
-          contenedorId:
-            contenedor
-              .id_contenedor,
-
-          db:
-            client,
-        });
+    const nivelActual =
+      nivelCache
+        .obtenerNivelVigente(
+          contenedor
+            .id_contenedor
+        );
 
 
-    if (!medicionNivel) {
+    if (!nivelActual) {
 
       throw new RegistroPesajeError(
         503,
-        "No fue posible obtener el nivel actual del contenedor.",
+        "No existe una medición reciente del nivel del contenedor.",
         {
           codigo:
             "NIVEL_NO_DISPONIBLE",
@@ -1399,8 +1301,8 @@ async function iniciarProceso({
 
     const porcentajeLlenado =
       toNumber(
-        medicionNivel
-          .valor
+        nivelActual
+          .porcentaje
       );
 
 
@@ -1423,7 +1325,7 @@ async function iniciarProceso({
 
 
     // ==================================================
-    // 5. Crear proceso
+    // CREAR PROCESO Y CONGELAR NIVEL
     // ==================================================
 
     const proceso =
@@ -1438,6 +1340,8 @@ async function iniciarProceso({
           tipoResiduoId,
 
           usuarioId,
+
+          porcentajeLlenado,
         }
       );
 
@@ -1463,12 +1367,6 @@ async function iniciarProceso({
           .COSTO,
 
 
-      /*
-       * Estos datos se utilizan solamente
-       * para presentación inmediata.
-       *
-       * Foto 3 no volverá a confiar en ellos.
-       */
       contenedor: {
 
         codigo:
@@ -1484,7 +1382,10 @@ async function iniciarProceso({
 
 
         porcentaje_llenado:
-          porcentajeLlenado,
+          Number(
+            proceso
+              .porcentaje_llenado
+          ),
       },
     };
 
@@ -1507,12 +1408,6 @@ async function iniciarProceso({
 
 // ======================================================
 // FOTO 2 - OBTENER COSTO
-// ======================================================
-//
-// El backend determina el contenedor mediante
-// el proceso EN_PROCESO.
-//
-// No necesitamos contenedor_id desde frontend.
 // ======================================================
 
 async function obtenerCostoGlobal({
@@ -1539,10 +1434,6 @@ async function obtenerCostoGlobal({
     );
 
 
-  /*
-   * Si ya se confirmó un costo para
-   * este proceso, devolvemos ese.
-   */
   if (
     procesoTieneCostoConfirmado(
       proceso
@@ -1616,13 +1507,6 @@ async function obtenerCostoGlobal({
 // ======================================================
 // FOTO 2 - CONFIRMAR COSTO ACTUAL
 // ======================================================
-//
-// Se utiliza cuando el usuario decide:
-//
-// "Continuar con el costo actual"
-//
-// El frontend NO manda el costo.
-// ======================================================
 
 async function confirmarCostoGlobal({
   idUsuario,
@@ -1684,10 +1568,6 @@ async function confirmarCostoGlobal({
     }
 
 
-    // ==================================================
-    // Ya tiene cálculo
-    // ==================================================
-
     if (
       procesoTieneCalculo(
         proceso
@@ -1708,10 +1588,6 @@ async function confirmarCostoGlobal({
       );
     }
 
-
-    // ==================================================
-    // Ya estaba confirmado
-    // ==================================================
 
     if (
       procesoTieneCostoConfirmado(
@@ -1743,10 +1619,6 @@ async function confirmarCostoGlobal({
       };
     }
 
-
-    // ==================================================
-    // Buscar costo del contenedor real
-    // ==================================================
 
     const costo =
       await obtenerCostoVigentePorContenedor(
@@ -1902,10 +1774,6 @@ async function guardarCostoGlobal({
     );
 
 
-    // ==================================================
-    // 1. Proceso
-    // ==================================================
-
     let proceso =
       await requerirProcesoActivo(
         client,
@@ -1955,10 +1823,6 @@ async function guardarCostoGlobal({
     }
 
 
-    /*
-     * Una vez confirmado el costo de este proceso
-     * no permitimos modificarlo silenciosamente.
-     */
     if (
       procesoTieneCostoConfirmado(
         proceso
@@ -2010,10 +1874,6 @@ async function guardarCostoGlobal({
     }
 
 
-    // ==================================================
-    // 2. Bloquear contenedores DSH
-    // ==================================================
-
     const {
       tipo1,
       tipo2,
@@ -2042,10 +1902,6 @@ async function guardarCostoGlobal({
     ];
 
 
-    // ==================================================
-    // 3. Obtener costos actuales
-    // ==================================================
-
     const costosActuales = [];
 
 
@@ -2069,10 +1925,6 @@ async function guardarCostoGlobal({
       });
     }
 
-
-    // ==================================================
-    // 4. Evitar costo idéntico
-    // ==================================================
 
     const todosIguales =
       costosActuales.every(
@@ -2113,10 +1965,6 @@ async function guardarCostoGlobal({
     }
 
 
-    // ==================================================
-    // 5. Aplicar nuevo costo
-    // ==================================================
-
     const costosAplicados = [];
 
 
@@ -2137,11 +1985,6 @@ async function guardarCostoGlobal({
           : null;
 
 
-      /*
-       * Si un contenedor ya tiene
-       * exactamente el costo solicitado,
-       * no duplicamos.
-       */
       if (
         registro &&
         costoAnterior ===
@@ -2193,10 +2036,6 @@ async function guardarCostoGlobal({
     }
 
 
-    // ==================================================
-    // 6. Costo del proceso actual
-    // ==================================================
-
     const costoProceso =
       costosAplicados.find(
         (costo) =>
@@ -2246,10 +2085,6 @@ async function guardarCostoGlobal({
       );
     }
 
-
-    // ==================================================
-    // 7. Congelar costo para este proceso
-    // ==================================================
 
     proceso =
       await guardarCostoEnProceso(
@@ -2314,22 +2149,21 @@ async function guardarCostoGlobal({
 // FOTO 3 - CALCULAR PESO
 // ======================================================
 //
-// MUY IMPORTANTE:
+// Solo recibe idUsuario.
 //
-// Solo recibe:
+// Backend obtiene:
+// - proceso
+// - contenedor
+// - tipo
+// - costo
+// - peso
 //
-// idUsuario
+// IMPORTANTE:
 //
-// NO recibe del frontend:
+// El nivel NO se vuelve a obtener aquí.
 //
-// historial_calculo_id
-// contenedor_id
-// id_tipo_residuo
-// peso
-// costo
-// porcentaje
-//
-// Todo sale del backend.
+// porcentaje_llenado ya fue guardado
+// cuando inició el proceso.
 // ======================================================
 
 async function guardarCalculo({
@@ -2357,19 +2191,11 @@ async function guardarCalculo({
     null;
 
 
-  let bloqueoAdquirido =
-    false;
-
-
   let transaccionActiva =
     false;
 
 
   try {
-
-    // ==================================================
-    // 1. Buscar proceso real del usuario
-    // ==================================================
 
     let proceso =
       await requerirProcesoActivo(
@@ -2392,21 +2218,6 @@ async function guardarCalculo({
       );
     }
 
-
-    // ==================================================
-    // 2. Evitar varias mediciones simultáneas
-    // ==================================================
-
-    bloqueoAdquirido =
-      await adquirirBloqueoCalculo(
-        client,
-        procesoId
-      );
-
-
-    // ==================================================
-    // 3. Volver a consultar después del lock
-    // ==================================================
 
     proceso =
       await obtenerProcesoPorId(
@@ -2450,16 +2261,6 @@ async function guardarCalculo({
     }
 
 
-    // ==================================================
-    // 4. IDEMPOTENCIA
-    // ==================================================
-    //
-    // Si ya se calculó antes:
-    //
-    // NO consulta sensor otra vez.
-    // NO guarda otra vez.
-    // ==================================================
-
     if (
       procesoTieneCalculo(
         proceso
@@ -2484,10 +2285,6 @@ async function guardarCalculo({
     }
 
 
-    // ==================================================
-    // 5. Foto 2 debe estar confirmada
-    // ==================================================
-
     if (
       !procesoTieneCostoConfirmado(
         proceso
@@ -2509,10 +2306,6 @@ async function guardarCalculo({
       );
     }
 
-
-    // ==================================================
-    // 6. Datos REALES desde proceso
-    // ==================================================
 
     const contenedorId =
       toInt(
@@ -2542,6 +2335,13 @@ async function guardarCalculo({
       );
 
 
+    const porcentajeLlenadoProceso =
+      toNumber(
+        proceso
+          .porcentaje_llenado
+      );
+
+
     if (
       !contenedorId ||
       !tipoResiduoId ||
@@ -2557,9 +2357,23 @@ async function guardarCalculo({
     }
 
 
-    // ==================================================
-    // 7. Validar contenedor
-    // ==================================================
+    if (
+      porcentajeLlenadoProceso ===
+        null ||
+      porcentajeLlenadoProceso < 0 ||
+      porcentajeLlenadoProceso > 100
+    ) {
+
+      throw new RegistroPesajeError(
+        409,
+        "El proceso no contiene un nivel de llenado válido.",
+        {
+          codigo:
+            "NIVEL_PROCESO_INVALIDO",
+        }
+      );
+    }
+
 
     const contenedor =
       await obtenerContenedorPorId(
@@ -2617,21 +2431,14 @@ async function guardarCalculo({
 
 
     // ==================================================
-    // 8. PESO
-    // ==================================================
-    //
-    // HOY:
-    // base_datos
-    //
-    // FUTURO:
-    // modulo
-    //
-    // Foto 3 no necesita saber cuál.
+    // PESO
     // ==================================================
 
     const medicionPeso =
       await medicionesService
         .obtenerPesoActual({
+
+          procesoId,
 
           contenedorId,
 
@@ -2713,70 +2520,7 @@ async function guardarCalculo({
 
 
     // ==================================================
-    // 9. NIVEL
-    // ==================================================
-
-    const medicionNivel =
-      await medicionesService
-        .obtenerNivelActual({
-
-          contenedorId,
-
-          db:
-            client,
-        });
-
-
-    if (!medicionNivel) {
-
-      throw new RegistroPesajeError(
-        503,
-        "No fue posible obtener el nivel actual del contenedor.",
-        {
-
-          codigo:
-            "NIVEL_NO_DISPONIBLE",
-
-          estado_medicion:
-            ESTADO_MEDICION
-              .ERROR,
-        }
-      );
-    }
-
-
-    const porcentajeLlenado =
-      toNumber(
-        medicionNivel
-          .valor
-      );
-
-
-    if (
-      porcentajeLlenado ===
-        null ||
-      porcentajeLlenado < 0 ||
-      porcentajeLlenado > 100
-    ) {
-
-      throw new RegistroPesajeError(
-        503,
-        "La medición actual del nivel no es válida.",
-        {
-
-          codigo:
-            "NIVEL_INVALIDO",
-
-          estado_medicion:
-            ESTADO_MEDICION
-              .ERROR,
-        }
-      );
-    }
-
-
-    // ==================================================
-    // 10. Total
+    // COSTO TOTAL
     // ==================================================
 
     const totalCostoQ =
@@ -2789,11 +2533,7 @@ async function guardarCalculo({
 
 
     // ==================================================
-    // 11. Transacción corta
-    // ==================================================
-    //
-    // No mantenemos transacción abierta
-    // mientras esperamos sensor.
+    // TRANSACCION CORTA
     // ==================================================
 
     await client.query(
@@ -2847,10 +2587,6 @@ async function guardarCalculo({
     }
 
 
-    // ==================================================
-    // 12. Segunda protección de idempotencia
-    // ==================================================
-
     if (
       procesoTieneCalculo(
         proceso
@@ -2876,8 +2612,33 @@ async function guardarCalculo({
 
 
     // ==================================================
-    // 13. Verificar costo congelado
+    // VALIDAR NIVEL CONGELADO
     // ==================================================
+
+    const porcentajeProcesoActual =
+      toNumber(
+        proceso
+          .porcentaje_llenado
+      );
+
+
+    if (
+      porcentajeProcesoActual ===
+        null ||
+      porcentajeProcesoActual < 0 ||
+      porcentajeProcesoActual > 100
+    ) {
+
+      throw new RegistroPesajeError(
+        409,
+        "El nivel almacenado del proceso ya no es válido.",
+        {
+          codigo:
+            "NIVEL_PROCESO_INVALIDO",
+        }
+      );
+    }
+
 
     if (
       Number(
@@ -2905,7 +2666,14 @@ async function guardarCalculo({
 
 
     // ==================================================
-    // 14. Guardar en MISMO proceso
+    // GUARDAR RESULTADO DEL PESO
+    // ==================================================
+    //
+    // IMPORTANTE:
+    //
+    // porcentaje_llenado NO se modifica.
+    //
+    // Fue guardado al iniciar el proceso.
     // ==================================================
 
     const { rows } =
@@ -2915,13 +2683,12 @@ async function guardarCalculo({
 
           SET
             total_en_libras = $1,
-            porcentaje_llenado = $2,
-            total_costo_q = $3,
-            lectura_id = $4
+            total_costo_q = $2,
+            lectura_id = $3
 
-          WHERE id = $5
-            AND calculado_por = $6
-            AND estado_proceso = $7
+          WHERE id = $4
+            AND calculado_por = $5
+            AND estado_proceso = $6
             AND total_en_libras IS NULL
             AND lectura_id IS NULL
 
@@ -2949,11 +2716,6 @@ async function guardarCalculo({
         `,
         [
           totalEnLibras,
-
-          Number(
-            porcentajeLlenado
-              .toFixed(2)
-          ),
 
           totalCostoQ,
 
@@ -3038,21 +2800,138 @@ async function guardarCalculo({
 
   } finally {
 
-    if (
-      bloqueoAdquirido &&
-      procesoId
-    ) {
-
-      await liberarBloqueoCalculo(
-        client,
-        procesoId
-      );
-    }
-
-
     client.release();
   }
 }
+
+
+// ======================================================
+// FOTO 3 - CONSULTAR ESTADO DE MEDICION
+// ======================================================
+
+async function consultarEstadoCalculo({
+  idUsuario,
+}) {
+
+  const usuarioId =
+    toInt(
+      idUsuario
+    );
+
+
+  if (!usuarioId) {
+
+    throw new RegistroPesajeError(
+      401,
+      "Usuario no autenticado"
+    );
+  }
+
+
+  const proceso =
+    await requerirProcesoActivo(
+      pool,
+      usuarioId
+    );
+
+
+  // ====================================================
+  // CALCULO YA TERMINADO
+  // ====================================================
+
+  if (
+    procesoTieneCalculo(
+      proceso
+    )
+  ) {
+
+    return {
+
+      estado_medicion:
+        "COMPLETADO",
+
+      mensaje:
+        "Peso obtenido correctamente.",
+
+      calculo_completado:
+        true,
+    };
+  }
+
+
+  // ====================================================
+  // ULTIMA SOLICITUD DEL PROCESO
+  // ====================================================
+
+  const { rows } =
+    await pool.query(
+      `
+        SELECT
+          estado,
+          mensaje,
+          actualizado_en,
+          completado_en
+
+        FROM solicitudes_medicion_peso
+
+        WHERE proceso_id = $1
+
+        ORDER BY
+          id DESC
+
+        LIMIT 1
+      `,
+      [
+        proceso.id,
+      ]
+    );
+
+
+  // ====================================================
+  // TODAVIA NO SE HA CREADO SOLICITUD
+  // ====================================================
+
+  if (
+    rows.length === 0
+  ) {
+
+    return {
+
+      estado_medicion:
+        "OBTENIENDO_LECTURA",
+
+      mensaje:
+        "Preparando medición de peso...",
+
+      calculo_completado:
+        false,
+    };
+  }
+
+
+  const solicitud =
+    rows[0];
+
+
+  return {
+
+    estado_medicion:
+      solicitud.estado,
+
+    mensaje:
+      solicitud.mensaje ||
+      "Procesando medición de peso...",
+
+    calculo_completado:
+      solicitud.estado ===
+      "COMPLETADO",
+
+    actualizado_en:
+      solicitud.actualizado_en,
+  };
+}
+
+
 // ======================================================
 // CANCELAR PROCESO ACTUAL
 // ======================================================
@@ -3087,19 +2966,11 @@ async function cancelarProceso({
     );
 
 
-    // ==================================================
-    // 1. Bloquear usuario
-    // ==================================================
-
     await bloquearUsuario(
       client,
       usuarioId
     );
 
-
-    // ==================================================
-    // 2. Buscar proceso activo
-    // ==================================================
 
     let proceso =
       await buscarProcesoActivo(
@@ -3120,10 +2991,6 @@ async function cancelarProceso({
       );
     }
 
-
-    // ==================================================
-    // 3. Bloquear ese proceso
-    // ==================================================
 
     proceso =
       await obtenerProcesoPorId(
@@ -3157,10 +3024,6 @@ async function cancelarProceso({
       );
     }
 
-
-    // ==================================================
-    // 4. CANCELAR
-    // ==================================================
 
     const { rows } =
       await client.query(
@@ -3272,7 +3135,8 @@ module.exports = {
   // FOTO 3
   guardarCalculo,
 
-   // CANCELAR
+
+  // CANCELAR
   cancelarProceso,
 
 

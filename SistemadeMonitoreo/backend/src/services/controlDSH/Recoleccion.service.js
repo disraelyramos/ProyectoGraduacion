@@ -22,6 +22,18 @@ const ESTADO_CONTENEDOR = {
 };
 
 
+const ESTADO_ALERTA = {
+  ACTIVA: "ACTIVA",
+  RESUELTA: "RESUELTA",
+};
+
+
+const TIPO_ALERTA_NIVEL = [
+  "NIVEL_AVISO",
+  "NIVEL_ALTO",
+];
+
+
 /*
  * Namespace exclusivo para bloquear
  * números de recibo durante el guardado.
@@ -601,6 +613,158 @@ async function validarLecturaProceso(
 
 
 // ======================================================
+// REINICIAR CICLO DE ALERTAS POR RECOLECCIÓN
+// ======================================================
+//
+// Esta función se ejecuta dentro de la MISMA
+// transacción donde se guarda la recolección.
+//
+// Hace únicamente sobre el contenedor recolectado:
+//
+// 1. resuelve alertas activas de nivel;
+// 2. reinicia primer y segundo aviso;
+// 3. registra qué recolección provocó el reinicio;
+// 4. actualiza fecha_reinicio.
+//
+// NO modifica el estado del otro contenedor.
+// ======================================================
+
+async function reiniciarAlertasPorRecoleccion(
+  client,
+  {
+    contenedorId,
+    recoleccionId,
+  }
+) {
+
+  const contenedorIdNumero =
+    toInt(
+      contenedorId
+    );
+
+
+  const recoleccionIdNumero =
+    toInt(
+      recoleccionId
+    );
+
+
+  if (
+    !contenedorIdNumero ||
+    !recoleccionIdNumero
+  ) {
+
+    throw new RecoleccionError(
+      500,
+      "No fue posible reiniciar el ciclo de alertas de la recolección.",
+      {
+        codigo:
+          "REINICIO_ALERTAS_INVALIDO",
+      }
+    );
+  }
+
+
+  // ====================================================
+  // 1. RESOLVER ALERTAS ACTIVAS DEL CICLO
+  // ====================================================
+
+  await client.query(
+    `
+      UPDATE alertas
+
+      SET
+        estado = $1,
+        fecha_resuelta = CURRENT_TIMESTAMP,
+        fecha_cierre = CURRENT_TIMESTAMP
+
+      WHERE contenedor_id = $2
+        AND tipo = ANY($3::varchar[])
+        AND estado = $4
+    `,
+    [
+      ESTADO_ALERTA
+        .RESUELTA,
+
+      contenedorIdNumero,
+
+      TIPO_ALERTA_NIVEL,
+
+      ESTADO_ALERTA
+        .ACTIVA,
+    ]
+  );
+
+
+  // ====================================================
+  // 2. REINICIAR ESTADO DEL CONTENEDOR
+  // ====================================================
+  //
+  // ON CONFLICT permite que funcione incluso
+  // si en el futuro aparece un contenedor que
+  // aún no tenía fila de estado.
+  // ====================================================
+
+  await client.query(
+    `
+      INSERT INTO estado_alertas_contenedor
+      (
+        contenedor_id,
+        primer_aviso_emitido,
+        segundo_aviso_emitido,
+        fecha_primer_aviso,
+        fecha_segundo_aviso,
+        ultima_recoleccion_id,
+        fecha_reinicio,
+        fecha_actualizacion
+      )
+      VALUES
+      (
+        $1,
+        FALSE,
+        FALSE,
+        NULL,
+        NULL,
+        $2,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP
+      )
+
+      ON CONFLICT (
+        contenedor_id
+      )
+      DO UPDATE SET
+
+        primer_aviso_emitido =
+          FALSE,
+
+        segundo_aviso_emitido =
+          FALSE,
+
+        fecha_primer_aviso =
+          NULL,
+
+        fecha_segundo_aviso =
+          NULL,
+
+        ultima_recoleccion_id =
+          EXCLUDED.ultima_recoleccion_id,
+
+        fecha_reinicio =
+          CURRENT_TIMESTAMP,
+
+        fecha_actualizacion =
+          CURRENT_TIMESTAMP
+    `,
+    [
+      contenedorIdNumero,
+      recoleccionIdNumero,
+    ]
+  );
+}
+
+
+// ======================================================
 // FOTO 4
 // OBTENER DATOS INICIALES
 // ======================================================
@@ -994,14 +1158,18 @@ async function validarNumeroReciboDisponible(
 // ======================================================
 //
 // Esta función:
-// 
+//
 // 1. obtiene EN_PROCESO;
 // 2. bloquea el proceso;
 // 3. valida cálculo de Foto 3;
 // 4. vuelve a calcular porcentajes;
 // 5. crea recolección;
 // 6. actualiza EL MISMO historial;
-// 7. EN_PROCESO -> FINALIZADO.
+// 7. EN_PROCESO -> FINALIZADO;
+// 8. resuelve alertas activas de nivel;
+// 9. reinicia ciclo de alertas del contenedor.
+//
+// Todo queda dentro de la misma transacción.
 //
 // NO crea un segundo historial.
 // ======================================================
@@ -1381,7 +1549,32 @@ async function guardarRecoleccion({
 
 
     // ==================================================
-    // 11. COMMIT
+    // 11. REINICIAR CICLO DE ALERTAS
+    // ==================================================
+    //
+    // SOLO se reinicia el contenedor
+    // que acaba de ser recolectado.
+    //
+    // Si cualquier parte falla,
+    // toda la transacción hace ROLLBACK.
+    // ==================================================
+
+    await reiniciarAlertasPorRecoleccion(
+      client,
+      {
+        contenedorId:
+          proceso
+            .contenedor_id,
+
+        recoleccionId:
+          recoleccion
+            .id,
+      }
+    );
+
+
+    // ==================================================
+    // 12. COMMIT
     // ==================================================
 
     await client.query(
@@ -1394,7 +1587,7 @@ async function guardarRecoleccion({
 
 
     // ==================================================
-    // 12. RESPUESTA
+    // 13. RESPUESTA
     // ==================================================
     //
     // No devolvemos IDs internos innecesarios.

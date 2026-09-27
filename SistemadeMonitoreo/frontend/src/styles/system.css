@@ -1673,3 +1673,20 @@ p {
   }
 
 }
+
+/* =========================================================
+   SPINNER PEQUEÑO PARA FONDOS CLAROS
+   ========================================================= */
+
+.system-spinner-small-dark {
+  width: 16px;
+  height: 16px;
+
+  border-width: 2px;
+
+  border-color:
+    var(--color-borde);
+
+  border-top-color:
+    var(--color-primario);
+}

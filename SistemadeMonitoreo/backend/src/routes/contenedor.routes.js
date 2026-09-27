@@ -11,8 +11,11 @@ const authenticateToken = require("../middlewares/auth.middleware"); // middlewa
 // 📌 Crear contenedor (protegido con JWT)
 router.post("/", authenticateToken, createContenedor);
 
-// 📌 Listar contenedores (también protegido con JWT)
-router.get("/", authenticateToken, getContenedores);
+router.get(
+  "/",
+  authenticateToken.sinRenovar,
+  getContenedores
+);
 
 // 📌 Buscar contenedores (por código o tipo de residuo)
 router.get("/buscar", authenticateToken, buscarContenedores);

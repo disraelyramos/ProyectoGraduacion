@@ -1,68 +1,416 @@
-const express = require('express');
-const cors = require('cors');
-require('dotenv').config();
+const express = require("express");
+const cors = require("cors");
+
+require("dotenv").config();
+
+
+// ======================================================
+// SERVICIOS AUTOMÁTICOS
+// ======================================================
+
+const nivelMonitor = require(
+  "./src/services/controlDSH/mediciones/NivelMonitor.service"
+);
+
+const alertasProgramadasMonitor = require(
+  "./src/services/alertasProgramadas/AlertasProgramadasMonitor.service"
+);
+
+const sesionesLimpieza = require(
+  "./src/services/Auth/SesionesLimpieza.service"
+);
+
+
+// ======================================================
+// CONFIGURACIÓN CORS
+// ======================================================
+//
+// CORS_ALLOWED_ORIGINS se configura en el .env.
+//
+// Desarrollo:
+// http://localhost:5173
+//
+// Producción:
+// URL real de Netlify.
+//
+// Si existen varios orígenes, separarlos por coma.
+// ======================================================
+
+const origenesPermitidos = String(
+  process.env.CORS_ALLOWED_ORIGINS || ""
+)
+  .split(",")
+  .map(
+    (origen) =>
+      origen.trim().replace(/\/+$/, "")
+  )
+  .filter(Boolean);
+
+
+if (origenesPermitidos.length === 0) {
+  throw new Error(
+    "Falta configurar CORS_ALLOWED_ORIGINS en el entorno del backend."
+  );
+}
+
+
+// ======================================================
+// CREAR APLICACIÓN
+// ======================================================
 
 const app = express();
-app.use(cors());
+
+
+// ======================================================
+// CORS
+// ======================================================
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+
+      // Permitir solicitudes sin Origin:
+      // ESP8266 y herramientas de backend.
+
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      const permitido =
+        origenesPermitidos.includes(origin);
+
+      return callback(null, permitido);
+    },
+  })
+);
+
+
+// ======================================================
+// JSON
+// ======================================================
+
 app.use(express.json());
 
-//  Middleware global para sanitizar entradas contra XSS
-const sanitize = require('./src/middlewares/sanitize');
+
+// ======================================================
+// SANITIZACIÓN XSS
+// ======================================================
+
+const sanitize = require(
+  "./src/middlewares/sanitize"
+);
+
 app.use(sanitize);
 
-// Importar rutas
-const authRoutes = require('./src/routes/auth.routes');
-const menuRoutes = require('./src/routes/menu.routes');
-const perfilRoutes = require('./src/routes/perfil.routes');
 
-const ubicacionRoutes = require('./src/routes/ubicacion.routes');
-const tipoResiduoRoutes = require('./src/routes/tipoResiduo.routes');
-const estadoContenedorRoutes = require('./src/routes/estadoContenedor.routes');
-const contenedorRoutes = require('./src/routes/contenedor.routes'); // 
-const recuperacionRoutes = require('./src/routes/recuperacion.routes');
-const historialRecoleccionRoutes = require("./src/routes/HistorialRecoleccion/HistorialdeRecoleccion.routes");
-const historialCostoRoutes = require("./src/routes/historialcosto/HistorialCosto.routes");
-const codigoContenedorRoutes = require("./src/routes/Codigocontenedor/CodigoContenedor.routes");
-const graficasRecoleccionRoutes = require("./src/routes/graficasderecoleccion/GraficasRecoleccion.routes");
-//  Usar rutas
-app.use('/api/auth', authRoutes);
-app.use('/api/menu', menuRoutes);
-app.use('/api/perfil', perfilRoutes);
+// ======================================================
+// IMPORTAR RUTAS
+// ======================================================
 
-app.use('/api/ubicaciones', ubicacionRoutes);
-app.use('/api/tipos-residuo', tipoResiduoRoutes);
-app.use('/api/estados-contenedor', estadoContenedorRoutes);
-app.use('/api/contenedores', contenedorRoutes); // 
-app.use("/api/recuperacion", recuperacionRoutes);
+const authRoutes = require(
+  "./src/routes/auth.routes"
+);
+
+const menuRoutes = require(
+  "./src/routes/menu.routes"
+);
+
+const perfilRoutes = require(
+  "./src/routes/perfil.routes"
+);
+
+const ubicacionRoutes = require(
+  "./src/routes/ubicacion.routes"
+);
+
+const tipoResiduoRoutes = require(
+  "./src/routes/tipoResiduo.routes"
+);
+
+const estadoContenedorRoutes = require(
+  "./src/routes/estadoContenedor.routes"
+);
+
+const contenedorRoutes = require(
+  "./src/routes/contenedor.routes"
+);
+
+const recuperacionRoutes = require(
+  "./src/routes/recuperacion.routes"
+);
+
+const historialRecoleccionRoutes = require(
+  "./src/routes/HistorialRecoleccion/HistorialdeRecoleccion.routes"
+);
+
+const historialCostoRoutes = require(
+  "./src/routes/historialcosto/HistorialCosto.routes"
+);
+
+const codigoContenedorRoutes = require(
+  "./src/routes/Codigocontenedor/CodigoContenedor.routes"
+);
+
+const graficasRecoleccionRoutes = require(
+  "./src/routes/graficasderecoleccion/GraficasRecoleccion.routes"
+);
+
+
+// ======================================================
+// RUTAS GENERALES
+// ======================================================
+
+app.use(
+  "/api/auth",
+  authRoutes
+);
+
+app.use(
+  "/api/menu",
+  menuRoutes
+);
+
+app.use(
+  "/api/perfil",
+  perfilRoutes
+);
+
+app.use(
+  "/api/ubicaciones",
+  ubicacionRoutes
+);
+
+app.use(
+  "/api/tipos-residuo",
+  tipoResiduoRoutes
+);
+
+app.use(
+  "/api/estados-contenedor",
+  estadoContenedorRoutes
+);
+
+app.use(
+  "/api/contenedores",
+  contenedorRoutes
+);
+
+app.use(
+  "/api/recuperacion",
+  recuperacionRoutes
+);
+
+
+// ======================================================
+// CONTROL DSH
+// ======================================================
 
 app.use(
   "/api/control-dsh/registro-pesaje",
-  require("./src/routes/controlDSH/RegistroPesaje.routes")
+  require(
+    "./src/routes/controlDSH/RegistroPesaje.routes"
+  )
+);
+
+app.use(
+  "/api/control-dsh/modulo-peso",
+  require(
+    "./src/routes/controlDSH/ModuloPeso.routes"
+  )
 );
 
 app.use(
   "/api/control-dsh/catalogos",
-  require("./src/routes/controlDSH/DisEmpresa.routes")
+  require(
+    "./src/routes/controlDSH/DisEmpresa.routes"
+  )
 );
 
-app.use("/api/historial-recoleccion", historialRecoleccionRoutes);
-app.use("/api/historial-costo", historialCostoRoutes);
-app.use("/api/codigo-contenedor", codigoContenedorRoutes);
-app.use("/api/graficas-recoleccion", graficasRecoleccionRoutes);
+
+// ======================================================
+// CONFIGURACIÓN DE ALERTAS
+// ======================================================
+
+app.use(
+  "/api/configuracion-alertas",
+  require(
+    "./src/routes/configuracionAlertas/ConfiguracionAlertas.routes"
+  )
+);
 
 
+// ======================================================
+// ALERTAS PROGRAMADAS
+// ======================================================
 
-//  Ruta protegida de prueba
-const authMiddleware = require('./src/middlewares/auth.middleware');
-app.get('/api/protegida', authMiddleware, (req, res) => {
-  res.json({ message: `Hola ${req.user.id_usuario}, tienes acceso` });
-});
+app.use(
+  "/api/alertas-programadas",
+  require(
+    "./src/routes/alertasProgramadas/AlertasProgramadas.routes"
+  )
+);
 
-// Ruta raíz
-app.get('/', (req, res) => {
-  res.send('API funcionando ');
-});
 
-// Inicializar servidor
-const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => console.log(` Servidor en puerto ${PORT}`));
+// ======================================================
+// HISTORIALES Y GRÁFICAS
+// ======================================================
+
+app.use(
+  "/api/historial-recoleccion",
+  historialRecoleccionRoutes
+);
+
+app.use(
+  "/api/historial-costo",
+  historialCostoRoutes
+);
+
+app.use(
+  "/api/codigo-contenedor",
+  codigoContenedorRoutes
+);
+
+app.use(
+  "/api/graficas-recoleccion",
+  graficasRecoleccionRoutes
+);
+
+
+// ======================================================
+// RUTA PROTEGIDA DE PRUEBA
+// ======================================================
+
+const authMiddleware = require(
+  "./src/middlewares/auth.middleware"
+);
+
+app.get(
+  "/api/protegida",
+  authMiddleware,
+  (req, res) => {
+
+    res.json({
+      message:
+        `Hola ${req.user.id_usuario}, tienes acceso`,
+    });
+
+  }
+);
+
+
+// ======================================================
+// RUTA RAÍZ
+// ======================================================
+
+app.get(
+  "/",
+  (req, res) => {
+
+    res.send(
+      "API funcionando"
+    );
+
+  }
+);
+
+
+// ======================================================
+// INICIALIZAR SERVIDOR
+// ======================================================
+
+const PORT =
+  process.env.PORT || 3001;
+
+
+app.listen(
+  PORT,
+  async () => {
+
+    console.log(
+      `Servidor en puerto ${PORT}`
+    );
+
+
+    // ==================================================
+    // 1. MONITOR DE NIVELES
+    // ==================================================
+
+    try {
+
+      await nivelMonitor.iniciarMonitor();
+
+      console.log(
+        "Monitor de nivel iniciado correctamente."
+      );
+
+    } catch (error) {
+
+      console.error(
+        "No fue posible iniciar el monitor de nivel:",
+        error.message
+      );
+
+    }
+
+
+    // ==================================================
+    // 2. MONITOR DE ALERTAS PROGRAMADAS
+    // ==================================================
+
+    try {
+
+      await alertasProgramadasMonitor
+        .iniciarMonitor();
+
+      console.log(
+        "Monitor de alertas programadas iniciado correctamente."
+      );
+
+    } catch (error) {
+
+      console.error(
+        "No fue posible iniciar el monitor de alertas programadas:",
+        error.message
+      );
+
+    }
+
+
+    // ==================================================
+    // 3. LIMPIEZA AUTOMÁTICA DE SESIONES
+    // ==================================================
+    //
+    // Las variables del .env controlan:
+    //
+    // SESIONES_LIMPIEZA_CADA_DIAS
+    // SESIONES_RETENCION_DIAS
+    //
+    // El servicio:
+    //
+    // - Desactiva sesiones vencidas.
+    // - Elimina sesiones antiguas e inactivas.
+    // - Conserva las sesiones activas vigentes.
+    //
+    // No elimina usuarios ni otras tablas.
+    // ==================================================
+
+    try {
+
+      await sesionesLimpieza
+        .iniciarLimpieza();
+
+      console.log(
+        "Servicio de limpieza de sesiones iniciado correctamente."
+      );
+
+    } catch (error) {
+
+      console.error(
+        "No fue posible iniciar la limpieza de sesiones:",
+        error.message
+      );
+
+    }
+
+  }
+);

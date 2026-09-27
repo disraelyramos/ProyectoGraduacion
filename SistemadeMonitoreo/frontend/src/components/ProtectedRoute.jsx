@@ -1,52 +1,194 @@
-import React, { useState, useEffect } from "react";
-import { Navigate } from "react-router-dom";
-import { jwtDecode } from "jwt-decode";
-import { toast } from "react-toastify";
+import React, {
+  useEffect,
+  useState,
+} from "react";
 
-const ProtectedRoute = ({ children }) => {
-  const [isValid, setIsValid] = useState(null); // null = aún verificando
+import {
+  Navigate,
+  useLocation,
+} from "react-router-dom";
+
+import {
+  jwtDecode,
+} from "jwt-decode";
+
+import {
+  showSessionExpiredAlert,
+} from "../utils/alerts";
+
+
+// ======================================================
+// DESTINO EXCLUSIVO DESDE WHATSAPP
+// ======================================================
+
+const RUTA_CONSULTA =
+  "/consulta-niveles";
+
+const CLAVE_DESTINO =
+  "bioinfeccioso_post_login";
+
+
+// ======================================================
+// RUTA PROTEGIDA
+// ======================================================
+
+const ProtectedRoute = ({
+  children,
+}) => {
+
+  const location =
+    useLocation();
+
+  const [
+    isValid,
+    setIsValid,
+  ] = useState(null);
+
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
+
+    const token =
+      localStorage.getItem(
+        "token"
+      );
+
+
+    // ==================================================
+    // CONSERVAR DESTINO DE WHATSAPP
+    // ==================================================
+
+    const conservarDestino = () => {
+
+      if (
+        location.pathname ===
+        RUTA_CONSULTA
+      ) {
+
+        sessionStorage.setItem(
+          CLAVE_DESTINO,
+          RUTA_CONSULTA
+        );
+
+      }
+
+    };
+
+
+    // ==================================================
+    // SIN SESIÓN
+    // ==================================================
+    //
+    // Si nunca inició sesión, enviamos al Login
+    // sin mostrar falsamente "Sesión caducada".
+    // ==================================================
 
     if (!token) {
+
+      conservarDestino();
+
       setIsValid(false);
+
       return;
+
     }
+
+
+    // ==================================================
+    // VERIFICAR TOKEN
+    // ==================================================
 
     try {
-      const decoded = jwtDecode(token);
-      const now = Date.now() / 1000;
 
-      if (decoded.exp < now) {
-        localStorage.removeItem("token");
+      const decoded =
+        jwtDecode(token);
 
-        //  Mostrar alerta de sesión expirada
-        toast.error("Tu sesión ha caducado, vuelve a iniciar sesión ");
+      const exp =
+        Number(
+          decoded?.exp
+        );
 
-        setIsValid(false);
-      } else {
-        setIsValid(true);
+
+      if (
+        !Number.isFinite(exp) ||
+        exp * 1000 <= Date.now()
+      ) {
+
+        throw new Error(
+          "TOKEN_NO_VALIDO"
+        );
+
       }
-    } catch (err) {
-      localStorage.removeItem("token");
 
-      // 🔹 Mostrar alerta de token inválido
-      toast.error("Token inválido. Inicia sesión nuevamente ");
+
+      setIsValid(true);
+
+    } catch (error) {
+
+      conservarDestino();
+
+      /*
+       * alerts.js ya elimina el token,
+       * muestra una sola alerta y envía
+       * al Login al pulsar Aceptar.
+       */
+
+      showSessionExpiredAlert();
+
       setIsValid(false);
-    }
-  }, []);
 
-  if (isValid === null) {
-    //  pantalla intermedia (spinner invisible para evitar parpadeos)
-    return <div style={{ display: "none" }}></div>;
+    }
+
+  }, [
+    location.pathname,
+  ]);
+
+
+  // ====================================================
+  // VALIDANDO SESIÓN
+  // ====================================================
+
+  if (
+    isValid === null
+  ) {
+
+    return null;
+
   }
+
+
+  // ====================================================
+  // SIN ACCESO
+  // ====================================================
 
   if (!isValid) {
-    return <Navigate to="/" replace />;
+
+    return (
+
+      <Navigate
+
+        to="/"
+
+        replace
+
+        state={{
+
+          from:
+            location.pathname === RUTA_CONSULTA
+              ? RUTA_CONSULTA
+              : null,
+
+        }}
+
+      />
+
+    );
+
   }
 
+
   return children;
+
 };
+
 
 export default ProtectedRoute;

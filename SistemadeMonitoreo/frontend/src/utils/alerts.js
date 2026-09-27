@@ -4,6 +4,85 @@ import "sweetalert2/dist/sweetalert2.min.css";
 
 /**
  * =====================================================
+ * SESIÓN CADUCADA
+ * =====================================================
+ *
+ * Evita mostrar varias alertas si distintas peticiones
+ * reciben un 401 al mismo tiempo.
+ */
+
+let sessionExpiredPromise = null;
+
+export const showSessionExpiredAlert = () => {
+
+  // Si ya existe una alerta de sesión abierta,
+  // no mostramos otra.
+  if (sessionExpiredPromise) {
+    return sessionExpiredPromise;
+  }
+
+
+  // La sesión ya no es válida.
+  localStorage.removeItem("token");
+
+
+  sessionExpiredPromise = Swal.fire({
+
+    title:
+      "Sesión caducada",
+
+    text:
+      "Su sesión ha caducado. Debe iniciar sesión nuevamente.",
+
+    icon:
+      "warning",
+
+    confirmButtonText:
+      "Aceptar",
+
+    confirmButtonColor:
+      "#3085d6",
+
+    // No permitir cerrar la alerta
+    // haciendo clic fuera.
+    allowOutsideClick:
+      false,
+
+    // No permitir cerrarla con ESC.
+    allowEscapeKey:
+      false,
+
+    // No mostrar X para cerrar.
+    showCloseButton:
+      false,
+
+  })
+    .then(() => {
+
+      /**
+       * Después de presionar Aceptar,
+       * se envía al Login.
+       */
+      window.location.replace("/");
+
+    })
+    .finally(() => {
+
+      /**
+       * Dejamos disponible nuevamente
+       * el controlador de alerta.
+       */
+      sessionExpiredPromise = null;
+
+    });
+
+
+  return sessionExpiredPromise;
+};
+
+
+/**
+ * =====================================================
  * ALERTA DE CONFIRMACIÓN PARAMETRIZABLE
  * =====================================================
  */
@@ -14,27 +93,42 @@ export const showConfirmAlert = (
   onConfirm,
   onCancel
 ) => {
+
   return Swal.fire({
+
     title,
     text,
-    icon: "warning",
 
-    showCancelButton: true,
+    icon:
+      "warning",
 
-    confirmButtonText: "Sí",
-    cancelButtonText: "No",
+    showCancelButton:
+      true,
 
-    reverseButtons: true,
+    confirmButtonText:
+      "Sí",
 
-    confirmButtonColor: "#3085d6",
-    cancelButtonColor: "#d33",
+    cancelButtonText:
+      "No",
+
+    reverseButtons:
+      true,
+
+    confirmButtonColor:
+      "#3085d6",
+
+    cancelButtonColor:
+      "#d33",
+
   }).then(async (result) => {
 
     if (
       result.isConfirmed &&
       typeof onConfirm === "function"
     ) {
+
       return await onConfirm();
+
     }
 
 
@@ -43,12 +137,16 @@ export const showConfirmAlert = (
         Swal.DismissReason.cancel &&
       typeof onCancel === "function"
     ) {
+
       return await onCancel();
+
     }
 
 
     return result;
+
   });
+
 };
 
 
@@ -67,6 +165,7 @@ export const showDynamicConfirm = (
   const config = {
 
     crear: {
+
       title:
         "¿Desea guardar este registro?",
 
@@ -75,10 +174,12 @@ export const showDynamicConfirm = (
 
       icon:
         "question",
+
     },
 
 
     editar: {
+
       title:
         "¿Desea actualizar este registro?",
 
@@ -87,10 +188,12 @@ export const showDynamicConfirm = (
 
       icon:
         "warning",
+
     },
 
 
     eliminar: {
+
       title:
         "¿Desea eliminar este registro?",
 
@@ -99,10 +202,12 @@ export const showDynamicConfirm = (
 
       icon:
         "error",
+
     },
 
 
     activar: {
+
       title:
         "¿Desea activar este elemento?",
 
@@ -111,10 +216,12 @@ export const showDynamicConfirm = (
 
       icon:
         "info",
+
     },
 
 
     desactivar: {
+
       title:
         "¿Desea desactivar este elemento?",
 
@@ -123,7 +230,9 @@ export const showDynamicConfirm = (
 
       icon:
         "info",
+
     },
+
   };
 
 
@@ -137,19 +246,28 @@ export const showDynamicConfirm = (
 
 
   return Swal.fire({
+
     title,
     text,
     icon,
 
-    showCancelButton: true,
+    showCancelButton:
+      true,
 
-    confirmButtonText: "Sí",
-    cancelButtonText: "No",
+    confirmButtonText:
+      "Sí",
 
-    reverseButtons: true,
+    cancelButtonText:
+      "No",
 
-    confirmButtonColor: "#3085d6",
-    cancelButtonColor: "#d33",
+    reverseButtons:
+      true,
+
+    confirmButtonColor:
+      "#3085d6",
+
+    cancelButtonColor:
+      "#d33",
 
   }).then(async (result) => {
 
@@ -157,7 +275,9 @@ export const showDynamicConfirm = (
       result.isConfirmed &&
       typeof onConfirm === "function"
     ) {
+
       return await onConfirm();
+
     }
 
 
@@ -166,12 +286,16 @@ export const showDynamicConfirm = (
         Swal.DismissReason.cancel &&
       typeof onCancel === "function"
     ) {
+
       return await onCancel();
+
     }
 
 
     return result;
+
   });
+
 };
 
 
@@ -184,7 +308,9 @@ export const showDynamicConfirm = (
 export const showSuccessAlert = (
   message
 ) => {
+
   return Swal.fire({
+
     title:
       "¡Éxito!",
 
@@ -199,7 +325,9 @@ export const showSuccessAlert = (
 
     confirmButtonColor:
       "#3085d6",
+
   });
+
 };
 
 
@@ -212,7 +340,9 @@ export const showSuccessAlert = (
 export const showErrorAlert = (
   message
 ) => {
+
   return Swal.fire({
+
     title:
       "Error",
 
@@ -227,7 +357,9 @@ export const showErrorAlert = (
 
     confirmButtonColor:
       "#d33",
+
   });
+
 };
 
 
@@ -243,7 +375,9 @@ export const showWarningAlert = (
   message,
   title = "Advertencia"
 ) => {
+
   return Swal.fire({
+
     title,
 
     text:
@@ -257,7 +391,9 @@ export const showWarningAlert = (
 
     confirmButtonColor:
       "#3085d6",
+
   });
+
 };
 
 
@@ -275,8 +411,11 @@ export const showToast = (
   message,
   icon = "info"
 ) => {
+
   return Swal.fire({
-    toast: true,
+
+    toast:
+      true,
 
     position:
       "top-end",
@@ -294,7 +433,9 @@ export const showToast = (
 
     timerProgressBar:
       true,
+
   });
+
 };
 
 
@@ -308,7 +449,9 @@ export const showBackendErrorModal = (
   message =
     "Ocurrió un error inesperado. Intente nuevamente."
 ) => {
+
   return Swal.fire({
+
     title:
       "Error",
 
@@ -323,7 +466,9 @@ export const showBackendErrorModal = (
 
     confirmButtonColor:
       "#d33",
+
   });
+
 };
 
 
@@ -337,7 +482,9 @@ export const showInfoAlert = (
   message,
   title = "Información"
 ) => {
+
   return Swal.fire({
+
     title,
 
     text:
@@ -351,7 +498,9 @@ export const showInfoAlert = (
 
     confirmButtonColor:
       "#3085d6",
+
   });
+
 };
 
 
@@ -369,11 +518,13 @@ export const showProcesoEnCursoAlert =
     proceso = null,
 
     onContinue,
+
     onCancel,
   }) => {
 
     const result =
       await Swal.fire({
+
         title:
           "Proceso en curso",
 
@@ -406,6 +557,7 @@ export const showProcesoEnCursoAlert =
 
         allowEscapeKey:
           false,
+
       });
 
 
@@ -421,13 +573,16 @@ export const showProcesoEnCursoAlert =
         typeof onContinue ===
         "function"
       ) {
+
         return await onContinue(
           proceso
         );
+
       }
 
 
       return result;
+
     }
 
 
@@ -444,17 +599,21 @@ export const showProcesoEnCursoAlert =
         typeof onCancel ===
         "function"
       ) {
+
         return await onCancel(
           proceso
         );
+
       }
 
 
       return result;
+
     }
 
 
     return result;
+
   };
 
 
@@ -526,6 +685,7 @@ export const showBackendAlert =
     ) {
 
       return showProcesoEnCursoAlert({
+
         message,
 
         proceso:
@@ -537,7 +697,9 @@ export const showBackendAlert =
 
         onCancel:
           onCancelProcess,
+
       });
+
     }
 
 
@@ -562,6 +724,7 @@ export const showBackendAlert =
         message,
         "Criterio de búsqueda incorrecto"
       );
+
     }
 
 
@@ -581,6 +744,7 @@ export const showBackendAlert =
         message,
         "Valor de búsqueda no válido"
       );
+
     }
 
 
@@ -600,6 +764,7 @@ export const showBackendAlert =
         message,
         "Tiempo de exportación vencido"
       );
+
     }
 
 
@@ -619,6 +784,34 @@ export const showBackendAlert =
         message,
         "Exportación no disponible"
       );
+
+    }
+
+
+    /**
+     * ================================================
+     * SESIÓN CADUCADA
+     * ================================================
+     *
+     * 401 significa que la autenticación
+     * ya no es válida.
+     *
+     * No debe mostrar:
+     *
+     * - Error en el servidor
+     * - No se pudo cargar el menú
+     * - Acceso no autorizado
+     *
+     * Debe mostrar únicamente la alerta
+     * de sesión caducada.
+     */
+
+    if (
+      statusCode === 401
+    ) {
+
+      return showSessionExpiredAlert();
+
     }
 
 
@@ -635,21 +828,27 @@ export const showBackendAlert =
       return showBackendErrorModal(
         message
       );
+
     }
 
 
     /**
      * ================================================
-     * AUTENTICACIÓN / PERMISOS
+     * PERMISOS
      * ================================================
+     *
+     * 403 significa que el usuario sí puede
+     * estar autenticado, pero no tiene permiso.
+     *
+     * Por eso NO se cierra la sesión.
      */
 
     if (
-      statusCode === 401 ||
       statusCode === 403
     ) {
 
       return Swal.fire({
+
         title:
           "Acceso no autorizado",
 
@@ -664,7 +863,9 @@ export const showBackendAlert =
 
         confirmButtonColor:
           "#3085d6",
+
       });
+
     }
 
 
@@ -681,6 +882,7 @@ export const showBackendAlert =
       return showInfoAlert(
         message
       );
+
     }
 
 
@@ -698,4 +900,5 @@ export const showBackendAlert =
     return showWarningAlert(
       message
     );
+
   };
