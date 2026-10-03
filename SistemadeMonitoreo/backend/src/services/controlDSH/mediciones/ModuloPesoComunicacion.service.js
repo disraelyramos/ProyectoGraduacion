@@ -1,55 +1,33 @@
-const pool = require(
-  "../../../config/db"
-);
-
+const pool = require("../../../config/db");
 
 // ======================================================
-// ESTADOS
+// ESTADOS DE MEDICIÓN
 // ======================================================
 
 const ESTADO = {
-
-  PENDIENTE:
-    "PENDIENTE",
-
-  MIDIENDO:
-    "MIDIENDO",
-
-  ESTABILIZANDO:
-    "ESTABILIZANDO",
-
-  MOVIMIENTO_DETECTADO:
-    "MOVIMIENTO_DETECTADO",
-
-  COMPLETADO:
-    "COMPLETADO",
-
-  ERROR:
-    "ERROR",
-
-  TIMEOUT:
-    "TIMEOUT",
-
-  CANCELADO:
-    "CANCELADO",
+  PENDIENTE: "PENDIENTE",
+  MIDIENDO: "MIDIENDO",
+  ESTABILIZANDO: "ESTABILIZANDO",
+  MOVIMIENTO_DETECTADO: "MOVIMIENTO_DETECTADO",
+  ESPERANDO_RETIRO: "ESPERANDO_RETIRO",
+  COMPLETADO: "COMPLETADO",
+  ERROR: "ERROR",
+  TIMEOUT: "TIMEOUT",
+  CANCELADO: "CANCELADO",
 };
-
 
 const ESTADOS_ACTIVOS = [
   ESTADO.MIDIENDO,
   ESTADO.ESTABILIZANDO,
   ESTADO.MOVIMIENTO_DETECTADO,
+  ESTADO.ESPERANDO_RETIRO,
 ];
 
-
-// ======================================================
-// MENSAJES CONTROLADOS POR BACKEND
-// ======================================================
+// Los mensajes se controlan desde el backend.
+// No se confía en mensajes enviados por el ESP.
 
 const MENSAJES = {
-
-  MIDIENDO:
-    "Calculando peso...",
+  MIDIENDO: "Calculando peso...",
 
   ESTABILIZANDO:
     "Estabilizando contenedor...",
@@ -57,229 +35,144 @@ const MENSAJES = {
   MOVIMIENTO_DETECTADO:
     "Movimiento detectado. Mantenga el contenedor completamente quieto.",
 
+  ESPERANDO_RETIRO:
+    "Medición finalizada. Retire el contenedor completo para registrar el peso.",
+
   ERROR:
     "Ocurrió un error durante la medición.",
 };
-
 
 // ======================================================
 // ERROR CONTROLADO
 // ======================================================
 
 class ModuloPesoError extends Error {
-
-  constructor(
-    statusCode,
-    message,
-    codigo
-  ) {
-
+  constructor(statusCode, message, codigo) {
     super(message);
 
-    this.statusCode =
-      statusCode;
-
-    this.codigo =
-      codigo;
+    this.statusCode = statusCode;
+    this.codigo = codigo;
   }
 }
-
 
 // ======================================================
 // HELPERS
 // ======================================================
 
 function toInt(value) {
+  const numero = Number.parseInt(
+    String(value),
+    10
+  );
 
-  const numero =
-    Number.parseInt(
-      String(value),
-      10
-    );
-
-
-  return Number.isFinite(
-    numero
-  )
+  return Number.isFinite(numero)
     ? numero
     : null;
 }
-
 
 function toNumber(value) {
+  const numero = Number(value);
 
-  const numero =
-    Number(value);
-
-
-  return Number.isFinite(
-    numero
-  )
+  return Number.isFinite(numero)
     ? numero
     : null;
 }
 
-
 // ======================================================
-// OBTENER Y TOMAR SOLICITUD PENDIENTE
-// ======================================================
-//
-// El ESP8266 consulta periódicamente.
-//
-// Esta operación:
-// - busca una solicitud PENDIENTE
-// - verifica proceso EN_PROCESO
-// - la asigna al módulo
-// - la cambia a MIDIENDO
-//
-// FOR UPDATE SKIP LOCKED evita que dos módulos
-// tomen la misma solicitud.
+// OBTENER SOLICITUD PENDIENTE
 // ======================================================
 
 async function obtenerSolicitudPendiente({
   moduloCodigo,
 }) {
-
-  const client =
-    await pool.connect();
-
+  const client = await pool.connect();
 
   try {
+    await client.query("BEGIN");
 
-    await client.query(
-      "BEGIN"
+    const { rows } = await client.query(
+      `
+        WITH pendiente AS (
+          SELECT s.id
+          FROM solicitudes_medicion_peso s
+
+          JOIN historial_calculo_costos h
+            ON h.id = s.proceso_id
+
+          WHERE s.modulo_codigo = $1
+            AND s.estado = $2
+            AND h.estado_proceso = $3
+
+          ORDER BY s.id ASC
+
+          FOR UPDATE OF s SKIP LOCKED
+
+          LIMIT 1
+        )
+
+        UPDATE solicitudes_medicion_peso s
+
+        SET
+          estado = $4,
+          mensaje = $5,
+          actualizado_en = NOW()
+
+        FROM pendiente p
+
+        WHERE s.id = p.id
+
+        RETURNING
+          s.id,
+          s.proceso_id,
+          s.contenedor_id,
+          s.modulo_codigo,
+          s.estado,
+          s.mensaje,
+          s.creado_en,
+          s.actualizado_en
+      `,
+      [
+        moduloCodigo,
+        ESTADO.PENDIENTE,
+        "EN_PROCESO",
+        ESTADO.MIDIENDO,
+        MENSAJES.MIDIENDO,
+      ]
     );
 
+    await client.query("COMMIT");
 
-    const { rows } =
-      await client.query(
-        `
-          WITH pendiente AS
-          (
-            SELECT
-              s.id
-
-            FROM solicitudes_medicion_peso s
-
-            JOIN historial_calculo_costos h
-              ON h.id =
-                 s.proceso_id
-
-            WHERE s.modulo_codigo = $1
-              AND s.estado = $2
-              AND h.estado_proceso = $3
-
-            ORDER BY
-              s.id ASC
-
-            FOR UPDATE
-              OF s
-              SKIP LOCKED
-
-            LIMIT 1
-          )
-
-          UPDATE solicitudes_medicion_peso s
-
-          SET
-            estado = $4,
-            mensaje = $5,
-            actualizado_en = NOW()
-
-          FROM pendiente p
-
-          WHERE s.id = p.id
-
-          RETURNING
-            s.id,
-            s.proceso_id,
-            s.contenedor_id,
-            s.modulo_codigo,
-            s.estado,
-            s.mensaje,
-            s.creado_en,
-            s.actualizado_en
-        `,
-        [
-          moduloCodigo,
-
-          ESTADO
-            .PENDIENTE,
-
-          "EN_PROCESO",
-
-          ESTADO
-            .MIDIENDO,
-
-          MENSAJES
-            .MIDIENDO,
-        ]
-      );
-
-
-    await client.query(
-      "COMMIT"
-    );
-
-
-    if (
-      rows.length === 0
-    ) {
-
+    if (rows.length === 0) {
       return {
-        disponible:
-          false,
-
-        solicitud:
-          null,
+        disponible: false,
+        solicitud: null,
       };
     }
 
-
     return {
-
-      disponible:
-        true,
+      disponible: true,
 
       solicitud: {
-
-        id:
-          Number(
-            rows[0].id
-          ),
-
-        estado:
-          rows[0].estado,
-
-        mensaje:
-          rows[0].mensaje,
+        id: Number(rows[0].id),
+        estado: rows[0].estado,
+        mensaje: rows[0].mensaje,
       },
     };
 
-
   } catch (error) {
-
     try {
-
-      await client.query(
-        "ROLLBACK"
-      );
-
+      await client.query("ROLLBACK");
     } catch (_) {}
-
 
     throw error;
 
-
   } finally {
-
     client.release();
   }
 }
 
-
 // ======================================================
-// REPORTAR ESTADO
+// ACTUALIZAR ESTADO DE MEDICIÓN
 // ======================================================
 
 async function actualizarEstado({
@@ -287,15 +180,9 @@ async function actualizarEstado({
   solicitudId,
   estado,
 }) {
-
-  const id =
-    toInt(
-      solicitudId
-    );
-
+  const id = toInt(solicitudId);
 
   if (!id) {
-
     throw new ModuloPesoError(
       400,
       "Solicitud no válida.",
@@ -303,33 +190,19 @@ async function actualizarEstado({
     );
   }
 
-
-  const estadoNuevo =
-    String(
-      estado || ""
-    )
-      .trim()
-      .toUpperCase();
-
+  const estadoNuevo = String(estado || "")
+    .trim()
+    .toUpperCase();
 
   const permitidos = [
-
     ESTADO.MIDIENDO,
-
     ESTADO.ESTABILIZANDO,
-
     ESTADO.MOVIMIENTO_DETECTADO,
-
+    ESTADO.ESPERANDO_RETIRO,
     ESTADO.ERROR,
   ];
 
-
-  if (
-    !permitidos.includes(
-      estadoNuevo
-    )
-  ) {
-
+  if (!permitidos.includes(estadoNuevo)) {
     throw new ModuloPesoError(
       400,
       "Estado de medición no válido.",
@@ -337,50 +210,37 @@ async function actualizarEstado({
     );
   }
 
+  const mensaje = MENSAJES[estadoNuevo];
 
-  const mensaje =
-    MENSAJES[
-      estadoNuevo
-    ];
+  const { rows } = await pool.query(
+    `
+      UPDATE solicitudes_medicion_peso
 
+      SET
+        estado = $1,
+        mensaje = $2,
+        actualizado_en = NOW()
 
-  const { rows } =
-    await pool.query(
-      `
-        UPDATE solicitudes_medicion_peso
+      WHERE id = $3
+        AND modulo_codigo = $4
+        AND estado = ANY($5::varchar[])
 
-        SET
-          estado = $1,
-          mensaje = $2,
-          actualizado_en = NOW()
-
-        WHERE id = $3
-          AND modulo_codigo = $4
-          AND estado = ANY($5::varchar[])
-
-        RETURNING
-          id,
-          estado,
-          mensaje,
-          actualizado_en
-      `,
-      [
-        estadoNuevo,
-        mensaje,
-
+      RETURNING
         id,
+        estado,
+        mensaje,
+        actualizado_en
+    `,
+    [
+      estadoNuevo,
+      mensaje,
+      id,
+      moduloCodigo,
+      ESTADOS_ACTIVOS,
+    ]
+  );
 
-        moduloCodigo,
-
-        ESTADOS_ACTIVOS,
-      ]
-    );
-
-
-  if (
-    rows.length === 0
-  ) {
-
+  if (rows.length === 0) {
     throw new ModuloPesoError(
       409,
       "La solicitud no está disponible para actualizar.",
@@ -388,38 +248,26 @@ async function actualizarEstado({
     );
   }
 
-
   return {
-
-    solicitud_id:
-      Number(
-        rows[0].id
-      ),
-
-    estado:
-      rows[0].estado,
-
-    mensaje:
-      rows[0].mensaje,
+    solicitud_id: Number(rows[0].id),
+    estado: rows[0].estado,
+    mensaje: rows[0].mensaje,
   };
 }
 
-
 // ======================================================
-// COMPLETAR MEDICION
+// COMPLETAR MEDICIÓN
 // ======================================================
 //
-// El ESP manda únicamente:
+// El ESP8285 únicamente envía peso_lb.
 //
-// peso_lb
-//
-// NO manda:
-// - contenedor_id
-// - proceso_id
-// - tipo_residuo
+// El backend determina:
+// - proceso
+// - contenedor
+// - tipo de lectura
+// - unidad de medida
 // - lectura_id
 //
-// Todo eso ya lo conoce el backend.
 // ======================================================
 
 async function completarMedicion({
@@ -427,21 +275,10 @@ async function completarMedicion({
   solicitudId,
   pesoLb,
 }) {
-
-  const id =
-    toInt(
-      solicitudId
-    );
-
-
-  const peso =
-    toNumber(
-      pesoLb
-    );
-
+  const id = toInt(solicitudId);
+  const peso = toNumber(pesoLb);
 
   if (!id) {
-
     throw new ModuloPesoError(
       400,
       "Solicitud no válida.",
@@ -449,12 +286,7 @@ async function completarMedicion({
     );
   }
 
-
-  if (
-    peso === null ||
-    peso < 0
-  ) {
-
+  if (peso === null || peso < 0) {
     throw new ModuloPesoError(
       400,
       "Peso no válido.",
@@ -462,26 +294,16 @@ async function completarMedicion({
     );
   }
 
-
-  const client =
-    await pool.connect();
-
+  const client = await pool.connect();
 
   try {
-
-    await client.query(
-      "BEGIN"
-    );
-
+    await client.query("BEGIN");
 
     // ==================================================
     // 1. BLOQUEAR SOLICITUD
     // ==================================================
 
-    const {
-      rows:
-        solicitudes,
-    } =
+    const { rows: solicitudes } =
       await client.query(
         `
           SELECT
@@ -490,14 +312,12 @@ async function completarMedicion({
             s.contenedor_id,
             s.modulo_codigo,
             s.estado,
-
             h.estado_proceso
 
           FROM solicitudes_medicion_peso s
 
           JOIN historial_calculo_costos h
-            ON h.id =
-               s.proceso_id
+            ON h.id = s.proceso_id
 
           WHERE s.id = $1
             AND s.modulo_codigo = $2
@@ -512,11 +332,7 @@ async function completarMedicion({
         ]
       );
 
-
-    if (
-      solicitudes.length === 0
-    ) {
-
+    if (solicitudes.length === 0) {
       throw new ModuloPesoError(
         404,
         "Solicitud no encontrada.",
@@ -524,21 +340,16 @@ async function completarMedicion({
       );
     }
 
-
-    const solicitud =
-      solicitudes[0];
-
+    const solicitud = solicitudes[0];
 
     // ==================================================
-    // 2. PROCESO TODAVIA ACTIVO
+    // 2. VALIDAR PROCESO ACTIVO
     // ==================================================
 
     if (
-      solicitud
-        .estado_proceso !==
+      solicitud.estado_proceso !==
       "EN_PROCESO"
     ) {
-
       await client.query(
         `
           UPDATE solicitudes_medicion_peso
@@ -552,13 +363,10 @@ async function completarMedicion({
         `,
         [
           ESTADO.CANCELADO,
-
           "El proceso ya no se encuentra activo.",
-
           id,
         ]
       );
-
 
       throw new ModuloPesoError(
         409,
@@ -567,16 +375,14 @@ async function completarMedicion({
       );
     }
 
-
     // ==================================================
-    // 3. IDEMPOTENCIA
+    // 3. EVITAR DUPLICAR UNA MEDICIÓN
     // ==================================================
 
     if (
       solicitud.estado ===
       ESTADO.COMPLETADO
     ) {
-
       throw new ModuloPesoError(
         409,
         "La medición ya fue completada.",
@@ -584,13 +390,11 @@ async function completarMedicion({
       );
     }
 
-
     if (
       !ESTADOS_ACTIVOS.includes(
         solicitud.estado
       )
     ) {
-
       throw new ModuloPesoError(
         409,
         "La solicitud no está activa.",
@@ -598,42 +402,18 @@ async function completarMedicion({
       );
     }
 
-
-    const contenedorId =
-      Number(
-        solicitud
-          .contenedor_id
-      );
-
+    const contenedorId = Number(
+      solicitud.contenedor_id
+    );
 
     // ==================================================
-    // 4. CREAR LECTURA REAL
-    // ==================================================
-    //
-    // tipos_lectura:
-    // peso_lb
-    //
-    // unidad_medida:
-    // lb
-    //
-    // fuente_lectura:
-    // sensor
-    //
-    // El código específico del módulo queda registrado
-    // en solicitudes_medicion_peso.modulo_codigo.
-    //
-    // Se buscan tipo y unidad por nombre para no depender
-    // directamente de IDs fijos.
+    // 4. REGISTRAR LECTURA REAL
     // ==================================================
 
-    const {
-      rows:
-        lecturas,
-    } =
+    const { rows: lecturas } =
       await client.query(
         `
-          INSERT INTO lecturas
-          (
+          INSERT INTO lecturas (
             contenedor_id,
             tipo_lectura_id,
             unidad_id,
@@ -669,26 +449,15 @@ async function completarMedicion({
         `,
         [
           contenedorId,
-
-          Number(
-            peso.toFixed(2)
-          ),
-
+          Number(peso.toFixed(2)),
           "sensor",
-
           "normal",
-
           "peso_lb",
-
           "lb",
         ]
       );
 
-
-    if (
-      lecturas.length === 0
-    ) {
-
+    if (lecturas.length === 0) {
       throw new ModuloPesoError(
         500,
         "No fue posible registrar la lectura de peso.",
@@ -696,19 +465,13 @@ async function completarMedicion({
       );
     }
 
-
-    const lectura =
-      lecturas[0];
-
+    const lectura = lecturas[0];
 
     // ==================================================
     // 5. COMPLETAR SOLICITUD
     // ==================================================
 
-    const {
-      rows:
-        completadas,
-    } =
+    const { rows: completadas } =
       await client.query(
         `
           UPDATE solicitudes_medicion_peso
@@ -734,26 +497,15 @@ async function completarMedicion({
         `,
         [
           ESTADO.COMPLETADO,
-
           "Peso obtenido correctamente.",
-
-          Number(
-            peso.toFixed(2)
-          ),
-
+          Number(peso.toFixed(2)),
           lectura.id,
-
           id,
-
           moduloCodigo,
         ]
       );
 
-
-    if (
-      completadas.length === 0
-    ) {
-
+    if (completadas.length === 0) {
       throw new ModuloPesoError(
         500,
         "No fue posible completar la solicitud.",
@@ -761,65 +513,38 @@ async function completarMedicion({
       );
     }
 
-
-    await client.query(
-      "COMMIT"
-    );
-
+    await client.query("COMMIT");
 
     return {
-
-      message:
-        "Peso registrado correctamente.",
-
-      solicitud_id:
-        Number(
-          completadas[0].id
-        ),
-
-      estado:
-        ESTADO.COMPLETADO,
-
-      peso_lb:
-        Number(
-          completadas[0]
-            .peso_lb
-        ),
+      message: "Peso registrado correctamente.",
+      solicitud_id: Number(
+        completadas[0].id
+      ),
+      estado: ESTADO.COMPLETADO,
+      peso_lb: Number(
+        completadas[0].peso_lb
+      ),
     };
 
-
   } catch (error) {
-
     try {
-
-      await client.query(
-        "ROLLBACK"
-      );
-
+      await client.query("ROLLBACK");
     } catch (_) {}
-
 
     throw error;
 
-
   } finally {
-
     client.release();
   }
 }
-
 
 // ======================================================
 // EXPORTACIONES
 // ======================================================
 
 module.exports = {
-
   obtenerSolicitudPendiente,
-
   actualizarEstado,
-
   completarMedicion,
-
   ModuloPesoError,
 };

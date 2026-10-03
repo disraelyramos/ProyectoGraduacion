@@ -20,21 +20,14 @@ const sesionesLimpieza = require(
   "./src/services/Auth/SesionesLimpieza.service"
 );
 
+const resumenRecoleccionRoutes = require(
+  "./src/routes/dashboard/ResumenRecoleccion.routes"
+);
 
-// ======================================================
-// CONFIGURACIÓN CORS
-// ======================================================
-//
-// CORS_ALLOWED_ORIGINS se configura en el .env.
-//
-// Desarrollo:
-// http://localhost:5173
-//
-// Producción:
-// URL real de Netlify.
-//
-// Si existen varios orígenes, separarlos por coma.
-// ======================================================
+
+
+
+
 
 const origenesPermitidos = String(
   process.env.CORS_ALLOWED_ORIGINS || ""
@@ -198,6 +191,11 @@ app.use(
 app.use(
   "/api/recuperacion",
   recuperacionRoutes
+);
+
+app.use(
+  "/api/dashboard/resumen-recoleccion",
+  resumenRecoleccionRoutes
 );
 
 
@@ -376,23 +374,6 @@ app.listen(
     }
 
 
-    // ==================================================
-    // 3. LIMPIEZA AUTOMÁTICA DE SESIONES
-    // ==================================================
-    //
-    // Las variables del .env controlan:
-    //
-    // SESIONES_LIMPIEZA_CADA_DIAS
-    // SESIONES_RETENCION_DIAS
-    //
-    // El servicio:
-    //
-    // - Desactiva sesiones vencidas.
-    // - Elimina sesiones antiguas e inactivas.
-    // - Conserva las sesiones activas vigentes.
-    //
-    // No elimina usuarios ni otras tablas.
-    // ==================================================
 
     try {
 

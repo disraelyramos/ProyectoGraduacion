@@ -7,6 +7,20 @@ const ContainerStatusItem = ({
   icon,
   color = "green",
 }) => {
+  const disponible =
+    typeof percentage === "number" &&
+    Number.isFinite(percentage) &&
+    percentage >= 0 &&
+    percentage <= 100;
+
+  const porcentajeVisible = disponible
+    ? `${percentage} %`
+    : "-- %";
+
+  const anchoBarra = disponible
+    ? percentage
+    : 0;
+
   return (
     <div className="container-status-item">
 
@@ -25,14 +39,16 @@ const ContainerStatusItem = ({
           </span>
 
           <span className="container-status-percentage">
-            {percentage} %
+            {porcentajeVisible}
           </span>
         </div>
 
         <div className="dashboard-progress">
           <span
             className={`dashboard-progress-bar dashboard-progress-bar--${color}`}
-            style={{ width: `${percentage}%` }}
+            style={{
+              width: `${anchoBarra}%`,
+            }}
           />
         </div>
 

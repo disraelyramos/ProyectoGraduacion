@@ -1,3 +1,4 @@
+
 import React, { useMemo } from "react";
 import { Doughnut } from "react-chartjs-2";
 
@@ -5,56 +6,191 @@ import "../charts/ChartSetup";
 import { getCssVariable } from "../../utils/getCssVariable";
 
 const chartColors = {
-  red: {
+  bioinfeccioso: {
     variable: "--color-red",
     fallback: "#ff2d35",
+    className: "red",
   },
-  blue: {
+
+  punzocortante: {
     variable: "--color-blue",
     fallback: "#2563eb",
+    className: "blue",
   },
 };
 
-const WasteDistributionCard = ({ distribution }) => {
+// ======================================================
+// FORMATO DE DATOS RECIBIDOS DEL BACKEND
+// ======================================================
+
+const formatoLibras = (valor) =>
+  `${Number(valor).toLocaleString("es-GT", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })} lb`;
+
+const formatoPorcentaje = (valor) =>
+  `${Number(valor).toLocaleString("es-GT", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })} %`;
+
+// ======================================================
+// COMPARACIÓN MENSUAL
+// ======================================================
+
+const ComparacionMensual = ({
+  comparison,
+  currentCollected,
+  previousPeriod,
+  currentPeriod,
+  general = false,
+}) => {
+  if (!comparison) {
+    return null;
+  }
+
+  const {
+    previousCollected,
+    difference,
+    changePercentage,
+    trend,
+  } = comparison;
+
+  const estados = {
+    increase: {
+      icon: "↑",
+      text: `${formatoPorcentaje(
+        Math.abs(changePercentage)
+      )} más que ${previousPeriod}`,
+      className: "increase",
+    },
+
+    decrease: {
+      icon: "↓",
+      text: `${formatoPorcentaje(
+        Math.abs(changePercentage)
+      )} menos que ${previousPeriod}`,
+      className: "decrease",
+    },
+
+    unchanged: {
+      icon: "→",
+      text: `Sin variación respecto a ${previousPeriod}`,
+      className: "unchanged",
+    },
+
+    "no-base": {
+      icon: "—",
+      text: `Sin base porcentual de comparación con ${previousPeriod}`,
+      className: "no-base",
+    },
+  };
+
+  const estado = estados[trend];
+
+  if (!estado) {
+    return null;
+  }
+
+  return (
+    <div
+      className={[
+        "waste-comparison",
+        `waste-comparison--${estado.className}`,
+        general ? "waste-comparison--general" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      {general && (
+        <strong className="waste-comparison-title">
+          Comparación general
+        </strong>
+      )}
+
+      <strong className="waste-comparison-result">
+        <span aria-hidden="true">
+          {estado.icon}
+        </span>
+
+        {estado.text}
+      </strong>
+
+      <span className="waste-comparison-detail">
+        {previousPeriod}:{" "}
+        {formatoLibras(previousCollected)}
+        {" → "}
+        {currentPeriod}:{" "}
+        {formatoLibras(currentCollected)}
+      </span>
+
+      {trend !== "unchanged" && (
+        <span className="waste-comparison-difference">
+          Diferencia:{" "}
+          {difference > 0 ? "+" : ""}
+          {formatoLibras(difference)}
+        </span>
+      )}
+    </div>
+  );
+};
+
+// ======================================================
+// TARJETA DE DISTRIBUCIÓN
+// ======================================================
+
+const WasteDistributionCard = ({
+  distribution,
+  loading = false,
+  error = false,
+}) => {
   const {
     period = "",
     total = 0,
-    items = [],
-    insight = "",
+    containers = [],
+    previousMonth = null,
+    comparison = null,
   } = distribution ?? {};
 
   const chartData = useMemo(
     () => ({
-      labels: items.map((item) => item.name),
+      labels: containers.map(
+        (item) => item.name
+      ),
 
       datasets: [
         {
-          data: items.map((item) => item.value),
+          data: containers.map(
+            (item) => item.collected
+          ),
 
-          backgroundColor: items.map((item) => {
-            const color = chartColors[item.color];
+          backgroundColor: containers.map(
+            (item) => {
+              const color =
+                chartColors[item.id];
 
-            if (!color) {
-              return "#94a3b8";
+              return color
+                ? getCssVariable(
+                    color.variable,
+                    color.fallback
+                  )
+                : "#94a3b8";
             }
-
-            return getCssVariable(
-              color.variable,
-              color.fallback
-            );
-          }),
+          ),
 
           borderWidth: 0,
           hoverOffset: 4,
         },
       ],
     }),
-    [items]
+    [containers]
   );
 
   const chartOptions = useMemo(
     () => ({
       responsive: true,
+
       maintainAspectRatio: false,
 
       cutout: "68%",
@@ -67,30 +203,83 @@ const WasteDistributionCard = ({ distribution }) => {
         tooltip: {
           callbacks: {
             label: (context) => {
-              const item = items[context.dataIndex];
+              const item =
+                containers[
+                  context.dataIndex
+                ];
 
               if (!item) {
                 return "";
               }
 
-              return `${item.name}: ${item.value.toLocaleString()} lb`;
+              return (
+                `${item.name}: ` +
+                formatoLibras(
+                  item.collected
+                ) +
+                ` · ${formatoPorcentaje(
+                  item.percentage
+                )}`
+              );
             },
           },
         },
       },
     }),
-    [items]
+    [containers]
   );
 
-  if (!distribution) {
-    return null;
+  // ====================================================
+  // ESTADOS DE CONSULTA
+  // ====================================================
+
+  if (loading) {
+    return (
+      <article className="dash-card dashboard-analysis-card">
+        <header className="dashboard-card-header">
+          <h3 className="dashboard-card-title">
+            Distribución del residuo
+          </h3>
+        </header>
+
+        <p className="dashboard-insight">
+          Cargando distribución de residuos...
+        </p>
+      </article>
+    );
   }
+
+  if (error || !distribution) {
+    return (
+      <article className="dash-card dashboard-analysis-card">
+        <header className="dashboard-card-header">
+          <h3 className="dashboard-card-title">
+            Distribución del residuo
+          </h3>
+        </header>
+
+        <p className="dashboard-insight">
+          No fue posible consultar la distribución
+          de residuos. Intente nuevamente.
+        </p>
+      </article>
+    );
+  }
+
+  const hayPesos = total > 0;
+
+  const periodoAnterior =
+    previousMonth?.period || "";
+
+  // ====================================================
+  // PRESENTACIÓN
+  // ====================================================
 
   return (
     <article className="dash-card dashboard-analysis-card">
       <header className="dashboard-card-header">
         <h3 className="dashboard-card-title">
-          Distribución del residuo — este mes
+          Distribución del residuo
         </h3>
 
         <span className="dashboard-period">
@@ -100,49 +289,102 @@ const WasteDistributionCard = ({ distribution }) => {
 
       <div className="waste-distribution-content">
         <div className="waste-chart-wrapper">
-          <Doughnut
-            data={chartData}
-            options={chartOptions}
-          />
+          {hayPesos ? (
+            <Doughnut
+              data={chartData}
+              options={chartOptions}
+            />
+          ) : (
+            <div className="waste-chart-empty">
+              Sin pesos registrados
+            </div>
+          )}
 
           <div className="waste-chart-center">
             <strong>
-              {total.toLocaleString()} lb
+              {formatoLibras(total)}
             </strong>
 
-            <span>Total</span>
+            <span>Total del mes</span>
           </div>
         </div>
 
         <div className="waste-distribution-legend">
-          {items.map((item) => (
-            <div
-              className="waste-legend-item"
-              key={item.id}
-            >
-              <div className="waste-legend-name">
-                <span
-                  className={`waste-legend-dot waste-legend-dot--${item.color}`}
-                />
+          {containers.map((item) => {
+            const color =
+              chartColors[item.id];
 
-                <span>{item.name}</span>
-              </div>
+            const colorClass =
+              color?.className || "";
 
-              <strong
-                className={`waste-legend-value waste-legend-value--${item.color}`}
+            return (
+              <div
+                className="waste-residue-block"
+                key={item.id}
               >
-                {item.value.toLocaleString()} lb · {item.percentage} %
-              </strong>
-            </div>
-          ))}
+                <div className="waste-legend-item">
+                  <div className="waste-legend-name">
+                    <span
+                      className={
+                        `waste-legend-dot ` +
+                        `waste-legend-dot--${colorClass}`
+                      }
+                    />
+
+                    <span>
+                      {item.name}
+                    </span>
+                  </div>
+
+                  <strong
+                    className={
+                      `waste-legend-value ` +
+                      `waste-legend-value--${colorClass}`
+                    }
+                  >
+                    {formatoLibras(
+                      item.collected
+                    )}
+                    {" · "}
+                    {formatoPorcentaje(
+                      item.percentage
+                    )}
+                  </strong>
+                </div>
+
+                <ComparacionMensual
+                  comparison={item}
+                  currentCollected={
+                    item.collected
+                  }
+                  previousPeriod={
+                    periodoAnterior
+                  }
+                  currentPeriod={period}
+                />
+              </div>
+            );
+          })}
         </div>
       </div>
 
-      {insight && (
-        <div className="dashboard-insight">
-          {insight}
-        </div>
+      {comparison && (
+        <ComparacionMensual
+          comparison={comparison}
+          currentCollected={total}
+          previousPeriod={
+            periodoAnterior
+          }
+          currentPeriod={period}
+          general
+        />
       )}
+
+      <p className="waste-comparison-note">
+        Comparación del acumulado del mes
+        actual hasta la fecha frente al
+        total del mes anterior.
+      </p>
     </article>
   );
 };

@@ -1,31 +1,9 @@
-export const dashboardMockData = {
-  containers: {
-    monitored: 2,
-    normal: 1,
-    attention: 0,
-    critical: 1,
 
-    items: [
-      {
-        id: 1,
-        type: "bioinfeccioso",
-        name: "Bioinfeccioso",
-        percentage: 82,
-        status: "Requiere recolección",
-        statusType: "critical",
-        color: "red",
-      },
-      {
-        id: 2,
-        type: "punzocortante",
-        name: "Punzocortante",
-        percentage: 40,
-        status: "Nivel normal",
-        statusType: "normal",
-        color: "green",
-      },
-    ],
-  },
+export const dashboardMockData = {
+  // ======================================================
+  // PREDICCIÓN DE LLENADO
+  // Pendiente de integrar Machine Learning.
+  // ======================================================
 
   metrics: [
     {
@@ -33,54 +11,63 @@ export const dashboardMockData = {
       title: "Predicción de llenado",
       icon: "prediction",
       iconColor: "purple",
-      value: "2 días",
+      value: "No disponible",
       valueColor: "purple",
-      subtitle: "Para alcanzar nivel crítico",
+      subtitle: "Pendiente de predicción",
     },
+
     {
       id: "month",
       title: "Resumen recolección",
       icon: "weight",
       iconColor: "green",
-      value: "3,518 lb",
+      value: "Cargando...",
       valueColor: "green",
-      subtitle: "8 recolecciones",
+      subtitle: "Consultando recolecciones",
     },
-  
+
     {
       id: "year",
       title: "Recolectado este año",
       icon: "calendar",
       iconColor: "orange",
-      value: "3,842 lb",
+      value: "Cargando...",
       valueColor: "orange",
-      subtitle: "Total acumulado",
+      subtitle: "Consultando recolecciones",
     },
   ],
 
-  distribution: {
-    period: "Marzo 2026",
-    total: 3518,
+  // ======================================================
+  // DISTRIBUCIÓN DEL RESIDUO
+  // Pendiente de conexión al backend.
+  // ======================================================
 
+  distribution: {
+    period: "Este mes",
+    total: 0,
     items: [
       {
         id: "bioinfeccioso",
         name: "Bioinfeccioso",
-        value: 2750,
-        percentage: 78,
+        value: 0,
+        percentage: 0,
         color: "red",
       },
       {
         id: "punzocortante",
         name: "Punzocortante",
-        value: 768,
-        percentage: 22,
+        value: 0,
+        percentage: 0,
         color: "blue",
       },
     ],
-
-    insight: "La mayor generación este mes proviene del bioinfeccioso.",
+    insight: "Datos pendientes de consulta.",
   },
+
+  // ======================================================
+  // TENDENCIA MENSUAL
+  // Pendiente de conexión al backend.
+  // ======================================================
 
   monthlyTrend: {
     period: "Este año",
@@ -104,41 +91,15 @@ export const dashboardMockData = {
       {
         id: "bioinfeccioso",
         name: "Bioinfeccioso",
-        data: [
-          2300,
-          2450,
-          2980,
-          2750,
-          2900,
-          3100,
-          3250,
-          3400,
-          3200,
-          3600,
-          3900,
-          4200,
-        ],
+        data: Array(12).fill(0),
       },
       {
         id: "punzocortante",
         name: "Punzocortante",
-        data: [
-          600,
-          650,
-          700,
-          620,
-          680,
-          720,
-          750,
-          770,
-          730,
-          780,
-          850,
-          900,
-        ],
+        data: Array(12).fill(0),
       },
     ],
 
-    insight: "Bioinfeccioso aumentó 18 % respecto al mes anterior.",
+    insight: "Datos pendientes de consulta.",
   },
 };

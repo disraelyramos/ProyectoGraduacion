@@ -64,6 +64,7 @@ router.post(
 );
 
 
+
 // ======================================================
 // FOTO 4
 // ======================================================
@@ -100,6 +101,11 @@ router.post(
   "/cancelar",
   authMiddleware,
   controller.cancelarProceso
+);
+router.get(
+  "/calculo/estado",
+  authMiddleware,
+  controller.consultarEstadoCalculo
 );
 
 
