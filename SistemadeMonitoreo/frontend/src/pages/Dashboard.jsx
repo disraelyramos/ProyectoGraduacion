@@ -56,6 +56,8 @@ import {
 
 } from "../utils/alerts";
 
+
+
 // =========================================================
 
 // VISTAS
@@ -97,6 +99,8 @@ import HistorialCosto
 import HistorialGrafica
 
   from "./controlDSH/HistorialGrafica";
+
+  import CrearNuevoUsuario from "./administracion/CrearNuevoUsuario";
 
 /* =========================================================
 
@@ -283,6 +287,8 @@ const submoduloComponents = {
   "/control-dsh/historial-graficas":
 
     HistorialGrafica,
+
+    "/administracion/nuevo-usuario": CrearNuevoUsuario,
 
 };
 

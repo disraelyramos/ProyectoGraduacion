@@ -1,0 +1,259 @@
+/* =========================================================
+   ADMINISTRACIÓN
+   Diseño específico de la pantalla
+   ========================================================= */
+
+.administracion-header {
+  margin-bottom: 28px;
+}
+
+
+/* =========================================================
+   DISTRIBUCIÓN
+   ========================================================= */
+
+.administracion-grid {
+  display: grid;
+
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+
+  gap: 22px;
+}
+
+
+/* =========================================================
+   TARJETAS
+   ========================================================= */
+
+.administracion-card {
+  position: relative;
+
+  min-height: 390px;
+
+  display: flex;
+  flex-direction: column;
+
+  overflow: hidden;
+}
+
+
+/* =========================================================
+   DECORACIÓN USUARIOS
+   ========================================================= */
+
+.administracion-card-users {
+  background:
+    radial-gradient(
+      circle at 94% 35%,
+      rgba(40, 120, 181, 0.08),
+      transparent 28%
+    ),
+    var(--color-superficie);
+}
+
+
+/* =========================================================
+   DECORACIÓN MÓDULOS
+   ========================================================= */
+
+.administracion-card-modules {
+  background:
+    radial-gradient(
+      circle at 94% 35%,
+      rgba(0, 127, 136, 0.08),
+      transparent 28%
+    ),
+    var(--color-superficie);
+}
+
+
+/* =========================================================
+   ICONOS
+   ========================================================= */
+
+.administracion-icon {
+  width: 86px;
+  height: 86px;
+
+  display: flex;
+
+  align-items: center;
+  justify-content: center;
+
+  flex-shrink: 0;
+
+  margin-bottom: 24px;
+
+  border-radius: 50%;
+
+  font-size: 2.1rem;
+}
+
+
+.administracion-icon-users {
+  color: var(--color-info);
+
+  background:
+    var(--color-info-suave);
+}
+
+
+.administracion-icon-modules {
+  color: var(--color-primario);
+
+  background:
+    var(--color-primario-suave);
+}
+
+
+/* =========================================================
+   CONTENIDO
+   ========================================================= */
+
+.administracion-card-body {
+  flex: 1;
+}
+
+
+.administracion-card-title {
+  margin:
+    0
+    0
+    8px;
+
+  color:
+    var(--color-texto);
+
+  font-size: 1.45rem;
+
+  font-weight: 700;
+}
+
+
+.administracion-card-description {
+  max-width: 420px;
+
+  margin: 0;
+
+  color:
+    var(--color-texto-secundario);
+
+  font-size: 0.95rem;
+
+  line-height: 1.55;
+}
+
+
+/* =========================================================
+   ACCIONES
+   ========================================================= */
+
+.administracion-actions {
+  display: grid;
+
+  gap: 10px;
+
+  margin-top: 26px;
+}
+
+
+/* USUARIO */
+
+.administracion-btn-users {
+  color:
+    var(--color-info);
+
+  border-color:
+    var(--color-info);
+}
+
+
+/* MÓDULOS */
+
+.administracion-btn-modules-primary {
+  background:
+    var(--color-primario);
+
+  border-color:
+    var(--color-primario);
+}
+
+
+.administracion-btn-modules-primary:hover:not(:disabled) {
+  background:
+    var(--color-primario-hover);
+
+  border-color:
+    var(--color-primario-hover);
+}
+
+
+.administracion-btn-modules {
+  color:
+    var(--color-primario);
+
+  border-color:
+    var(--color-primario);
+}
+
+
+/* =========================================================
+   TABLET
+   ========================================================= */
+
+@media (max-width: 900px) {
+
+  .administracion-grid {
+    grid-template-columns: 1fr;
+  }
+
+
+  .administracion-card {
+    min-height: 340px;
+  }
+
+}
+
+
+/* =========================================================
+   CELULARES
+   ========================================================= */
+
+@media (max-width: 600px) {
+
+  .administracion-header {
+    margin-bottom: 20px;
+  }
+
+
+  .administracion-grid {
+    gap: 14px;
+  }
+
+
+  .administracion-card {
+    min-height: auto;
+  }
+
+
+  .administracion-icon {
+    width: 68px;
+    height: 68px;
+
+    margin-bottom: 18px;
+
+    font-size: 1.7rem;
+  }
+
+
+  .administracion-card-title {
+    font-size: 1.25rem;
+  }
+
+
+  .administracion-actions {
+    margin-top: 22px;
+  }
+
+}
