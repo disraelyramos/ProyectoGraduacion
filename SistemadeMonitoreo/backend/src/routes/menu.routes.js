@@ -1,9 +1,25 @@
-const express = require('express');
-const router = express.Router();
-const menuController = require('../controllers/menu.controller');
-const authMiddleware = require('../middlewares/auth.middleware'); 
+const express = require("express");
 
-// GET /api/menu/:role_id (protegido con JWT)
-router.get('/:role_id', authMiddleware, menuController.getMenuByRole);
+const router = express.Router();
+
+const menuController = require(
+  "../controllers/Modulo/menu.controller"
+);
+
+const authMiddleware = require(
+  "../middlewares/auth.middleware"
+);
+
+
+// ======================================================
+// MENÚ DEL USUARIO AUTENTICADO
+// ======================================================
+
+router.get(
+  "/",
+  authMiddleware,
+  menuController.getMenu
+);
+
 
 module.exports = router;

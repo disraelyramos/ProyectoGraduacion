@@ -168,14 +168,67 @@ async function desactivarSesionesUsuario({
 
 
 /* =========================================================
-   CREAR SESIÓN
+   VERIFICAR SI EL USUARIO TIENE SESIÓN ACTIVA
 
-   Todas las formas de generar una sesión pasan por aquí:
+   No confía en información del frontend.
 
-   - login
-   - cambio obligatorio
-   - reconfirmación
+   Una sesión cuenta como activa únicamente si:
+   - pertenece al usuario;
+   - activo = TRUE;
+   - fecha_expiracion > NOW().
+
+   PostgreSQL es la fuente del tiempo.
    ========================================================= */
+
+async function tieneSesionActiva({
+  client = null,
+  usuarioId,
+}) {
+  const db =
+    obtenerDb(client);
+
+  const usuarioSeguro =
+    normalizarUsuarioId(
+      usuarioId
+    );
+
+
+  /*
+   * Primero corregimos sesiones vencidas
+   * que todavía aparezcan activas.
+   */
+
+  await limpiarSesionesExpiradas({
+    client,
+  });
+
+
+  const {
+    rows,
+  } = await db.query(
+    `
+      SELECT EXISTS (
+        SELECT 1
+
+        FROM sesiones
+
+        WHERE id_usuario = $1
+          AND activo = TRUE
+          AND fecha_expiracion > NOW()
+      ) AS tiene_sesion_activa
+    `,
+    [
+      usuarioSeguro,
+    ]
+  );
+
+
+  return (
+    rows[0]
+      ?.tiene_sesion_activa ===
+    true
+  );
+}
 
 async function crearSesion({
   client = null,
@@ -408,4 +461,6 @@ module.exports = {
 
   limpiarSesionesExpiradas,
   desactivarSesionesUsuario,
+
+  tieneSesionActiva,
 };

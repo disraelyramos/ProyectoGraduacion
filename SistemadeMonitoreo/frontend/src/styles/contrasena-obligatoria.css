@@ -1,0 +1,439 @@
+/* =========================================================
+   CAMBIO OBLIGATORIO DE CONTRASEÑA
+   ========================================================= */
+
+.password-required-page {
+  width: 100%;
+  min-height: 100dvh;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 24px;
+
+  background:
+    var(--color-fondo);
+}
+
+
+/* =========================================================
+   CARD
+   ========================================================= */
+
+.password-required-card {
+  width: min(560px, 100%);
+
+  padding: 28px;
+
+  background:
+    var(--color-superficie);
+
+  border:
+    1px solid
+    var(--color-borde);
+
+  border-radius:
+    var(--radio-card);
+
+  box-shadow:
+    var(--sombra-card);
+}
+
+
+/* =========================================================
+   CABECERA
+   ========================================================= */
+
+.password-header {
+  margin-bottom: 24px;
+}
+
+
+.password-header h1 {
+  margin:
+    0
+    0
+    8px;
+
+  color:
+    var(--color-texto);
+
+  font-size:
+    1.6rem;
+
+  font-weight: 700;
+
+  line-height: 1.25;
+}
+
+
+.password-header p {
+  margin: 0;
+
+  color:
+    var(--color-texto-secundario);
+
+  font-size:
+    0.92rem;
+
+  line-height: 1.5;
+}
+
+
+/* =========================================================
+   USUARIO
+   ========================================================= */
+
+.password-user-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 16px;
+
+  margin-bottom: 22px;
+
+  padding:
+    12px
+    14px;
+
+  background:
+    var(--color-superficie-secundaria);
+
+  border:
+    1px solid
+    var(--color-borde);
+
+  border-radius:
+    var(--radio-medio);
+}
+
+
+.password-user-info span {
+  color:
+    var(--color-texto-secundario);
+
+  font-size:
+    0.86rem;
+
+  font-weight: 600;
+}
+
+
+.password-user-info strong {
+  color:
+    var(--color-texto);
+
+  font-size:
+    0.92rem;
+
+  font-weight: 700;
+
+  overflow-wrap: anywhere;
+}
+
+
+/* =========================================================
+   FORMULARIO
+   ========================================================= */
+
+.password-form {
+  width: 100%;
+}
+
+
+/* =========================================================
+   INPUT CONTRASEÑA
+   ========================================================= */
+
+.password-input-group {
+  position: relative;
+
+  width: 100%;
+}
+
+
+.password-input {
+  padding-right: 48px;
+}
+
+
+.password-toggle-button {
+  position: absolute;
+
+  top: 50%;
+  right: 8px;
+
+  width: 34px;
+  height: 34px;
+
+  display: grid;
+  place-items: center;
+
+  padding: 0;
+
+  border: 0;
+  border-radius:
+    var(--radio-pequeno);
+
+  background: transparent;
+
+  color:
+    var(--color-texto-secundario);
+
+  font-size: 1rem;
+
+  cursor: pointer;
+
+  transform:
+    translateY(-50%);
+
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+
+.password-toggle-button:hover {
+  color:
+    var(--color-primario);
+
+  background:
+    var(--color-primario-suave);
+}
+
+
+/* =========================================================
+   ESTADOS DEL INPUT
+   ========================================================= */
+
+.password-input-group.is-valid
+.system-form-control {
+  border-color:
+    var(--color-exito);
+}
+
+
+.password-input-group.is-invalid
+.system-form-control {
+  border-color:
+    var(--color-peligro);
+}
+
+
+/* =========================================================
+   REQUISITOS
+   ========================================================= */
+
+.password-requirements {
+  margin:
+    2px
+    0
+    22px;
+
+  padding:
+    16px;
+
+  background:
+    var(--color-info-suave);
+
+  border:
+    1px solid
+    rgba(40, 120, 181, 0.22);
+
+  border-radius:
+    var(--radio-medio);
+}
+
+
+.password-requirements-title {
+  margin-bottom: 10px;
+
+  color:
+    var(--color-texto);
+
+  font-size:
+    0.9rem;
+
+  font-weight: 700;
+}
+
+
+.password-rules {
+  margin: 0;
+
+  padding: 0;
+
+  display: grid;
+
+  gap: 8px;
+
+  list-style: none;
+}
+
+
+.password-rule {
+  display: flex;
+  align-items: center;
+
+  gap: 8px;
+
+  color:
+    var(--color-texto-secundario);
+
+  font-size:
+    0.83rem;
+}
+
+
+.password-rule-icon {
+  display: inline-flex;
+
+  flex-shrink: 0;
+
+  color:
+    var(--color-texto-suave);
+}
+
+
+.password-rule-valid {
+  color:
+    var(--color-exito);
+}
+
+
+.password-rule-valid
+.password-rule-icon {
+  color:
+    var(--color-exito);
+}
+
+
+/* =========================================================
+   BOTÓN PRINCIPAL
+   ========================================================= */
+
+.password-submit-button {
+  width: 100%;
+
+  min-height:
+    var(--boton-altura);
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  padding:
+    0.6rem
+    1rem;
+
+  border:
+    1px solid
+    var(--color-primario);
+
+  border-radius:
+    var(--radio-medio);
+
+  background:
+    var(--color-primario);
+
+  color:
+    var(--color-texto-invertido);
+
+  font-family: inherit;
+
+  font-size:
+    0.9rem;
+
+  font-weight: 600;
+
+  cursor: pointer;
+
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+
+.password-submit-button:hover:not(:disabled) {
+  background:
+    var(--color-primario-hover);
+
+  border-color:
+    var(--color-primario-hover);
+}
+
+
+.password-submit-button:disabled {
+  color: #879199;
+
+  background: #dfe4e7;
+
+  border-color: #dfe4e7;
+
+  cursor: not-allowed;
+}
+
+
+/* =========================================================
+   RESPONSIVE
+   ========================================================= */
+
+@media (max-width: 600px) {
+
+  .password-required-page {
+    align-items: flex-start;
+
+    padding:
+      16px
+      10px;
+  }
+
+
+  .password-required-card {
+    padding:
+      22px
+      16px;
+  }
+
+
+  .password-header h1 {
+    font-size:
+      1.35rem;
+  }
+
+
+  .password-user-info {
+    align-items: flex-start;
+
+    flex-direction: column;
+
+    gap: 4px;
+  }
+
+}
+
+
+@media (max-width: 380px) {
+
+  .password-required-page {
+    padding:
+      12px
+      6px;
+  }
+
+
+  .password-required-card {
+    padding:
+      18px
+      12px;
+  }
+
+
+  .password-header h1 {
+    font-size:
+      1.22rem;
+  }
+
+}

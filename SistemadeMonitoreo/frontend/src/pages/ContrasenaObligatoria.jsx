@@ -15,7 +15,7 @@ import {
 } from "react-icons/fa";
 
 import "react-toastify/dist/ReactToastify.css";
-import "../styles/login.css";
+import "../styles/contrasena-obligatoria.css";
 import "../styles/system.css";
 
 /**

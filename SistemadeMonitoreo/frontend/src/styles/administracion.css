@@ -257,3 +257,141 @@
   }
 
 }
+
+/* =========================================================
+   GESTIONAR USUARIOS - ACCIONES
+   ========================================================= */
+
+.gestion-usuarios-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+
+  flex-wrap: wrap;
+
+  gap: 8px;
+}
+
+
+.gestion-usuarios-action-btn {
+  min-width: 150px;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  gap: 8px;
+}
+
+
+@media (max-width: 768px) {
+
+  .gestion-usuarios-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+
+  .gestion-usuarios-action-btn {
+    width: 100%;
+    min-width: 0;
+  }
+
+}
+
+/* =========================================================
+   GESTIONAR USUARIOS - BUSCADOR
+   ========================================================= */
+
+.gestion-usuarios-search-card {
+  margin-bottom: 18px;
+}
+
+
+.gestion-usuarios-search {
+  position: relative;
+
+  width: 100%;
+  max-width: 520px;
+}
+
+
+.gestion-usuarios-search-icon {
+  position: absolute;
+
+  top: 50%;
+  left: 14px;
+
+  transform: translateY(-50%);
+
+  pointer-events: none;
+
+  opacity: 0.6;
+}
+
+
+.gestion-usuarios-search-input {
+  width: 100%;
+
+  padding-left: 42px;
+}
+
+
+/* =========================================================
+   GESTIONAR USUARIOS - ACCIONES
+   ========================================================= */
+
+.gestion-usuarios-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+
+  flex-wrap: wrap;
+
+  gap: 8px;
+}
+
+
+.gestion-usuarios-action-btn {
+  min-width: 150px;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  gap: 8px;
+}
+
+
+@media (max-width: 768px) {
+
+  .gestion-usuarios-search {
+    max-width: 100%;
+  }
+
+
+  .gestion-usuarios-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+
+  .gestion-usuarios-action-btn {
+    width: 100%;
+    min-width: 0;
+  }
+
+}
+
+.administracion-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.administracion-card-body {
+  flex: 1;
+}
+
+.administracion-actions {
+  margin-top: auto;
+}

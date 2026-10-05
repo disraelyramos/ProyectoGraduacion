@@ -148,7 +148,13 @@ const graficasRecoleccionRoutes = require(
   "./src/routes/graficasderecoleccion/GraficasRecoleccion.routes"
 );
 
+const administracionRoutes = require(
+  "./src/routes/administracion.routes"
+);
 
+const permisosRoutes = require(
+  "./src/routes/permisos.routes"
+);
 // ======================================================
 // RUTAS GENERALES
 // ======================================================
@@ -273,6 +279,15 @@ app.use(
   graficasRecoleccionRoutes
 );
 
+app.use(
+  "/api/administracion",
+  administracionRoutes
+);
+
+app.use(
+  "/api/permisos",
+  permisosRoutes
+);
 
 // ======================================================
 // RUTA PROTEGIDA DE PRUEBA

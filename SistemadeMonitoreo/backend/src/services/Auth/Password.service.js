@@ -205,10 +205,39 @@ async function actualizarPassword({
 }
 
 
+/* =========================================================
+   GENERAR HASH DE CONTRASEÑA
+
+   Permite reutilizar la configuración actual de bcrypt
+   sin duplicar la lógica en otros servicios.
+   ========================================================= */
+
+async function generarPasswordHash(
+  password
+) {
+  if (
+    typeof password !== "string" ||
+    password.length === 0
+  ) {
+    throw new Error(
+      "La contraseña es requerida para generar el hash."
+    );
+  }
+
+
+  return bcrypt.hash(
+    password,
+    authConfig.bcryptRounds
+  );
+}
+
+
 module.exports = {
   passwordExpirada,
 
   validarPasswordNoRepetida,
 
   actualizarPassword,
+
+  generarPasswordHash,
 };
