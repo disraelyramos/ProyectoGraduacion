@@ -30,11 +30,26 @@ const {
 
 
 /* =========================================================
-   CONSTANTES
+   CONFIGURACIÓN
    ========================================================= */
 
 const RESET_TOKEN_MINUTES =
-  10;
+  Number(
+    process.env.RECUPERACION_TOKEN_MINUTES
+  );
+
+
+if (
+  !Number.isInteger(
+    RESET_TOKEN_MINUTES
+  ) ||
+  RESET_TOKEN_MINUTES <= 0
+) {
+
+  throw new Error(
+    "RECUPERACION_TOKEN_MINUTES no está configurado correctamente."
+  );
+}
 
 
 /* =========================================================
@@ -110,8 +125,12 @@ function escaparHtml(
 function generarToken() {
 
   return crypto
-    .randomBytes(32)
-    .toString("hex");
+    .randomBytes(
+      32
+    )
+    .toString(
+      "hex"
+    );
 }
 
 
@@ -184,8 +203,10 @@ function obtenerFrontendUrl() {
 
 
     if (
-      url.protocol !== "http:" &&
-      url.protocol !== "https:"
+      url.protocol !==
+        "http:" &&
+      url.protocol !==
+        "https:"
     ) {
 
       throw new Error(
