@@ -1,0 +1,12 @@
+[phases.setup]
+nixPkgs = ["nodejs_22", "python312", "python312Packages.pip"]
+
+[phases.install]
+cmds = [
+  "npm install",
+  "python3 -m pip install --upgrade pip",
+  "python3 -m pip install pandas scikit-learn psycopg2-binary python-dotenv"
+]
+
+[start]
+cmd = "npm start"
