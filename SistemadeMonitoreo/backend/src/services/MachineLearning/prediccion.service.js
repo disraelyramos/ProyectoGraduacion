@@ -7,7 +7,12 @@ const path = require("path");
 // ======================================================
 
 const PYTHON_BIN =
-  process.env.ML_PYTHON_BIN || "python";
+  process.env.ML_PYTHON_BIN ||
+  (
+    process.platform === "win32"
+      ? "python"
+      : "python3"
+  );
 
 const ML_TIMEOUT_MS = Number(
   process.env.ML_TIMEOUT_MS || 15000
@@ -36,10 +41,113 @@ const PREDICTOR_PATH = path.resolve(
 
 
 // ======================================================
+// FORMATEAR TIEMPO PARA EL USUARIO
+// ======================================================
+
+function formatearTiempoDias(dias) {
+
+  if (
+    dias === null ||
+    typeof dias !== "number" ||
+    !Number.isFinite(dias) ||
+    dias < 0
+  ) {
+    return null;
+  }
+
+
+  // ====================================================
+  // UMBRAL YA ALCANZADO
+  // ====================================================
+
+  if (dias === 0) {
+    return "Nivel alto alcanzado";
+  }
+
+
+  const minutosTotales =
+    Math.round(
+      dias * 24 * 60
+    );
+
+
+  // ====================================================
+  // MENOS DE UNA HORA
+  // ====================================================
+
+  if (minutosTotales < 60) {
+
+    return `${Math.max(
+      minutosTotales,
+      1
+    )} min`;
+  }
+
+
+  let horasTotales =
+    Math.round(
+      minutosTotales / 60
+    );
+
+
+  let diasEnteros =
+    Math.floor(
+      horasTotales / 24
+    );
+
+  let horasRestantes =
+    horasTotales % 24;
+
+
+  // ====================================================
+  // MENOS DE UN DÍA
+  // ====================================================
+
+  if (diasEnteros === 0) {
+
+    return horasRestantes === 1
+      ? "1 hora"
+      : `${horasRestantes} horas`;
+  }
+
+
+  // ====================================================
+  // DÍAS EXACTOS
+  // ====================================================
+
+  if (horasRestantes === 0) {
+
+    return diasEnteros === 1
+      ? "1 día"
+      : `${diasEnteros} días`;
+  }
+
+
+  // ====================================================
+  // DÍAS + HORAS
+  // ====================================================
+
+  const textoDias =
+    diasEnteros === 1
+      ? "1 día"
+      : `${diasEnteros} días`;
+
+  const textoHoras =
+    horasRestantes === 1
+      ? "1 hora"
+      : `${horasRestantes} horas`;
+
+
+  return `${textoDias} y ${textoHoras}`;
+}
+
+
+// ======================================================
 // VALIDAR RESULTADO INDIVIDUAL
 // ======================================================
 
 function validarPrediccion(prediccion) {
+
   if (
     !prediccion ||
     typeof prediccion !== "object" ||
@@ -73,14 +181,29 @@ function validarPrediccion(prediccion) {
   }
 
 
-  /*
-   * Los siguientes estados pueden no contener
-   * datos numéricos de predicción.
-   */
-  if (prediccion.estado !== "OK") {
-    return prediccion;
+  // ====================================================
+  // ESTADOS SIN PREDICCIÓN DISPONIBLE
+  // ====================================================
+
+  if (
+    prediccion.estado !== "OK"
+  ) {
+
+    return {
+      ...prediccion,
+
+      tiempo_para_aviso_texto:
+        null,
+
+      tiempo_para_alto_texto:
+        null,
+    };
   }
 
+
+  // ====================================================
+  // CAMPOS NUMÉRICOS OBLIGATORIOS
+  // ====================================================
 
   const camposNumericos = [
     "nivel_actual",
@@ -91,10 +214,17 @@ function validarPrediccion(prediccion) {
   ];
 
 
-  for (const campo of camposNumericos) {
+  for (
+    const campo
+    of camposNumericos
+  ) {
+
     if (
-      typeof prediccion[campo] !== "number" ||
-      !Number.isFinite(prediccion[campo])
+      typeof prediccion[campo] !==
+        "number" ||
+      !Number.isFinite(
+        prediccion[campo]
+      )
     ) {
       throw new Error(
         `Machine Learning devolvió ${campo} inválido.`
@@ -102,6 +232,10 @@ function validarPrediccion(prediccion) {
     }
   }
 
+
+  // ====================================================
+  // NIVEL ACTUAL
+  // ====================================================
 
   if (
     prediccion.nivel_actual < 0 ||
@@ -113,6 +247,10 @@ function validarPrediccion(prediccion) {
   }
 
 
+  // ====================================================
+  // UMBRAL DE AVISO
+  // ====================================================
+
   if (
     prediccion.umbral_aviso <= 0 ||
     prediccion.umbral_aviso > 100
@@ -122,6 +260,10 @@ function validarPrediccion(prediccion) {
     );
   }
 
+
+  // ====================================================
+  // UMBRAL ALTO
+  // ====================================================
 
   if (
     prediccion.umbral_alto <=
@@ -134,6 +276,10 @@ function validarPrediccion(prediccion) {
   }
 
 
+  // ====================================================
+  // ESTADO DE ALERTAS
+  // ====================================================
+
   if (
     typeof prediccion.alertas_activas !==
     "boolean"
@@ -143,6 +289,10 @@ function validarPrediccion(prediccion) {
     );
   }
 
+
+  // ====================================================
+  // RIESGO
+  // ====================================================
 
   const riesgosPermitidos = [
     "BAJO",
@@ -163,12 +313,21 @@ function validarPrediccion(prediccion) {
   }
 
 
-  for (const campo of [
-    "dias_para_aviso",
-    "dias_para_alto",
-  ]) {
+  // ====================================================
+  // TIEMPOS
+  // ====================================================
+
+  for (
+    const campo
+    of [
+      "dias_para_aviso",
+      "dias_para_alto",
+    ]
+  ) {
+
     const valor =
       prediccion[campo];
+
 
     if (
       valor !== null &&
@@ -185,7 +344,29 @@ function validarPrediccion(prediccion) {
   }
 
 
-  return prediccion;
+  // ====================================================
+  // RESPUESTA ENRIQUECIDA POR EL BACKEND
+  // ====================================================
+
+  return {
+
+    ...prediccion,
+
+
+    tiempo_para_aviso_texto:
+      formatearTiempoDias(
+        prediccion
+          .dias_para_aviso
+      ),
+
+
+    tiempo_para_alto_texto:
+      formatearTiempoDias(
+        prediccion
+          .dias_para_alto
+      ),
+
+  };
 }
 
 
@@ -194,6 +375,7 @@ function validarPrediccion(prediccion) {
 // ======================================================
 
 function validarResultado(resultado) {
+
   if (!Array.isArray(resultado)) {
     throw new Error(
       "La respuesta de Machine Learning no es un arreglo."
@@ -212,77 +394,121 @@ function validarResultado(resultado) {
 // ======================================================
 
 function ejecutarPrediccion() {
-  return new Promise(
-    (resolve, reject) => {
 
-      const proceso = spawn(
-        PYTHON_BIN,
-        [PREDICTOR_PATH],
-        {
-          cwd: BACKEND_ROOT,
-          windowsHide: true,
-        }
-      );
+  return new Promise(
+    (
+      resolve,
+      reject
+    ) => {
+
+      const proceso =
+        spawn(
+          PYTHON_BIN,
+          [
+            PREDICTOR_PATH,
+          ],
+          {
+            cwd:
+              BACKEND_ROOT,
+
+            windowsHide:
+              true,
+          }
+        );
 
 
       let salida = "";
+
       let errorSalida = "";
-      let finalizado = false;
+
+      let finalizado =
+        false;
 
 
-      const timeout = setTimeout(
-        () => {
+      // ==================================================
+      // TIMEOUT
+      // ==================================================
 
-          if (finalizado) {
-            return;
-          }
+      const timeout =
+        setTimeout(
+          () => {
 
-          finalizado = true;
+            if (
+              finalizado
+            ) {
+              return;
+            }
 
-          proceso.kill();
 
-          reject(
-            new Error(
-              `El proceso de Machine Learning superó ${ML_TIMEOUT_MS} ms.`
-            )
-          );
+            finalizado =
+              true;
 
-        },
-        ML_TIMEOUT_MS
-      );
 
+            proceso.kill();
+
+
+            reject(
+              new Error(
+                `El proceso de Machine Learning superó ${ML_TIMEOUT_MS} ms.`
+              )
+            );
+
+          },
+          ML_TIMEOUT_MS
+        );
+
+
+      // ==================================================
+      // STDOUT
+      // ==================================================
 
       proceso.stdout.on(
         "data",
         (data) => {
+
           salida +=
             data.toString();
         }
       );
 
 
+      // ==================================================
+      // STDERR
+      // ==================================================
+
       proceso.stderr.on(
         "data",
         (data) => {
+
           errorSalida +=
             data.toString();
         }
       );
 
 
+      // ==================================================
+      // ERROR AL EJECUTAR PYTHON
+      // ==================================================
+
       proceso.on(
         "error",
         (error) => {
 
-          if (finalizado) {
+          if (
+            finalizado
+          ) {
             return;
           }
 
-          finalizado = true;
+
+          finalizado =
+            true;
+
 
           clearTimeout(
             timeout
           );
+
 
           reject(
             new Error(
@@ -293,22 +519,38 @@ function ejecutarPrediccion() {
       );
 
 
+      // ==================================================
+      // PROCESO FINALIZADO
+      // ==================================================
+
       proceso.on(
         "close",
         (codigo) => {
 
-          if (finalizado) {
+          if (
+            finalizado
+          ) {
             return;
           }
 
-          finalizado = true;
+
+          finalizado =
+            true;
+
 
           clearTimeout(
             timeout
           );
 
 
-          if (codigo !== 0) {
+          // ================================================
+          // ERROR DE PYTHON
+          // ================================================
+
+          if (
+            codigo !== 0
+          ) {
+
             return reject(
               new Error(
                 errorSalida.trim() ||
@@ -318,7 +560,14 @@ function ejecutarPrediccion() {
           }
 
 
-          if (!salida.trim()) {
+          // ================================================
+          // SIN RESPUESTA
+          // ================================================
+
+          if (
+            !salida.trim()
+          ) {
+
             return reject(
               new Error(
                 "Machine Learning no devolvió resultados."
@@ -327,16 +576,23 @@ function ejecutarPrediccion() {
           }
 
 
+          // ================================================
+          // PROCESAR JSON
+          // ================================================
+
           try {
+
             const resultado =
               JSON.parse(
                 salida.trim()
               );
 
+
             const resultadoValidado =
               validarResultado(
                 resultado
               );
+
 
             resolve(
               resultadoValidado
