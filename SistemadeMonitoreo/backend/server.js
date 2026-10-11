@@ -26,9 +26,6 @@ const resumenRecoleccionRoutes = require(
 
 
 
-
-
-
 const origenesPermitidos = String(
   process.env.CORS_ALLOWED_ORIGINS || ""
 )
@@ -154,6 +151,16 @@ const administracionRoutes = require(
 
 const permisosRoutes = require(
   "./src/routes/permisos.routes"
+);
+
+const prediccionRoutes = require(
+  "./src/routes/MachineLearning/prediccion.routes"
+);
+
+const {
+  iniciarMonitorPredicciones,
+} = require(
+  "./src/services/MachineLearning/prediccionMonitor.service"
 );
 // ======================================================
 // RUTAS GENERALES
@@ -289,6 +296,18 @@ app.use(
   permisosRoutes
 );
 
+app.use(
+  "/api/control-dsh/modulo-nivel",
+  require(
+    "./src/routes/controlDSH/ModuloNivel.routes"
+  )
+);
+
+app.use(
+  "/api/predicciones",
+  prediccionRoutes
+);
+
 // ======================================================
 // RUTA PROTEGIDA DE PRUEBA
 // ======================================================
@@ -345,12 +364,35 @@ app.listen(
 
 
     // ==================================================
-    // 1. MONITOR DE NIVELES
+    // 1. MONITOR PREDICTIVO
     // ==================================================
 
     try {
 
-      await nivelMonitor.iniciarMonitor();
+      iniciarMonitorPredicciones();
+
+      console.log(
+        "Monitor predictivo iniciado correctamente."
+      );
+
+    } catch (error) {
+
+      console.error(
+        "No fue posible iniciar el monitor predictivo:",
+        error.message
+      );
+
+    }
+
+
+    // ==================================================
+    // 2. MONITOR DE NIVELES
+    // ==================================================
+
+    try {
+
+      await nivelMonitor
+        .iniciarMonitor();
 
       console.log(
         "Monitor de nivel iniciado correctamente."
@@ -367,7 +409,7 @@ app.listen(
 
 
     // ==================================================
-    // 2. MONITOR DE ALERTAS PROGRAMADAS
+    // 3. MONITOR DE ALERTAS PROGRAMADAS
     // ==================================================
 
     try {
@@ -389,6 +431,9 @@ app.listen(
     }
 
 
+    // ==================================================
+    // 4. LIMPIEZA DE SESIONES
+    // ==================================================
 
     try {
 
@@ -408,5 +453,31 @@ app.listen(
 
     }
 
+  }
+);
+
+
+// ======================================================
+// APAGADO CONTROLADO
+// ======================================================
+
+process.on(
+  "SIGINT",
+  () => {
+
+    detenerMonitorPredicciones();
+
+    process.exit(0);
+  }
+);
+
+
+process.on(
+  "SIGTERM",
+  () => {
+
+    detenerMonitorPredicciones();
+
+    process.exit(0);
   }
 );

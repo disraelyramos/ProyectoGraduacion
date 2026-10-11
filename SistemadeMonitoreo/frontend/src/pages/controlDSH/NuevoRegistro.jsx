@@ -13,15 +13,7 @@ import {
   FaInfoCircle,
 } from "react-icons/fa";
 
-/*
- * TEMPORAL:
- * Se mantiene Bootstrap hasta revisar:
- * - ModalCosto
- * - ModalTotales
- * - RegistroRecoleccion
- */
 import "bootstrap/dist/css/bootstrap.min.css";
-
 import "../../styles/nuevo-registro.css";
 
 import apiClient from "../../utils/apiClient";
@@ -37,27 +29,25 @@ import ModalTotales from "../../components/controlDSH/ModalTotales";
 import RegistroRecoleccion from "./RegistroRecoleccion";
 
 
-/* =========================================================
-   CONFIGURACIÓN
-   ========================================================= */
+// ======================================================
+// CONFIGURACION
+// ======================================================
 
 const NIVEL_REFRESH_INTERVAL_MS =
   Number(
     import.meta.env
       .VITE_NIVEL_REFRESH_INTERVAL_MS
   ) > 0
-
     ? Number(
         import.meta.env
           .VITE_NIVEL_REFRESH_INTERVAL_MS
       )
-
     : 3000;
 
 
-/* =========================================================
-   CONSTANTES DE INTERFAZ
-   ========================================================= */
+// ======================================================
+// CONSTANTES
+// ======================================================
 
 const ESTADO_PROCESO = {
   EN_PROCESO: "EN_PROCESO",
@@ -71,10 +61,6 @@ const ETAPA_PROCESO = {
 };
 
 
-/* =========================================================
-   TIPOS PARA PRESENTACIÓN
-   ========================================================= */
-
 const TIPOS = [
   {
     id: 2,
@@ -83,7 +69,6 @@ const TIPOS = [
     themeClass:
       "residuo-card--punzocortante",
   },
-
   {
     id: 1,
     label: "Bioinfeccioso",
@@ -94,25 +79,17 @@ const TIPOS = [
 ];
 
 
-/* =========================================================
-   HELPERS
-   ========================================================= */
+// ======================================================
+// HELPERS
+// ======================================================
 
-const clamp0to100 = (value) => {
-
+function clamp0to100(value) {
   const numero =
     Number(value);
 
-
-  if (
-    !Number.isFinite(
-      numero
-    )
-  ) {
-
+  if (!Number.isFinite(numero)) {
     return 0;
   }
-
 
   return Math.min(
     100,
@@ -121,18 +98,18 @@ const clamp0to100 = (value) => {
       numero
     )
   );
-};
+}
 
 
-/* =========================================================
-   COMPONENTE
-   ========================================================= */
+// ======================================================
+// COMPONENTE
+// ======================================================
 
 const NuevoRegistro = () => {
 
-  /* =======================================================
-     DATOS SOLO PARA PRESENTACIÓN
-     ======================================================= */
+  // ====================================================
+  // DATOS
+  // ====================================================
 
   const [
     loading,
@@ -149,9 +126,9 @@ const NuevoRegistro = () => {
   });
 
 
-  /* =======================================================
-     ESTADO DE VISTAS
-     ======================================================= */
+  // ====================================================
+  // VISTAS
+  // ====================================================
 
   const [
     showCosto,
@@ -171,9 +148,9 @@ const NuevoRegistro = () => {
   ] = useState(false);
 
 
-  /* =======================================================
-     PROTECCIONES DE INTERFAZ
-     ======================================================= */
+  // ====================================================
+  // PROTECCIONES
+  // ====================================================
 
   const recuperacionConsultadaRef =
     useRef(false);
@@ -187,17 +164,13 @@ const NuevoRegistro = () => {
     useRef(false);
 
 
-  /*
-   * Evita que una consulta automática
-   * se monte encima de otra.
-   */
   const actualizacionNivelEnCursoRef =
     useRef(false);
 
 
-  /* =======================================================
-     ¿HAY FLUJO ABIERTO?
-     ======================================================= */
+  // ====================================================
+  // FLUJO ACTIVO EN UI
+  // ====================================================
 
   const hayProcesoUIActivo =
     useMemo(
@@ -205,7 +178,6 @@ const NuevoRegistro = () => {
         showCosto ||
         showTotales ||
         showRecoleccion,
-
       [
         showCosto,
         showTotales,
@@ -214,9 +186,9 @@ const NuevoRegistro = () => {
     );
 
 
-  /* =======================================================
-     RESET VISUAL
-     ======================================================= */
+  // ====================================================
+  // RESET VISUAL
+  // ====================================================
 
   const resetFlujoUI =
     useCallback(() => {
@@ -236,9 +208,9 @@ const NuevoRegistro = () => {
     }, []);
 
 
-  /* =======================================================
-     ABRIR ETAPA
-     ======================================================= */
+  // ====================================================
+  // ABRIR ETAPA
+  // ====================================================
 
   const abrirEtapa =
     useCallback(
@@ -248,14 +220,11 @@ const NuevoRegistro = () => {
 
         const etapa =
           String(
-            etapaServidor ||
-            ""
+            etapaServidor || ""
           )
             .trim()
             .toUpperCase();
 
-
-        /* FOTO 2 */
 
         if (
           etapa ===
@@ -272,8 +241,6 @@ const NuevoRegistro = () => {
         }
 
 
-        /* FOTO 3 */
-
         if (
           etapa ===
           ETAPA_PROCESO.CALCULO
@@ -288,8 +255,6 @@ const NuevoRegistro = () => {
           return true;
         }
 
-
-        /* FOTO 4 */
 
         if (
           etapa ===
@@ -314,46 +279,33 @@ const NuevoRegistro = () => {
 
         return false;
       },
-
       []
     );
 
 
-  /* =======================================================
-     CERRAR FOTO 2
-     ======================================================= */
+  // ====================================================
+  // CERRAR MODALES
+  // ====================================================
 
   const closeCosto =
     useCallback(() => {
 
-      /*
-       * Cerrar el modal
-       * NO cancela el proceso.
-       */
       setShowCosto(false);
 
     }, []);
 
 
-  /* =======================================================
-     CERRAR FOTO 3
-     ======================================================= */
-
   const closeTotales =
     useCallback(() => {
 
-      /*
-       * Cerrar el modal
-       * NO cancela el proceso.
-       */
       setShowTotales(false);
 
     }, []);
 
 
-  /* =======================================================
-     PROCESAR RESPUESTA DE NIVELES
-     ======================================================= */
+  // ====================================================
+  // PROCESAR NIVELES
+  // ====================================================
 
   const construirNiveles =
     useCallback(
@@ -362,11 +314,8 @@ const NuevoRegistro = () => {
       ) => {
 
         const list =
-          Array.isArray(
-            data
-          )
+          Array.isArray(data)
             ? data
-
             : data?.rows ||
               data?.data ||
               [];
@@ -399,11 +348,6 @@ const NuevoRegistro = () => {
           }
 
 
-          /*
-           * Solo utilizamos el primer
-           * contenedor encontrado para
-           * cada tipo.
-           */
           if (
             next[tipoId] !==
             null
@@ -413,13 +357,6 @@ const NuevoRegistro = () => {
           }
 
 
-          /*
-           * El backend ahora informa si
-           * el nivel del caché está vigente.
-           *
-           * Si está vencido, no debemos
-           * mostrarlo como si fuera 0 %.
-           */
           if (
             contenedor
               ?.nivel_disponible ===
@@ -483,27 +420,13 @@ const NuevoRegistro = () => {
 
         return next;
       },
-
       []
     );
 
 
-  /* =======================================================
-     CARGAR NIVELES
-     ======================================================= */
-  //
-  // silencioso = false:
-  //
-  // - carga inicial;
-  // - muestra estado loading;
-  // - puede mostrar alerta.
-  //
-  // silencioso = true:
-  //
-  // - actualización automática;
-  // - no bloquea tarjetas;
-  // - no lanza alerta cada 3 segundos.
-  // ======================================================= */
+  // ====================================================
+  // CARGAR NIVELES
+  // ====================================================
 
   const cargarNiveles =
     useCallback(
@@ -511,17 +434,13 @@ const NuevoRegistro = () => {
         silencioso = false,
       } = {}) => {
 
-        /*
-         * Las actualizaciones silenciosas
-         * no deben solaparse.
-         */
         if (
           silencioso &&
           actualizacionNivelEnCursoRef
             .current
         ) {
 
-          return;
+          return null;
         }
 
 
@@ -558,6 +477,7 @@ const NuevoRegistro = () => {
 
           return next;
 
+
         } catch (err) {
 
           console.error(
@@ -568,17 +488,7 @@ const NuevoRegistro = () => {
           );
 
 
-          /*
-           * POLLING:
-           *
-           * No borramos el último dato
-           * visual ante una falla temporal.
-           *
-           * Tampoco mostramos alertas
-           * repetidamente.
-           */
           if (silencioso) {
-
             return null;
           }
 
@@ -590,6 +500,7 @@ const NuevoRegistro = () => {
 
 
           await showBackendAlert({
+
             status:
               err?.response
                 ?.status ||
@@ -607,6 +518,7 @@ const NuevoRegistro = () => {
 
           return null;
 
+
         } finally {
 
           if (silencioso) {
@@ -621,16 +533,15 @@ const NuevoRegistro = () => {
           }
         }
       },
-
       [
         construirNiveles,
       ]
     );
 
 
-  /* =======================================================
-     CONSULTAR PROCESO ACTIVO
-     ======================================================= */
+  // ====================================================
+  // PROCESO ACTIVO
+  // ====================================================
 
   const obtenerProcesoActivo =
     useCallback(
@@ -652,27 +563,19 @@ const NuevoRegistro = () => {
         }
 
 
-        const proceso =
+        return (
           res.data
-            ?.proceso;
-
-
-        if (!proceso) {
-
-          return null;
-        }
-
-
-        return proceso;
+            ?.proceso ||
+          null
+        );
       },
-
       []
     );
 
 
-  /* =======================================================
-     CONTINUAR PROCESO
-     ======================================================= */
+  // ====================================================
+  // CONTINUAR PROCESO
+  // ====================================================
 
   const continuarProceso =
     useCallback(
@@ -703,7 +606,6 @@ const NuevoRegistro = () => {
               "No existe un proceso activo para continuar."
             );
 
-
             return;
           }
 
@@ -718,7 +620,6 @@ const NuevoRegistro = () => {
               "El proceso ya no se encuentra activo."
             );
 
-
             return;
           }
 
@@ -727,9 +628,11 @@ const NuevoRegistro = () => {
             proceso.etapa
           );
 
+
         } catch (err) {
 
           await showBackendAlert({
+
             status:
               err?.response
                 ?.status ||
@@ -744,13 +647,13 @@ const NuevoRegistro = () => {
               },
           });
 
+
         } finally {
 
           recuperandoProcesoRef.current =
             false;
         }
       },
-
       [
         abrirEtapa,
         obtenerProcesoActivo,
@@ -758,9 +661,9 @@ const NuevoRegistro = () => {
     );
 
 
-  /* =======================================================
-     CANCELAR PROCESO
-     ======================================================= */
+  // ====================================================
+  // CANCELAR PROCESO
+  // ====================================================
 
   const cancelarProcesoActual =
     useCallback(
@@ -776,11 +679,9 @@ const NuevoRegistro = () => {
 
             resetFlujoUI();
 
-
             await showInfoAlert(
               "No existe un proceso activo para cancelar."
             );
-
 
             return false;
           }
@@ -799,21 +700,13 @@ const NuevoRegistro = () => {
               "El servidor no devolvió un proceso válido."
             );
 
-
             return false;
           }
 
 
           await apiClient.post(
             "/control-dsh/registro-pesaje/cancelar",
-
             {
-              /*
-               * Compatibilidad temporal.
-               *
-               * El backend determina el
-               * proceso mediante usuario.
-               */
               historial_calculo_id:
                 procesoId,
             }
@@ -833,9 +726,11 @@ const NuevoRegistro = () => {
 
           return true;
 
+
         } catch (err) {
 
           await showBackendAlert({
+
             status:
               err?.response
                 ?.status ||
@@ -854,7 +749,6 @@ const NuevoRegistro = () => {
           return false;
         }
       },
-
       [
         cargarNiveles,
         obtenerProcesoActivo,
@@ -863,9 +757,9 @@ const NuevoRegistro = () => {
     );
 
 
-  /* =======================================================
-     MOSTRAR MODAL "PROCESO EN CURSO"
-     ======================================================= */
+  // ====================================================
+  // DECISION PROCESO EN CURSO
+  // ====================================================
 
   const mostrarDecisionProceso =
     useCallback(
@@ -876,15 +770,16 @@ const NuevoRegistro = () => {
       ) => {
 
         if (!proceso) {
-
           return;
         }
 
 
         await showBackendAlert({
+
           status: 409,
 
           data: {
+
             codigo:
               "PROCESO_EN_CURSO",
 
@@ -909,7 +804,6 @@ const NuevoRegistro = () => {
             },
         });
       },
-
       [
         cancelarProcesoActual,
         continuarProceso,
@@ -917,9 +811,9 @@ const NuevoRegistro = () => {
     );
 
 
-  /* =======================================================
-     RECUPERAR PROCESO AL ENTRAR
-     ======================================================= */
+  // ====================================================
+  // RECUPERAR PROCESO AL ENTRAR
+  // ====================================================
 
   const recuperarProcesoActivo =
     useCallback(
@@ -932,7 +826,6 @@ const NuevoRegistro = () => {
 
 
           if (!proceso) {
-
             return;
           }
 
@@ -940,6 +833,7 @@ const NuevoRegistro = () => {
           await mostrarDecisionProceso(
             proceso
           );
+
 
         } catch (err) {
 
@@ -950,6 +844,7 @@ const NuevoRegistro = () => {
 
 
           await showBackendAlert({
+
             status:
               err?.response
                 ?.status ||
@@ -965,7 +860,6 @@ const NuevoRegistro = () => {
           });
         }
       },
-
       [
         mostrarDecisionProceso,
         obtenerProcesoActivo,
@@ -973,9 +867,9 @@ const NuevoRegistro = () => {
     );
 
 
-  /* =======================================================
-     INICIALIZACIÓN
-     ======================================================= */
+  // ====================================================
+  // INICIALIZACION
+  // ====================================================
 
   useEffect(() => {
 
@@ -1009,59 +903,13 @@ const NuevoRegistro = () => {
   ]);
 
 
-  /* =======================================================
-     ACTUALIZACIÓN AUTOMÁTICA DE NIVELES
-     ======================================================= */
-  //
-  // Solo actualiza la interfaz.
-  //
-  // NO:
-  // - genera alertas;
-  // - inicia procesos;
-  // - calcula peso;
-  // - modifica BD.
-  //
-  // GET /contenedores ya consume el caché del backend.
-  // ======================================================= */
+  // ====================================================
+  // ACTUALIZACION AUTOMATICA DE NIVELES
+  // ====================================================
 
   useEffect(() => {
 
-    const intervalo =
-      setInterval(
-        () => {
-
-          /*
-           * Si la pestaña no está visible,
-           * no necesitamos hacer consultas
-           * visuales innecesarias.
-           *
-           * Las alertas continúan funcionando
-           * en el backend.
-           */
-          if (
-            document.hidden
-          ) {
-
-            return;
-          }
-
-
-          cargarNiveles({
-            silencioso:
-              true,
-          });
-
-        },
-
-        NIVEL_REFRESH_INTERVAL_MS
-      );
-
-
-    /*
-     * Cuando el usuario vuelve a esta
-     * pestaña, actualizamos inmediatamente.
-     */
-    const manejarVisibilidad =
+    const actualizar =
       () => {
 
         if (
@@ -1073,15 +921,21 @@ const NuevoRegistro = () => {
 
 
         cargarNiveles({
-          silencioso:
-            true,
+          silencioso: true,
         });
       };
 
 
+    const intervalo =
+      setInterval(
+        actualizar,
+        NIVEL_REFRESH_INTERVAL_MS
+      );
+
+
     document.addEventListener(
       "visibilitychange",
-      manejarVisibilidad
+      actualizar
     );
 
 
@@ -1094,7 +948,7 @@ const NuevoRegistro = () => {
 
       document.removeEventListener(
         "visibilitychange",
-        manejarVisibilidad
+        actualizar
       );
     };
 
@@ -1103,9 +957,9 @@ const NuevoRegistro = () => {
   ]);
 
 
-  /* =======================================================
-     INICIAR NUEVO PROCESO
-     ======================================================= */
+  // ====================================================
+  // INICIAR PROCESO
+  // ====================================================
 
   const handleSelectTipo =
     useCallback(
@@ -1131,7 +985,6 @@ const NuevoRegistro = () => {
 
           await apiClient.post(
             "/control-dsh/registro-pesaje/iniciar",
-
             {
               id_tipo_residuo:
                 idTipoResiduo,
@@ -1144,6 +997,7 @@ const NuevoRegistro = () => {
           setShowTotales(false);
 
           setShowRecoleccion(false);
+
 
         } catch (err) {
 
@@ -1160,6 +1014,7 @@ const NuevoRegistro = () => {
 
 
           await showBackendAlert({
+
             status,
 
             data,
@@ -1177,13 +1032,13 @@ const NuevoRegistro = () => {
               },
           });
 
+
         } finally {
 
           inicioProcesoEnCursoRef.current =
             false;
         }
       },
-
       [
         cancelarProcesoActual,
         continuarProceso,
@@ -1192,9 +1047,9 @@ const NuevoRegistro = () => {
     );
 
 
-  /* =======================================================
-     FOTO 2 → FOTO 3
-     ======================================================= */
+  // ====================================================
+  // COSTO -> CALCULO
+  // ====================================================
 
   const handleOpenTotales =
     useCallback(() => {
@@ -1208,9 +1063,17 @@ const NuevoRegistro = () => {
     }, []);
 
 
-  /* =======================================================
-     FOTO 3 → FOTO 4
-     ======================================================= */
+  // ====================================================
+  // CALCULO -> RECOLECCION
+  // ====================================================
+  //
+  // El cambio de etapa ocurre cuando ModalTotales
+  // confirma que el backend devolvió el cálculo como
+  // COMPLETADO.
+  //
+  // Ya no existe una etapa visual de retiro.
+  //
+  // ====================================================
 
   const handleShowRecoleccion =
     useCallback(() => {
@@ -1224,9 +1087,9 @@ const NuevoRegistro = () => {
     }, []);
 
 
-  /* =======================================================
-     CANCELAR DESDE CUALQUIER FOTO
-     ======================================================= */
+  // ====================================================
+  // CANCELAR
+  // ====================================================
 
   const handleCancel =
     useCallback(
@@ -1235,16 +1098,15 @@ const NuevoRegistro = () => {
         await cancelarProcesoActual();
 
       },
-
       [
         cancelarProcesoActual,
       ]
     );
 
 
-  /* =======================================================
-     FINALIZAR
-     ======================================================= */
+  // ====================================================
+  // FINALIZAR
+  // ====================================================
 
   const handleFinish =
     useCallback(
@@ -1261,7 +1123,6 @@ const NuevoRegistro = () => {
         await cargarNiveles();
 
       },
-
       [
         cargarNiveles,
         resetFlujoUI,
@@ -1269,9 +1130,9 @@ const NuevoRegistro = () => {
     );
 
 
-  /* =======================================================
-     TARJETAS
-     ======================================================= */
+  // ====================================================
+  // TARJETAS
+  // ====================================================
 
   const renderCard =
     useCallback(
@@ -1289,11 +1150,9 @@ const NuevoRegistro = () => {
           nivel
             ? Number(
                 clamp0to100(
-                  nivel
-                    .porcentaje
+                  nivel.porcentaje
                 ).toFixed(0)
               )
-
             : 0;
 
 
@@ -1309,9 +1168,7 @@ const NuevoRegistro = () => {
             key={
               tipo.id
             }
-
             type="button"
-
             className={
               `residuo-card ${tipo.themeClass} ${
                 disabled
@@ -1319,11 +1176,9 @@ const NuevoRegistro = () => {
                   : ""
               }`
             }
-
             onClick={() => {
 
               if (disabled) {
-
                 return;
               }
 
@@ -1332,19 +1187,13 @@ const NuevoRegistro = () => {
                 tipo.id
               );
             }}
-
             disabled={
               disabled
             }
-
             aria-label={
               `Seleccionar residuo ${tipo.label}`
             }
           >
-
-            {/* ===========================================
-                CABECERA DE RESIDUO
-            =========================================== */}
 
             <div className="residuo-card-header">
 
@@ -1377,25 +1226,16 @@ const NuevoRegistro = () => {
             </div>
 
 
-            {/* ===========================================
-                BARRA DE NIVEL
-            =========================================== */}
-
             <div
               className="custom-progress"
-
               role="progressbar"
-
               aria-valuenow={
                 nivel
                   ? porcentaje
                   : 0
               }
-
               aria-valuemin="0"
-
               aria-valuemax="100"
-
               aria-label={
                 nivel
                   ? `Nivel de ${tipo.label}: ${porcentaje}%`
@@ -1405,7 +1245,6 @@ const NuevoRegistro = () => {
 
               <div
                 className="custom-progress-bar"
-
                 style={{
                   width:
                     nivel
@@ -1416,10 +1255,6 @@ const NuevoRegistro = () => {
 
             </div>
 
-
-            {/* ===========================================
-                SIN DATOS
-            =========================================== */}
 
             {!nivel &&
               !loading && (
@@ -1435,7 +1270,6 @@ const NuevoRegistro = () => {
           </button>
         );
       },
-
       [
         nivelesPorTipo,
         loading,
@@ -1444,9 +1278,9 @@ const NuevoRegistro = () => {
     );
 
 
-  /* =======================================================
-     RENDER
-     ======================================================= */
+  // ====================================================
+  // RENDER
+  // ====================================================
 
   return (
 
@@ -1463,10 +1297,6 @@ const NuevoRegistro = () => {
             }`
           }
         >
-
-          {/* =============================================
-              SELECCIÓN DE RESIDUO
-          ============================================= */}
 
           <div className="system-card nuevo-registro-card">
 
@@ -1524,6 +1354,7 @@ const NuevoRegistro = () => {
                 <span>
 
                   {" "}
+
                   Debe seleccionar uno de los
                   desechos para iniciar el cálculo
                   del pesaje.
@@ -1537,10 +1368,6 @@ const NuevoRegistro = () => {
           </div>
 
 
-          {/* =============================================
-              FOTO 4
-          ============================================= */}
-
           {showRecoleccion && (
 
             <div className="nuevo-registro-recoleccion">
@@ -1549,7 +1376,6 @@ const NuevoRegistro = () => {
                 onCancel={
                   handleCancel
                 }
-
                 onFinish={
                   handleFinish
                 }
@@ -1562,42 +1388,29 @@ const NuevoRegistro = () => {
         </div>
 
 
-        {/* ===============================================
-            FOTO 2
-        =============================================== */}
-
         <ModalCosto
           show={
             showCosto
           }
-
           handleClose={
             closeCosto
           }
-
           handleOpenTotales={
             handleOpenTotales
           }
         />
 
 
-        {/* ===============================================
-            FOTO 3
-        =============================================== */}
-
         <ModalTotales
           show={
             showTotales
           }
-
           handleClose={
             closeTotales
           }
-
           handleShowRecoleccion={
             handleShowRecoleccion
           }
-
           onCancel={
             handleCancel
           }

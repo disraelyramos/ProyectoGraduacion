@@ -50,7 +50,12 @@ function responderError(
 
 
 // ======================================================
-// OBTENER SOLICITUD
+// OBTENER SOLICITUD PENDIENTE
+// ======================================================
+//
+// El ESP8266 consulta esta ruta para saber si existe
+// una solicitud activa de pesaje.
+//
 // ======================================================
 
 exports.obtenerPendiente =
@@ -90,7 +95,19 @@ exports.obtenerPendiente =
 
 
 // ======================================================
-// ACTUALIZAR ESTADO
+// ACTUALIZAR ESTADO DEL MODULO
+// ======================================================
+//
+// Estados esperados:
+//
+// MIDIENDO
+// ESTABILIZANDO
+// MOVIMIENTO_DETECTADO
+// ERROR
+//
+// ESPERANDO_RETIRO ya no forma parte
+// del flujo normal.
+//
 // ======================================================
 
 exports.actualizarEstado =
@@ -138,7 +155,21 @@ exports.actualizarEstado =
 
 
 // ======================================================
-// COMPLETAR
+// COMPLETAR MEDICION
+// ======================================================
+//
+// peso_lb representa la DIFERENCIA de peso
+// detectada por el ESP8266 respecto al peso
+// anteriormente confirmado del mismo contenedor.
+//
+// Ejemplo:
+//
+// Peso anterior: 5.20 lb
+// Peso actual:   7.85 lb
+//
+// peso_lb enviado:
+// 2.65 lb
+//
 // ======================================================
 
 exports.completarMedicion =
@@ -148,6 +179,31 @@ exports.completarMedicion =
   ) => {
 
     try {
+
+      const pesoLb =
+        Number(
+          req.body
+            ?.peso_lb
+        );
+
+
+      if (
+        !Number.isFinite(
+          pesoLb
+        ) ||
+        pesoLb < 0
+      ) {
+
+        return res
+          .status(400)
+          .json({
+            message:
+              "peso_lb debe ser un valor numérico válido mayor o igual a cero.",
+            codigo:
+              "PESO_INVALIDO",
+          });
+      }
+
 
       const resultado =
         await moduloPesoService
@@ -161,9 +217,7 @@ exports.completarMedicion =
               req.params
                 .solicitudId,
 
-            pesoLb:
-              req.body
-                ?.peso_lb,
+            pesoLb,
           });
 
 

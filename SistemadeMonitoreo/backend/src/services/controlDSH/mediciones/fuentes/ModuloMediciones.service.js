@@ -5,23 +5,35 @@ const pool = require("../../../../config/db");
 // ======================================================
 
 const ESTADO_SOLICITUD = Object.freeze({
+
   PENDIENTE: "PENDIENTE",
+
   MIDIENDO: "MIDIENDO",
+
   ESTABILIZANDO: "ESTABILIZANDO",
+
   MOVIMIENTO_DETECTADO: "MOVIMIENTO_DETECTADO",
-  ESPERANDO_RETIRO: "ESPERANDO_RETIRO",
+
   COMPLETADO: "COMPLETADO",
+
   ERROR: "ERROR",
+
   TIMEOUT: "TIMEOUT",
+
   CANCELADO: "CANCELADO",
+
 });
 
 const ESTADOS_ACTIVOS = Object.freeze([
+
   ESTADO_SOLICITUD.PENDIENTE,
+
   ESTADO_SOLICITUD.MIDIENDO,
+
   ESTADO_SOLICITUD.ESTABILIZANDO,
+
   ESTADO_SOLICITUD.MOVIMIENTO_DETECTADO,
-  ESTADO_SOLICITUD.ESPERANDO_RETIRO,
+
 ]);
 
 // ======================================================
@@ -98,18 +110,7 @@ class ModuloMedicionesError extends Error {
   }
 }
 
-// ======================================================
-// DETERMINAR MODULO DEL CONTENEDOR
-// ======================================================
-//
-// BD:
-// tipo 1 = Bioinfeccioso
-// tipo 2 = Punzocortante
-//
-// El backend determina el modulo.
-// No se acepta el modulo enviado por el frontend.
-//
-// ======================================================
+
 
 async function obtenerModuloPorContenedor({
   contenedorId,

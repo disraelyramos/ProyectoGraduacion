@@ -16,7 +16,7 @@ const nivelAlertasService = require(
 
 
 // ======================================================
-// CONFIGURACIÓN
+// CONFIGURACION
 // ======================================================
 
 const INTERVALO_MONITOR_MS =
@@ -101,7 +101,7 @@ async function obtenerContenedoresDSH() {
 // REFRESCAR NIVEL DE UN CONTENEDOR
 // ======================================================
 //
-// Flujo:
+// FLUJO:
 //
 // proveedor
 //    ↓
@@ -109,16 +109,25 @@ async function obtenerContenedoresDSH() {
 //    ↓
 // actualizar cache
 //    ↓
+// guardar historial cuando corresponda
+//    ↓
 // evaluar alertas
 //
 // IMPORTANTE:
 //
-// Las alertas NO dependen del frontend.
+// - Las alertas NO dependen del frontend.
+// - El historial NO se guarda en cada ciclo.
+// - NivelActualCache.service controla
+//   NIVEL_HISTORIAL_INTERVAL_MS.
 // ======================================================
 
 async function refrescarNivelContenedor(
   contenedorId
 ) {
+
+  // ====================================================
+  // 1. OBTENER MEDICION
+  // ====================================================
 
   const medicion =
     await medicionesService
@@ -132,6 +141,10 @@ async function refrescarNivelContenedor(
     return null;
   }
 
+
+  // ====================================================
+  // 2. VALIDAR PORCENTAJE
+  // ====================================================
 
   const porcentaje =
     Number(
@@ -152,18 +165,32 @@ async function refrescarNivelContenedor(
 
 
   // ====================================================
-  // 1. ACTUALIZAR CACHE
+  // 3. ACTUALIZAR CACHE + HISTORIAL
   // ====================================================
   //
-  // Se actualiza aunque el porcentaje
-  // sea exactamente igual al anterior.
+  // actualizarNivel():
   //
-  // Esto permite saber que la fuente
-  // continúa enviando información.
+  // - actualiza el cache inmediatamente;
+  // - conserva el ultimo nivel vigente;
+  // - guarda historial en lecturas
+  //   cuando ya paso el intervalo configurado;
+  //
+  // tipo_lectura:
+  // nivel_porcentaje
+  //
+  // unidad:
+  // %
+  //
+  // fuente:
+  // sensor
+  //
+  // estado:
+  // normal
+  //
   // ====================================================
 
   const nivelActualizado =
-    nivelCache
+    await nivelCache
       .actualizarNivel({
 
         contenedorId,
@@ -175,19 +202,23 @@ async function refrescarNivelContenedor(
 
         fechaActualizacion:
           new Date(),
+
       });
 
 
   // ====================================================
-  // 2. EVALUAR ALERTAS
+  // 4. EVALUAR ALERTAS
   // ====================================================
   //
   // NivelAlertas.service controla:
   //
-  // - primer aviso una sola vez;
-  // - segundo aviso una sola vez;
-  // - prioridad del segundo umbral;
-  // - estado independiente por contenedor.
+  // - primer aviso;
+  // - segundo aviso;
+  // - evitar duplicados;
+  // - prioridad del nivel alto;
+  // - estado independiente
+  //   por contenedor.
+  //
   // ====================================================
 
   const resultadoAlerta =
@@ -197,15 +228,14 @@ async function refrescarNivelContenedor(
         contenedorId,
 
         porcentaje,
+
       });
 
 
-  /*
-   * No imprimimos cada ciclo normal.
-   *
-   * Solo dejamos registro en consola
-   * cuando realmente se creó una alerta.
-   */
+  // ====================================================
+  // 5. LOG SOLO SI SE CREO UNA ALERTA
+  // ====================================================
+
   if (
     resultadoAlerta
       ?.alerta
@@ -218,6 +248,10 @@ async function refrescarNivelContenedor(
   }
 
 
+  // ====================================================
+  // RESPUESTA INTERNA
+  // ====================================================
+
   return {
 
     nivel:
@@ -225,6 +259,7 @@ async function refrescarNivelContenedor(
 
     alerta:
       resultadoAlerta,
+
   };
 }
 
@@ -235,11 +270,12 @@ async function refrescarNivelContenedor(
 
 async function ejecutarCiclo() {
 
-  /*
-   * Evita que una ejecución se monte
-   * sobre la siguiente.
-   */
-  if (ejecucionEnCurso) {
+  // Evita que una ejecucion
+  // se monte sobre la siguiente.
+
+  if (
+    ejecucionEnCurso
+  ) {
 
     return;
   }
@@ -270,13 +306,15 @@ async function ejecutarCiclo() {
 
       } catch (error) {
 
-        /*
-         * Si falla un contenedor,
-         * el otro continúa siendo evaluado.
-         */
+        // Si falla un contenedor,
+        // el otro sigue funcionando.
+
         console.error(
+
           `Error procesando nivel del contenedor ${contenedor.id_contenedor}:`,
+
           error.message
+
         );
       }
     }
@@ -285,8 +323,11 @@ async function ejecutarCiclo() {
   } catch (error) {
 
     console.error(
+
       "Error ejecutando monitor de niveles:",
+
       error.message
+
     );
 
 
@@ -304,7 +345,9 @@ async function ejecutarCiclo() {
 
 async function iniciarMonitor() {
 
-  if (timerMonitor) {
+  if (
+    timerMonitor
+  ) {
 
     return;
   }
@@ -314,7 +357,9 @@ async function iniciarMonitor() {
     obtenerProveedorConfigurado();
 
 
-  if (!proveedor) {
+  if (
+    !proveedor
+  ) {
 
     throw new Error(
       "Falta configurar MEDICION_NIVEL_PROVIDER."
@@ -323,7 +368,14 @@ async function iniciarMonitor() {
 
 
   // ====================================================
-  // DESARROLLO
+  // PROVEEDOR BASE DE DATOS
+  // ====================================================
+  //
+  // Utilizado principalmente para desarrollo.
+  //
+  // El backend consulta el proveedor
+  // cada cierto intervalo.
+  //
   // ====================================================
 
   if (
@@ -331,9 +383,8 @@ async function iniciarMonitor() {
     "base_datos"
   ) {
 
-    /*
-     * Primera ejecución inmediata.
-     */
+    // Primera ejecucion inmediata.
+
     await ejecutarCiclo();
 
 
@@ -346,8 +397,11 @@ async function iniciarMonitor() {
               (error) => {
 
                 console.error(
+
                   "Error inesperado en monitor de niveles:",
+
                   error.message
+
                 );
               }
             );
@@ -363,21 +417,39 @@ async function iniciarMonitor() {
 
 
   // ====================================================
-  // PRODUCCIÓN
+  // PROVEEDOR MODULO
   // ====================================================
   //
-  // Cuando MEDICION_NIVEL_PROVIDER=modulo:
+  // PRODUCCION:
   //
-  // NO hacemos polling desde Railway hacia el ESP8266.
+  // MEDICION_NIVEL_PROVIDER=modulo
   //
-  // El ESP8266 enviará el nivel al backend.
+  // NO hacemos polling desde Railway
+  // hacia el ESP8266.
   //
-  // En ese endpoint de recepción utilizaremos:
+  // El ESP8266 debe enviar el nivel
+  // hacia un endpoint del backend.
   //
-  // NivelActualCache.service
-  // NivelAlertas.service
+  // Ese endpoint debe ejecutar:
   //
-  // exactamente igual que aquí.
+  // await nivelCache.actualizarNivel(...)
+  //
+  // y luego:
+  //
+  // await nivelAlertasService.evaluarNivel(...)
+  //
+  // De esa forma:
+  //
+  // ESP8266
+  //   ↓
+  // endpoint backend
+  //   ↓
+  // cache
+  //   ↓
+  // historial
+  //   ↓
+  // alertas
+  //
   // ====================================================
 
   if (
@@ -385,9 +457,18 @@ async function iniciarMonitor() {
     "modulo"
   ) {
 
+    console.log(
+      "Monitor de nivel: proveedor modulo activo. Esperando lecturas enviadas por el ESP8266."
+    );
+
+
     return;
   }
 
+
+  // ====================================================
+  // PROVEEDOR INVALIDO
+  // ====================================================
 
   throw new Error(
     `Proveedor de nivel no válido: ${proveedor}`
@@ -401,7 +482,9 @@ async function iniciarMonitor() {
 
 function detenerMonitor() {
 
-  if (!timerMonitor) {
+  if (
+    !timerMonitor
+  ) {
 
     return;
   }
@@ -428,4 +511,5 @@ module.exports = {
   detenerMonitor,
 
   ejecutarCiclo,
+
 };
