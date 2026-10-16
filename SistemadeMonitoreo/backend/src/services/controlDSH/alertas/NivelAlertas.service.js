@@ -2,7 +2,6 @@ const pool = require(
   "../../../config/db"
 );
 
-
 const AlertaEnviosService = require(
   "./AlertaEnvios.service"
 );
@@ -23,12 +22,10 @@ const GRACIA_POST_RECOLECCION_MS =
     process.env
       .ALERTA_POST_RECOLECCION_GRACE_MS
   ) >= 0
-
     ? Number(
         process.env
           .ALERTA_POST_RECOLECCION_GRACE_MS
       )
-
     : 30000;
 
 
@@ -64,7 +61,7 @@ function toInt(value) {
     );
 
 
-  return Number.isFinite(
+  return Number.isSafeInteger(
     numero
   )
     ? numero
@@ -92,6 +89,39 @@ function redondear2(value) {
     Number(value)
       .toFixed(2)
   );
+}
+
+
+// ======================================================
+// OBTENER PLANTILLA META PARA ALERTAS DE NIVEL
+// ======================================================
+//
+// El nombre de la plantilla se controla por .env.
+//
+// Ejemplo:
+//
+// WHATSAPP_TEMPLATE_ALERTA=alerta_nivel_contenedor
+// ======================================================
+
+function obtenerPlantillaMetaNivel() {
+
+  const plantilla =
+    String(
+      process.env
+        .WHATSAPP_TEMPLATE_ALERTA ??
+      ""
+    ).trim();
+
+
+  if (!plantilla) {
+
+    throw new Error(
+      "WHATSAPP_TEMPLATE_ALERTA no está configurado."
+    );
+  }
+
+
+  return plantilla;
 }
 
 
@@ -128,10 +158,6 @@ async function obtenerConfiguracion(
 // ======================================================
 // ASEGURAR ESTADO DEL CONTENEDOR
 // ======================================================
-//
-// Si en el futuro se registra un contenedor nuevo,
-// esta función evita depender de un INSERT manual.
-// ======================================================
 
 async function asegurarEstadoContenedor(
   client,
@@ -165,13 +191,10 @@ async function asegurarEstadoContenedor(
 // OBTENER Y BLOQUEAR ESTADO
 // ======================================================
 //
-// FOR UPDATE evita que dos evaluaciones del mismo
-// contenedor creen la misma alerta simultáneamente.
+// FOR UPDATE evita que dos evaluaciones simultáneas
+// creen la misma alerta.
 //
-// También calculamos dentro de PostgreSQL cuánto tiempo
-// ha pasado desde fecha_reinicio.
-//
-// Esto evita depender del reloj del servidor Node.
+// ms_desde_reinicio se calcula en PostgreSQL.
 // ======================================================
 
 async function obtenerEstadoContenedor(
@@ -184,19 +207,26 @@ async function obtenerEstadoContenedor(
       `
         SELECT
           contenedor_id,
+
           primer_aviso_emitido,
           segundo_aviso_emitido,
+
           fecha_primer_aviso,
           fecha_segundo_aviso,
+
           ultima_recoleccion_id,
           fecha_reinicio,
           fecha_actualizacion,
 
           CASE
-            WHEN ultima_recoleccion_id IS NOT NULL
-             AND fecha_reinicio IS NOT NULL
+            WHEN ultima_recoleccion_id
+                   IS NOT NULL
+             AND fecha_reinicio
+                   IS NOT NULL
+
             THEN GREATEST(
               0,
+
               EXTRACT(
                 EPOCH FROM (
                   CURRENT_TIMESTAMP -
@@ -204,7 +234,9 @@ async function obtenerEstadoContenedor(
                 )
               ) * 1000
             )
+
             ELSE NULL
+
           END AS ms_desde_reinicio
 
         FROM estado_alertas_contenedor
@@ -283,7 +315,9 @@ async function obtenerContenedor(
           c.id_contenedor,
           c.codigo,
           c.id_tipo_residuo,
-          tr.nombre AS tipo_residuo
+
+          tr.nombre
+            AS tipo_residuo
 
         FROM contenedores c
 
@@ -329,6 +363,7 @@ async function crearAlertaNivel(
           contenedor_id,
           lectura_id,
           motivo,
+
           nivel_porcentaje,
           umbral_configurado,
 
@@ -349,6 +384,7 @@ async function crearAlertaNivel(
           $2,
           NULL,
           NULL,
+
           $3,
           $4,
 
@@ -401,31 +437,37 @@ async function crearAlertaNivel(
 
 
 // ======================================================
-// CREAR TRAZABILIDAD DEL ENVÍO WHATSAPP
+// CREAR ENVÍO WHATSAPP INICIAL
 // ======================================================
 //
-// IMPORTANTE:
+// Esta función NO llama a Meta.
 //
-// Todavía NO se envía nada a Meta.
-//
-// Únicamente se crea:
+// Únicamente crea:
 //
 // alertas_envios
 // canal = WHATSAPP
+// secuencia_notificacion = 1
 // intento = 1
 // estado = PENDIENTE
 //
-// Si no existe destinatario con WhatsApp configurado,
-// AlertaEnvios.service devuelve:
+// Los recordatorios posteriores utilizarán:
 //
-// SIN_DESTINATARIO_WHATSAPP
+// secuencia 2 = recordatorio 1
+// secuencia 3 = recordatorio 2
+// secuencia 4 = recordatorio 3
 //
-// y la alerta principal se conserva.
+// Los recordatorios NO se crean aquí.
+//
+// Se crearán posteriormente por el monitor encargado
+// de la programación de recordatorios.
 // ======================================================
 
 async function crearEnvioWhatsAppInicial(
   client,
-  alerta
+  {
+    alerta,
+    contenedor,
+  }
 ) {
 
   if (
@@ -439,27 +481,100 @@ async function crearEnvioWhatsAppInicial(
   }
 
 
-  const resultado =
-    await AlertaEnviosService
-      .crearEnvioWhatsAppPendiente(
-        client,
-        {
-          alertaId:
-            alerta.id,
+  if (
+    !contenedor ||
+    !contenedor.codigo ||
+    !contenedor.tipo_residuo
+  ) {
 
-          mensaje:
-            alerta.mensaje,
-
-          secuenciaNotificacion:
-            1,
-
-          intento:
-            1,
-        }
-      );
+    throw new Error(
+      "No existen datos válidos del contenedor para crear el envío de WhatsApp."
+    );
+  }
 
 
-  return resultado;
+  const porcentaje =
+    toNumber(
+      alerta
+        .nivel_porcentaje
+    );
+
+
+  if (
+    porcentaje === null ||
+    porcentaje < 0 ||
+    porcentaje > 100
+  ) {
+
+    throw new Error(
+      "El porcentaje de la alerta no es válido para WhatsApp."
+    );
+  }
+
+
+  // ====================================================
+  // VARIABLE {{1}}
+  // ====================================================
+  //
+  // Ejemplo:
+  //
+  // CNT-001 (Bioinfeccioso)
+  // ====================================================
+
+  const identificacionContenedor =
+    `${contenedor.codigo} (${contenedor.tipo_residuo})`;
+
+
+  // ====================================================
+  // VARIABLE {{2}}
+  // ====================================================
+  //
+  // Se envía solamente el valor.
+  //
+  // Ejemplo:
+  //
+  // 64.62
+  //
+  // No agregamos "%" porque la plantilla aprobada
+  // puede contener el símbolo alrededor de la variable.
+  // ====================================================
+
+  const porcentajeTexto =
+    String(
+      redondear2(
+        porcentaje
+      )
+    );
+
+
+  return AlertaEnviosService
+    .crearEnvioWhatsAppPendiente(
+      client,
+      {
+        alertaId:
+          alerta.id,
+
+        mensaje:
+          alerta.mensaje,
+
+        plantillaMeta:
+          obtenerPlantillaMetaNivel(),
+
+        parametrosPlantilla: [
+          identificacionContenedor,
+          porcentajeTexto,
+        ],
+
+        secuenciaNotificacion:
+          1,
+
+        intento:
+          1,
+
+        fechaProgramadaIntento:
+          null,
+      }
+    );
 }
 
 
@@ -477,7 +592,8 @@ async function marcarPrimerAviso(
       UPDATE estado_alertas_contenedor
 
       SET
-        primer_aviso_emitido = TRUE,
+        primer_aviso_emitido =
+          TRUE,
 
         fecha_primer_aviso =
           CURRENT_TIMESTAMP,
@@ -498,8 +614,8 @@ async function marcarPrimerAviso(
 // MARCAR SEGUNDO AVISO
 // ======================================================
 //
-// Si el nivel saltó directamente al segundo umbral,
-// también marcamos el primero como procesado.
+// Si el nivel salta directamente al segundo umbral,
+// también se considera procesado el primero.
 //
 // Ejemplo:
 //
@@ -572,7 +688,10 @@ async function evaluarNivel({
     );
 
 
-  if (!contenedorIdNumero) {
+  if (
+    !contenedorIdNumero ||
+    contenedorIdNumero <= 0
+  ) {
 
     throw new Error(
       "Contenedor inválido al evaluar alertas de nivel."
@@ -690,6 +809,8 @@ async function evaluarNivel({
       primerUmbral === null ||
       segundoUmbral === null ||
       primerUmbral < 0 ||
+      primerUmbral > 100 ||
+      segundoUmbral < 0 ||
       segundoUmbral > 100 ||
       primerUmbral >=
         segundoUmbral
@@ -790,17 +911,10 @@ async function evaluarNivel({
     // PRIORIDAD 1:
     // SEGUNDO UMBRAL
     // ==================================================
-    //
-    // Ejemplo:
-    //
-    // 45 % -> 75 %
-    //
-    // Solo NIVEL_ALTO.
-    // ==================================================
 
     if (
       porcentajeNumero >=
-        segundoUmbral
+      segundoUmbral
     ) {
 
       if (
@@ -868,14 +982,14 @@ async function evaluarNivel({
       // ================================================
       // 2. CREAR ENVÍO WHATSAPP PENDIENTE
       // ================================================
-      //
-      // Todavía NO llama a Meta.
-      // ================================================
 
       const envioWhatsApp =
         await crearEnvioWhatsAppInicial(
           client,
-          alerta
+          {
+            alerta,
+            contenedor,
+          }
         );
 
 
@@ -889,7 +1003,7 @@ async function evaluarNivel({
 
         estado
           .primer_aviso_emitido ===
-          true
+        true
       );
 
 
@@ -925,7 +1039,7 @@ async function evaluarNivel({
 
     if (
       porcentajeNumero >=
-        primerUmbral
+      primerUmbral
     ) {
 
       if (
@@ -997,7 +1111,10 @@ async function evaluarNivel({
       const envioWhatsApp =
         await crearEnvioWhatsAppInicial(
           client,
-          alerta
+          {
+            alerta,
+            contenedor,
+          }
         );
 
 

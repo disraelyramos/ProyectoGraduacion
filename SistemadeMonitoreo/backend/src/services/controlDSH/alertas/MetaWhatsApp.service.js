@@ -1,18 +1,6 @@
 // ======================================================
 // META WHATSAPP CLOUD API
 // ======================================================
-//
-// Responsabilidad:
-//
-// Enviar una plantilla de WhatsApp mediante Meta.
-//
-// NO realiza consultas a PostgreSQL.
-// NO decide quién recibe las alertas.
-// NO modifica el estado de alertas_envios.
-//
-// Esas responsabilidades pertenecen al módulo
-// de alertas y al procesador de envíos.
-// ======================================================
 
 
 // ======================================================
@@ -42,33 +30,82 @@ class MetaWhatsAppError extends Error {
     this.codigoMeta =
       codigoMeta;
 
+    // Compatibilidad con ProcesadorEnvios.service.js
+    this.codigo =
+      codigoMeta;
+
     this.reintentable =
       reintentable;
 
     this.resultadoDesconocido =
       resultadoDesconocido;
   }
-
 }
 
 
 // ======================================================
-// OBTENER CONFIGURACIÓN
+// ENTERO POSITIVO
+// ======================================================
+
+function obtenerEnteroPositivo(
+  valor,
+  predeterminado
+) {
+
+  const numero =
+    Number.parseInt(
+      String(
+        valor ?? ""
+      ),
+      10
+    );
+
+
+  if (
+    !Number.isFinite(
+      numero
+    ) ||
+    numero <= 0
+  ) {
+
+    return predeterminado;
+  }
+
+
+  return numero;
+}
+
+
+// ======================================================
+// CONFIGURACIÓN META
 // ======================================================
 
 function obtenerConfiguracionMeta() {
 
   const token =
-    process.env.WHATSAPP_ACCESS_TOKEN
+    process.env
+      .WHATSAPP_ACCESS_TOKEN
       ?.trim();
+
 
   const phoneNumberId =
-    process.env.WHATSAPP_PHONE_NUMBER_ID
+    process.env
+      .WHATSAPP_PHONE_NUMBER_ID
       ?.trim();
 
+
   const version =
-    process.env.WHATSAPP_API_VERSION
+    process.env
+      .WHATSAPP_API_VERSION
       ?.trim();
+
+
+  const timeoutMs =
+    obtenerEnteroPositivo(
+      process.env
+        .WHATSAPP_HTTP_TIMEOUT_MS,
+      15000
+    );
 
 
   if (
@@ -84,12 +121,25 @@ function obtenerConfiguracionMeta() {
 
 
   if (
-    !/^\d+$/.test(phoneNumberId) ||
-    !/^v\d+\.\d+$/.test(version)
+    !/^\d+$/.test(
+      phoneNumberId
+    )
   ) {
 
     throw new MetaWhatsAppError(
-      "La configuración técnica de WhatsApp contiene valores inválidos."
+      "WHATSAPP_PHONE_NUMBER_ID no es válido."
+    );
+  }
+
+
+  if (
+    !/^v\d+\.\d+$/.test(
+      version
+    )
+  ) {
+
+    throw new MetaWhatsAppError(
+      "WHATSAPP_API_VERSION no es válida."
     );
   }
 
@@ -98,28 +148,55 @@ function obtenerConfiguracionMeta() {
 
     token,
 
+    phoneNumberId,
+
+    version,
+
+    timeoutMs,
+
     url:
       `https://graph.facebook.com/${version}/${phoneNumberId}/messages`,
-
   };
-
 }
 
 
 // ======================================================
 // VALIDAR DESTINATARIO
 // ======================================================
+//
+// BD:
+//
+// +50237068088
+//
+// META:
+//
+// 50237068088
+// ======================================================
 
-function validarDestinatario(valor) {
+function validarDestinatario(
+  valor
+) {
 
   const numero =
-    String(valor ?? "")
+    String(
+      valor ??
+      ""
+    )
       .trim()
-      .replace(/^\+/, "");
+      .replace(
+        /^\+/,
+        ""
+      )
+      .replace(
+        /\s+/g,
+        ""
+      );
 
 
   if (
-    !/^[1-9]\d{7,14}$/.test(numero)
+    !/^[1-9]\d{7,14}$/.test(
+      numero
+    )
   ) {
 
     throw new MetaWhatsAppError(
@@ -129,7 +206,64 @@ function validarDestinatario(valor) {
 
 
   return numero;
+}
 
+
+// ======================================================
+// RESOLVER PARÁMETROS
+// ======================================================
+//
+// Compatibilidad con:
+//
+// parametrosCuerpo
+// parametrosBody
+// parametros
+//
+// ProcesadorEnvios actualmente envía:
+//
+// parametros
+// parametrosBody
+//
+// Por lo tanto este servicio admite ambos.
+// ======================================================
+
+function resolverParametros({
+  parametrosCuerpo,
+  parametrosBody,
+  parametros,
+}) {
+
+  if (
+    Array.isArray(
+      parametrosCuerpo
+    )
+  ) {
+
+    return parametrosCuerpo;
+  }
+
+
+  if (
+    Array.isArray(
+      parametrosBody
+    )
+  ) {
+
+    return parametrosBody;
+  }
+
+
+  if (
+    Array.isArray(
+      parametros
+    )
+  ) {
+
+    return parametros;
+  }
+
+
+  return [];
 }
 
 
@@ -143,9 +277,25 @@ function validarPlantilla(
   parametrosCuerpo
 ) {
 
+  const nombrePlantilla =
+    String(
+      plantilla ??
+      ""
+    ).trim();
+
+
+  const codigoIdioma =
+    String(
+      idioma ??
+      ""
+    ).trim();
+
+
   if (
-    typeof plantilla !== "string" ||
-    !/^[a-z0-9_]+$/.test(plantilla)
+    !nombrePlantilla ||
+    !/^[a-z0-9_]+$/.test(
+      nombrePlantilla
+    )
   ) {
 
     throw new MetaWhatsAppError(
@@ -155,20 +305,22 @@ function validarPlantilla(
 
 
   if (
-    typeof idioma !== "string" ||
+    !codigoIdioma ||
     !/^[a-z]{2,3}(?:_[A-Z]{2})?$/.test(
-      idioma
+      codigoIdioma
     )
   ) {
 
     throw new MetaWhatsAppError(
-      "Debe indicar el idioma de la plantilla."
+      "Debe indicar un idioma válido para la plantilla."
     );
   }
 
 
   if (
-    !Array.isArray(parametrosCuerpo)
+    !Array.isArray(
+      parametrosCuerpo
+    )
   ) {
 
     throw new MetaWhatsAppError(
@@ -177,63 +329,90 @@ function validarPlantilla(
   }
 
 
-  return parametrosCuerpo.map(
-    (valor) => {
+  const parametros =
+    parametrosCuerpo.map(
+      (
+        valor,
+        index
+      ) => {
 
-      const texto =
-        String(valor ?? "").trim();
+        const texto =
+          String(
+            valor ??
+            ""
+          ).trim();
 
 
-      if (!texto) {
+        if (!texto) {
 
-        throw new MetaWhatsAppError(
-          "Los parámetros de la plantilla no pueden estar vacíos."
-        );
+          throw new MetaWhatsAppError(
+            `El parámetro ${
+              index + 1
+            } de la plantilla está vacío.`
+          );
+        }
+
+
+        return {
+          type:
+            "text",
+
+          text:
+            texto,
+        };
       }
+    );
 
 
-      return {
+  return {
 
-        type: "text",
+    nombrePlantilla,
 
-        text: texto,
+    codigoIdioma,
 
-      };
-
-    }
-  );
-
+    parametros,
+  };
 }
 
 
 // ======================================================
-// ENVIAR PLANTILLA DE WHATSAPP
+// ENVIAR PLANTILLA WHATSAPP
 // ======================================================
 
-async function enviarPlantillaWhatsApp({
+async function enviarPlantillaWhatsApp(
+  {
+    destinatario,
 
-  destinatario,
+    plantilla,
 
-  plantilla,
+    nombrePlantilla,
 
-  idioma,
+    idioma,
 
-  parametrosCuerpo = [],
+    codigoIdioma,
 
-}) {
+    parametrosCuerpo,
+
+    parametrosBody,
+
+    parametros,
+  }
+) {
 
   // ====================================================
-  // 1. VALIDAR CONFIGURACIÓN
+  // 1. CONFIGURACIÓN
   // ====================================================
 
   const {
     token,
     url,
-  } = obtenerConfiguracionMeta();
+    timeoutMs,
+  } =
+    obtenerConfiguracionMeta();
 
 
   // ====================================================
-  // 2. VALIDAR DESTINATARIO Y PLANTILLA
+  // 2. DESTINATARIO
   // ====================================================
 
   const numero =
@@ -242,66 +421,95 @@ async function enviarPlantillaWhatsApp({
     );
 
 
-  const parametros =
+  // ====================================================
+  // 3. RESOLVER ALIAS
+  // ====================================================
+
+  const plantillaFinal =
+    String(
+      plantilla ||
+      nombrePlantilla ||
+      ""
+    ).trim();
+
+
+  const idiomaFinal =
+    String(
+      idioma ||
+      codigoIdioma ||
+      ""
+    ).trim();
+
+
+  const parametrosFinales =
+    resolverParametros({
+      parametrosCuerpo,
+      parametrosBody,
+      parametros,
+    });
+
+
+  // ====================================================
+  // 4. VALIDAR PLANTILLA
+  // ====================================================
+
+  const {
+    nombrePlantilla:
+      nombreValidado,
+
+    codigoIdioma:
+      idiomaValidado,
+
+    parametros:
+      parametrosValidados,
+  } =
     validarPlantilla(
-      plantilla,
-      idioma,
-      parametrosCuerpo
+      plantillaFinal,
+      idiomaFinal,
+      parametrosFinales
     );
 
 
   // ====================================================
-  // 3. CONSTRUIR MENSAJE
+  // 5. CONSTRUIR TEMPLATE
   // ====================================================
 
   const template = {
 
     name:
-      plantilla,
+      nombreValidado,
 
     language: {
-
       code:
-        idioma,
-
+        idiomaValidado,
     },
-
   };
 
 
-  /*
-   * Solamente se agrega el componente body
-   * cuando la plantilla utiliza variables.
-   *
-   * Ejemplo:
-   *
-   * Contenedor: {{1}}
-   * Porcentaje: {{2}}
-   *
-   * Una plantilla sin variables no necesita
-   * enviar components.
-   */
+  // ====================================================
+  // VARIABLES DEL BODY
+  // ====================================================
 
   if (
-    parametros.length > 0
+    parametrosValidados.length >
+    0
   ) {
 
     template.components = [
-
       {
-
         type:
           "body",
 
         parameters:
-          parametros,
-
+          parametrosValidados,
       },
-
     ];
-
   }
 
+
+  // ====================================================
+  // 6. PAYLOAD
+  // ====================================================
 
   const payload = {
 
@@ -318,24 +526,11 @@ async function enviarPlantillaWhatsApp({
       "template",
 
     template,
-
   };
 
 
   // ====================================================
-  // 4. ENVIAR SOLICITUD
-  // ====================================================
-  //
-  // Timeout de 15 segundos.
-  //
-  // IMPORTANTE:
-  //
-  // Si ocurre un timeout, no sabemos con certeza
-  // si Meta alcanzó a recibir la solicitud.
-  //
-  // Por eso marcamos el resultado como desconocido
-  // para que el futuro procesador NO reintente
-  // automáticamente sin revisar ese caso.
+  // 7. TIMEOUT
   // ====================================================
 
   const controller =
@@ -344,8 +539,12 @@ async function enviarPlantillaWhatsApp({
 
   const timeout =
     setTimeout(
-      () => controller.abort(),
-      15000
+      () => {
+
+        controller.abort();
+
+      },
+      timeoutMs
     );
 
 
@@ -353,65 +552,65 @@ async function enviarPlantillaWhatsApp({
   let data;
 
 
+  // ====================================================
+  // 8. ENVIAR A META
+  // ====================================================
+
   try {
 
-    response = await fetch(
+    response =
+      await fetch(
+        url,
+        {
+          method:
+            "POST",
 
-      url,
+          headers: {
 
-      {
+            Authorization:
+              `Bearer ${token}`,
 
-        method:
-          "POST",
+            "Content-Type":
+              "application/json",
+          },
 
-        headers: {
+          body:
+            JSON.stringify(
+              payload
+            ),
 
-          Authorization:
-            `Bearer ${token}`,
-
-          "Content-Type":
-            "application/json",
-
-        },
-
-        body:
-          JSON.stringify(
-            payload
-          ),
-
-        signal:
-          controller.signal,
-
-      }
-
-    );
+          signal:
+            controller.signal,
+        }
+      );
 
 
     data =
-      await response.json()
-        .catch(() => ({}));
+      await response
+        .json()
+        .catch(
+          () => ({})
+        );
 
 
-  } catch (error) {
-
-    /*
-     * No registramos el token ni los datos
-     * completos de la petición.
-     */
+  } catch (
+    error
+  ) {
 
     throw new MetaWhatsAppError(
 
-      controller.signal.aborted
+      controller
+        .signal
+        .aborted
+
         ? "La solicitud a Meta superó el tiempo de espera."
+
         : "No fue posible completar la conexión con Meta.",
 
       {
-
         resultadoDesconocido:
           true,
-
       }
-
     );
 
 
@@ -420,21 +619,49 @@ async function enviarPlantillaWhatsApp({
     clearTimeout(
       timeout
     );
-
   }
 
 
   // ====================================================
-  // 5. META RECHAZÓ LA SOLICITUD
+  // 9. META RECHAZÓ
   // ====================================================
 
   if (
     !response.ok
   ) {
 
+    const errorMeta =
+      data?.error ||
+      {};
+
+
     const codigoMeta =
-      data?.error?.code ??
+      errorMeta.code ??
       null;
+
+
+    const detalleMeta =
+      String(
+        errorMeta
+          ?.error_data
+          ?.details ||
+        ""
+      ).trim();
+
+
+    const mensajeBase =
+      String(
+        errorMeta.message ||
+        "Meta rechazó el mensaje de WhatsApp."
+      ).trim();
+
+
+    const mensaje =
+      detalleMeta
+
+        ? `${mensajeBase} | ${detalleMeta}`
+
+        : mensajeBase;
 
 
     const reintentable =
@@ -443,12 +670,8 @@ async function enviarPlantillaWhatsApp({
 
 
     throw new MetaWhatsAppError(
-
-      data?.error?.message ||
-      "Meta rechazó el mensaje de WhatsApp.",
-
+      mensaje,
       {
-
         statusCode:
           response.status,
 
@@ -456,19 +679,28 @@ async function enviarPlantillaWhatsApp({
 
         reintentable,
 
+        resultadoDesconocido:
+          false,
       }
-
     );
-
   }
 
 
   // ====================================================
-  // 6. OBTENER IDENTIFICADOR DEL MENSAJE
+  // 10. MESSAGE ID
   // ====================================================
 
+  const mensaje =
+    data
+      ?.messages
+      ?.[0];
+
+
   const mensajeId =
-    data?.messages?.[0]?.id;
+    String(
+      mensaje?.id ||
+      ""
+    ).trim();
 
 
   if (
@@ -476,37 +708,20 @@ async function enviarPlantillaWhatsApp({
   ) {
 
     throw new MetaWhatsAppError(
-
-      "Meta respondió, pero no devolvió el identificador del mensaje.",
-
+      "Meta respondió correctamente, pero no devolvió el identificador del mensaje.",
       {
-
         statusCode:
           response.status,
 
         resultadoDesconocido:
           true,
-
       }
-
     );
-
   }
 
 
   // ====================================================
-  // 7. RESPUESTA
-  // ====================================================
-  //
-  // Meta aceptó la solicitud.
-  //
-  // Esto NO significa todavía:
-  //
-  // - Que el mensaje fue entregado.
-  // - Que el destinatario lo leyó.
-  //
-  // Esos estados se comprobarán posteriormente
-  // mediante los webhooks oficiales.
+  // 11. RESPUESTA
   // ====================================================
 
   return {
@@ -518,12 +733,16 @@ async function enviarPlantillaWhatsApp({
       mensajeId,
 
     estadoMeta:
-      data?.messages?.[0]
-        ?.message_status ||
+      mensaje
+        ?.message_status ??
       null,
 
-  };
+    destinatario:
+      numero,
 
+    plantilla:
+      nombreValidado,
+  };
 }
 
 
@@ -536,5 +755,4 @@ module.exports = {
   enviarPlantillaWhatsApp,
 
   MetaWhatsAppError,
-
 };

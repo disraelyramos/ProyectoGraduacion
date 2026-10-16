@@ -1,7 +1,14 @@
-const express = require("express");
-const cors = require("cors");
+const express = require(
+  "express"
+);
 
-require("dotenv").config();
+const cors = require(
+  "cors"
+);
+
+require(
+  "dotenv"
+).config();
 
 
 // ======================================================
@@ -16,6 +23,14 @@ const alertasProgramadasMonitor = require(
   "./src/services/alertasProgramadas/AlertasProgramadasMonitor.service"
 );
 
+const whatsappMonitor = require(
+  "./src/services/controlDSH/alertas/WhatsAppMonitor.service"
+);
+
+const recordatoriosWhatsAppMonitor = require(
+  "./src/services/controlDSH/alertas/RecordatoriosWhatsApp.service"
+);
+
 const sesionesLimpieza = require(
   "./src/services/Auth/SesionesLimpieza.service"
 );
@@ -25,19 +40,46 @@ const resumenRecoleccionRoutes = require(
 );
 
 
+// ======================================================
+// MONITOR DE MACHINE LEARNING
+// ======================================================
+
+const {
+  iniciarMonitorPredicciones,
+  detenerMonitorPredicciones,
+} = require(
+  "./src/services/MachineLearning/prediccionMonitor.service"
+);
+
+
+// ======================================================
+// CORS - ORÍGENES PERMITIDOS
+// ======================================================
 
 const origenesPermitidos = String(
-  process.env.CORS_ALLOWED_ORIGINS || ""
+  process.env.CORS_ALLOWED_ORIGINS ||
+  ""
 )
   .split(",")
   .map(
     (origen) =>
-      origen.trim().replace(/\/+$/, "")
+      origen
+        .trim()
+        .replace(
+          /\/+$/,
+          ""
+        )
   )
-  .filter(Boolean);
+  .filter(
+    Boolean
+  );
 
 
-if (origenesPermitidos.length === 0) {
+if (
+  origenesPermitidos.length ===
+  0
+) {
+
   throw new Error(
     "Falta configurar CORS_ALLOWED_ORIGINS en el entorno del backend."
   );
@@ -48,7 +90,8 @@ if (origenesPermitidos.length === 0) {
 // CREAR APLICACIÓN
 // ======================================================
 
-const app = express();
+const app =
+  express();
 
 
 // ======================================================
@@ -57,20 +100,53 @@ const app = express();
 
 app.use(
   cors({
-    origin: (origin, callback) => {
+    origin:
+      (
+        origin,
+        callback
+      ) => {
 
-      // Permitir solicitudes sin Origin:
-      // ESP8266 y herramientas de backend.
+        // ==================================================
+        // PERMITIR SOLICITUDES SIN ORIGIN
+        // ==================================================
+        //
+        // ESP8266 y herramientas de backend.
+        // ==================================================
 
-      if (!origin) {
-        return callback(null, true);
-      }
+        if (
+          !origin
+        ) {
 
-      const permitido =
-        origenesPermitidos.includes(origin);
+          return callback(
+            null,
+            true
+          );
+        }
 
-      return callback(null, permitido);
-    },
+
+        const origenNormalizado =
+          String(
+            origin
+          )
+            .trim()
+            .replace(
+              /\/+$/,
+              ""
+            );
+
+
+        const permitido =
+          origenesPermitidos
+            .includes(
+              origenNormalizado
+            );
+
+
+        return callback(
+          null,
+          permitido
+        );
+      },
   })
 );
 
@@ -79,7 +155,9 @@ app.use(
 // JSON
 // ======================================================
 
-app.use(express.json());
+app.use(
+  express.json()
+);
 
 
 // ======================================================
@@ -90,7 +168,9 @@ const sanitize = require(
   "./src/middlewares/sanitize"
 );
 
-app.use(sanitize);
+app.use(
+  sanitize
+);
 
 
 // ======================================================
@@ -157,11 +237,7 @@ const prediccionRoutes = require(
   "./src/routes/MachineLearning/prediccion.routes"
 );
 
-const {
-  iniciarMonitorPredicciones,
-} = require(
-  "./src/services/MachineLearning/prediccionMonitor.service"
-);
+
 // ======================================================
 // RUTAS GENERALES
 // ======================================================
@@ -308,6 +384,7 @@ app.use(
   prediccionRoutes
 );
 
+
 // ======================================================
 // RUTA PROTEGIDA DE PRUEBA
 // ======================================================
@@ -316,16 +393,20 @@ const authMiddleware = require(
   "./src/middlewares/auth.middleware"
 );
 
+
 app.get(
   "/api/protegida",
   authMiddleware,
-  (req, res) => {
+
+  (
+    req,
+    res
+  ) => {
 
     res.json({
       message:
         `Hola ${req.user.id_usuario}, tienes acceso`,
     });
-
   }
 );
 
@@ -336,12 +417,15 @@ app.get(
 
 app.get(
   "/",
-  (req, res) => {
+
+  (
+    req,
+    res
+  ) => {
 
     res.send(
       "API funcionando"
     );
-
   }
 );
 
@@ -351,11 +435,13 @@ app.get(
 // ======================================================
 
 const PORT =
-  process.env.PORT || 3001;
+  process.env.PORT ||
+  3001;
 
 
 app.listen(
   PORT,
+
   async () => {
 
     console.log(
@@ -371,17 +457,19 @@ app.listen(
 
       iniciarMonitorPredicciones();
 
+
       console.log(
         "Monitor predictivo iniciado correctamente."
       );
 
-    } catch (error) {
+    } catch (
+      error
+    ) {
 
       console.error(
         "No fue posible iniciar el monitor predictivo:",
         error.message
       );
-
     }
 
 
@@ -394,17 +482,19 @@ app.listen(
       await nivelMonitor
         .iniciarMonitor();
 
+
       console.log(
         "Monitor de nivel iniciado correctamente."
       );
 
-    } catch (error) {
+    } catch (
+      error
+    ) {
 
       console.error(
         "No fue posible iniciar el monitor de nivel:",
         error.message
       );
-
     }
 
 
@@ -417,22 +507,74 @@ app.listen(
       await alertasProgramadasMonitor
         .iniciarMonitor();
 
+
       console.log(
         "Monitor de alertas programadas iniciado correctamente."
       );
 
-    } catch (error) {
+    } catch (
+      error
+    ) {
 
       console.error(
         "No fue posible iniciar el monitor de alertas programadas:",
         error.message
       );
-
     }
 
 
     // ==================================================
-    // 4. LIMPIEZA DE SESIONES
+    // 4. MONITOR DE ENVÍOS WHATSAPP
+    // ==================================================
+
+    try {
+
+      await whatsappMonitor
+        .iniciarMonitor();
+
+
+      console.log(
+        "Servicio de WhatsApp inicializado correctamente."
+      );
+
+    } catch (
+      error
+    ) {
+
+      console.error(
+        "No fue posible iniciar el monitor de WhatsApp:",
+        error.message
+      );
+    }
+
+
+    // ==================================================
+    // 5. MONITOR DE RECORDATORIOS WHATSAPP
+    // ==================================================
+
+    try {
+
+      await recordatoriosWhatsAppMonitor
+        .iniciarMonitor();
+
+
+      console.log(
+        "Monitor de recordatorios WhatsApp iniciado correctamente."
+      );
+
+    } catch (
+      error
+    ) {
+
+      console.error(
+        "No fue posible iniciar el monitor de recordatorios WhatsApp:",
+        error.message
+      );
+    }
+
+
+    // ==================================================
+    // 6. LIMPIEZA DE SESIONES
     // ==================================================
 
     try {
@@ -440,19 +582,20 @@ app.listen(
       await sesionesLimpieza
         .iniciarLimpieza();
 
+
       console.log(
         "Servicio de limpieza de sesiones iniciado correctamente."
       );
 
-    } catch (error) {
+    } catch (
+      error
+    ) {
 
       console.error(
         "No fue posible iniciar la limpieza de sesiones:",
         error.message
       );
-
     }
-
   }
 );
 
@@ -463,21 +606,141 @@ app.listen(
 
 process.on(
   "SIGINT",
+
   () => {
 
-    detenerMonitorPredicciones();
+    // ==================================================
+    // DETENER MONITOR PREDICTIVO
+    // ==================================================
 
-    process.exit(0);
+    try {
+
+      detenerMonitorPredicciones();
+
+    } catch (
+      error
+    ) {
+
+      console.error(
+        "Error deteniendo monitor predictivo:",
+        error.message
+      );
+    }
+
+
+    // ==================================================
+    // DETENER MONITOR WHATSAPP
+    // ==================================================
+
+    try {
+
+      whatsappMonitor
+        .detenerMonitor();
+
+    } catch (
+      error
+    ) {
+
+      console.error(
+        "Error deteniendo monitor de WhatsApp:",
+        error.message
+      );
+    }
+
+
+    // ==================================================
+    // DETENER RECORDATORIOS WHATSAPP
+    // ==================================================
+
+    try {
+
+      recordatoriosWhatsAppMonitor
+        .detenerMonitor();
+
+    } catch (
+      error
+    ) {
+
+      console.error(
+        "Error deteniendo monitor de recordatorios WhatsApp:",
+        error.message
+      );
+    }
+
+
+    process.exit(
+      0
+    );
   }
 );
 
 
 process.on(
   "SIGTERM",
+
   () => {
 
-    detenerMonitorPredicciones();
+    // ==================================================
+    // DETENER MONITOR PREDICTIVO
+    // ==================================================
 
-    process.exit(0);
+    try {
+
+      detenerMonitorPredicciones();
+
+    } catch (
+      error
+    ) {
+
+      console.error(
+        "Error deteniendo monitor predictivo:",
+        error.message
+      );
+    }
+
+
+    // ==================================================
+    // DETENER MONITOR WHATSAPP
+    // ==================================================
+
+    try {
+
+      whatsappMonitor
+        .detenerMonitor();
+
+    } catch (
+      error
+    ) {
+
+      console.error(
+        "Error deteniendo monitor de WhatsApp:",
+        error.message
+      );
+    }
+
+
+    // ==================================================
+    // DETENER RECORDATORIOS WHATSAPP
+    // ==================================================
+
+    try {
+
+      recordatoriosWhatsAppMonitor
+        .detenerMonitor();
+
+    } catch (
+      error
+    ) {
+
+      console.error(
+        "Error deteniendo monitor de recordatorios WhatsApp:",
+        error.message
+      );
+    }
+
+
+    process.exit(
+      0
+    );
   }
 );

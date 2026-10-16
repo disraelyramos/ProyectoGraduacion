@@ -1,25 +1,26 @@
-const pool = require(
-  "../../../config/db"
-);
+// backend/src/services/alertas/AlertaEnvios.service.js
 
 
 // ======================================================
 // CONSTANTES
 // ======================================================
 
-const CANAL = {
-  WHATSAPP:
-    "WHATSAPP",
+const CANAL_WHATSAPP =
+  "WHATSAPP";
 
-  EMAIL:
-    "EMAIL",
-};
+const ESTADO_PENDIENTE =
+  "PENDIENTE";
 
 
-const ESTADO_ENVIO = {
-  PENDIENTE:
-    "PENDIENTE",
-};
+// Aviso inicial + 3 recordatorios.
+const MAX_SECUENCIA_NOTIFICACION =
+  4;
+
+
+// Cada aviso o recordatorio puede intentar
+// enviarse hasta 3 veces por WhatsApp.
+const MAX_INTENTOS_WHATSAPP =
+  3;
 
 
 // ======================================================
@@ -35,7 +36,7 @@ function toInt(value) {
     );
 
 
-  return Number.isFinite(
+  return Number.isSafeInteger(
     numero
   )
     ? numero
@@ -44,24 +45,260 @@ function toInt(value) {
 
 
 // ======================================================
-// OBTENER DESTINATARIO ACTIVO
+// VALIDAR CLIENTE DE BD
+// ======================================================
+
+function validarCliente(
+  client
+) {
+
+  if (
+    !client ||
+    typeof client.query !==
+      "function"
+  ) {
+
+    throw new Error(
+      "No existe una conexión válida a la base de datos."
+    );
+  }
+}
+
+
+// ======================================================
+// NORMALIZAR PLANTILLA META
+// ======================================================
+
+function normalizarPlantillaMeta(
+  value
+) {
+
+  const plantilla =
+    String(
+      value ?? ""
+    )
+      .trim()
+      .toLowerCase();
+
+
+  if (!plantilla) {
+
+    throw new Error(
+      "La plantilla de Meta es obligatoria."
+    );
+  }
+
+
+  if (
+    !/^[a-z0-9_]+$/.test(
+      plantilla
+    )
+  ) {
+
+    throw new Error(
+      "El nombre de la plantilla de Meta no es válido."
+    );
+  }
+
+
+  return plantilla;
+}
+
+
+// ======================================================
+// NORMALIZAR PARÁMETROS DE PLANTILLA
+// ======================================================
+
+function normalizarParametrosPlantilla(
+  parametros
+) {
+
+  if (
+    !Array.isArray(
+      parametros
+    )
+  ) {
+
+    throw new Error(
+      "Los parámetros de la plantilla de Meta deben enviarse como un arreglo."
+    );
+  }
+
+
+  if (
+    parametros.length === 0
+  ) {
+
+    throw new Error(
+      "La plantilla de Meta requiere parámetros."
+    );
+  }
+
+
+  if (
+    parametros.length > 10
+  ) {
+
+    throw new Error(
+      "La plantilla contiene demasiados parámetros."
+    );
+  }
+
+
+  return parametros.map(
+    (
+      parametro,
+      index
+    ) => {
+
+      const texto =
+        String(
+          parametro ?? ""
+        ).trim();
+
+
+      if (!texto) {
+
+        throw new Error(
+          `El parámetro ${
+            index + 1
+          } de la plantilla está vacío.`
+        );
+      }
+
+
+      return texto;
+    }
+  );
+}
+
+
+// ======================================================
+// NORMALIZAR FECHA PROGRAMADA
+// ======================================================
+
+function normalizarFechaProgramada(
+  value
+) {
+
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
+
+    return null;
+  }
+
+
+  const fecha =
+    value instanceof Date
+      ? value
+      : new Date(value);
+
+
+  if (
+    Number.isNaN(
+      fecha.getTime()
+    )
+  ) {
+
+    throw new Error(
+      "La fecha programada del envío no es válida."
+    );
+  }
+
+
+  return fecha.toISOString();
+}
+
+
+// ======================================================
+// CREAR CONTENIDO ESTRUCTURADO
 // ======================================================
 //
-// No se utiliza:
+// contenido_enviado continúa siendo TEXT en la BD,
+// pero guardaremos JSON.
 //
-// id_usuario = 5
-// usuario = juanito
-// número hardcodeado
+// Esto permite conservar:
 //
-// Durante las pruebas encontrará al usuario actual.
+// - mensaje humano;
+// - parámetros exactos enviados a Meta.
 //
-// Cuando cambie el encargado, solamente se actualiza
-// el usuario correspondiente en la base de datos.
+// Así el procesador NO tendrá que interpretar
+// cadenas de texto para reconstruir variables.
+// ======================================================
+
+function crearContenidoEstructurado({
+  mensaje,
+  parametrosPlantilla,
+}) {
+
+  const contenido =
+    String(
+      mensaje ?? ""
+    ).trim();
+
+
+  if (!contenido) {
+
+    throw new Error(
+      "El contenido de la notificación está vacío."
+    );
+  }
+
+
+  return JSON.stringify({
+    version:
+      1,
+
+    mensaje:
+      contenido,
+
+    parametros:
+      parametrosPlantilla,
+  });
+}
+
+
+// ======================================================
+// OBTENER DESTINATARIO WHATSAPP ACTIVO
+// ======================================================
+//
+// El sistema contempla un único Inspector receptor.
+//
+// No se utiliza ningún número proveniente de .env.
+// El teléfono siempre procede de usuarios.
+// ======================================================
+
+// ======================================================
+// OBTENER DESTINATARIO WHATSAPP ACTIVO
+// ======================================================
+//
+// NO se quema:
+//
+// - id_usuario
+// - rol_id
+// - número de teléfono
+//
+// El destinatario se obtiene completamente desde BD.
+//
+// Regla:
+//
+// Debe existir UN único usuario:
+// - activo
+// - con telefono_whatsapp configurado
+//
 // ======================================================
 
 async function obtenerDestinatarioWhatsApp(
   client
 ) {
+
+  validarCliente(
+    client
+  );
+
 
   const { rows } =
     await client.query(
@@ -73,19 +310,17 @@ async function obtenerDestinatarioWhatsApp(
           u.correo,
           u.telefono_whatsapp,
 
-          r.nombre
-            AS rol,
+          r.nombre AS rol,
 
-          eu.nombre
-            AS estado
+          eu.nombre AS estado
 
         FROM usuarios u
 
-        JOIN roles r
+        INNER JOIN roles r
           ON r.id =
              u.rol_id
 
-        JOIN estados_usuario eu
+        INNER JOIN estados_usuario eu
           ON eu.id =
              u.estado_id
 
@@ -95,15 +330,6 @@ async function obtenerDestinatarioWhatsApp(
           )
         ) = 'activo'
 
-          AND LOWER(
-            TRIM(
-              r.nombre
-            )
-          ) IN (
-            'administrador',
-            'inspector'
-          )
-
           AND u.telefono_whatsapp
             IS NOT NULL
 
@@ -112,12 +338,16 @@ async function obtenerDestinatarioWhatsApp(
           ) <> ''
 
         ORDER BY
-          u.id_usuario
+          u.id_usuario ASC
 
         LIMIT 2
       `
     );
 
+
+  // ====================================================
+  // NINGÚN USUARIO CON WHATSAPP
+  // ====================================================
 
   if (
     rows.length === 0
@@ -127,22 +357,29 @@ async function obtenerDestinatarioWhatsApp(
   }
 
 
-  /*
-   * El diseño actual contempla un único
-   * encargado receptor de las alertas.
-   *
-   * Evitamos elegir silenciosamente entre
-   * dos personas distintas.
-   */
+  // ====================================================
+  // MÁS DE UN DESTINATARIO
+  // ====================================================
+  //
+  // No elegimos uno arbitrariamente.
+  //
+  // Debe existir solamente un usuario activo
+  // con WhatsApp configurado.
+  // ====================================================
+
   if (
     rows.length > 1
   ) {
 
     throw new Error(
-      "Existe más de un Administrador/Inspector activo con WhatsApp configurado."
+      "Existe más de un usuario activo con WhatsApp configurado. Debe existir un único destinatario."
     );
   }
 
+
+  // ====================================================
+  // DESTINATARIO OBTENIDO DESDE BD
+  // ====================================================
 
   return rows[0];
 }
@@ -152,31 +389,53 @@ async function obtenerDestinatarioWhatsApp(
 // CREAR ENVÍO WHATSAPP PENDIENTE
 // ======================================================
 //
+// secuenciaNotificacion:
+//
+// 1 = aviso inicial
+// 2 = recordatorio 1
+// 3 = recordatorio 2
+// 4 = recordatorio 3
+//
+// intento:
+//
+// 1 = primer intento técnico
+// 2 = segundo intento técnico
+// 3 = tercer intento técnico
+//
 // IMPORTANTE:
 //
-// Esto TODAVÍA NO llama a Meta.
+// Los intentos técnicos NO son recordatorios.
 //
-// Únicamente registra que la alerta debe
-// enviarse posteriormente.
-//
-// Ejemplo:
-//
-// alerta_id = 10
-// secuencia = 1
-// canal = WHATSAPP
-// intento = 1
-// estado = PENDIENTE
+// El correo tampoco se genera aquí.
 // ======================================================
 
 async function crearEnvioWhatsAppPendiente(
   client,
   {
     alertaId,
+
     mensaje,
+
+    plantillaMeta,
+
+    parametrosPlantilla,
+
     secuenciaNotificacion = 1,
+
     intento = 1,
+
+    fechaProgramadaIntento = null,
   }
 ) {
+
+  validarCliente(
+    client
+  );
+
+
+  // ====================================================
+  // NORMALIZAR IDENTIFICADORES
+  // ====================================================
 
   const alertaIdNumero =
     toInt(
@@ -196,14 +455,14 @@ async function crearEnvioWhatsAppPendiente(
     );
 
 
-  const contenido =
-    String(
-      mensaje ??
-      ""
-    ).trim();
+  // ====================================================
+  // VALIDAR ALERTA
+  // ====================================================
 
-
-  if (!alertaIdNumero) {
+  if (
+    !alertaIdNumero ||
+    alertaIdNumero <= 0
+  ) {
 
     throw new Error(
       "Alerta inválida al crear el envío."
@@ -211,9 +470,15 @@ async function crearEnvioWhatsAppPendiente(
   }
 
 
+  // ====================================================
+  // VALIDAR SECUENCIA
+  // ====================================================
+
   if (
     !secuenciaNumero ||
-    secuenciaNumero < 1
+    secuenciaNumero < 1 ||
+    secuenciaNumero >
+      MAX_SECUENCIA_NOTIFICACION
   ) {
 
     throw new Error(
@@ -222,10 +487,15 @@ async function crearEnvioWhatsAppPendiente(
   }
 
 
+  // ====================================================
+  // VALIDAR INTENTO
+  // ====================================================
+
   if (
     !intentoNumero ||
     intentoNumero < 1 ||
-    intentoNumero > 3
+    intentoNumero >
+      MAX_INTENTOS_WHATSAPP
   ) {
 
     throw new Error(
@@ -234,16 +504,51 @@ async function crearEnvioWhatsAppPendiente(
   }
 
 
-  if (!contenido) {
+  // ====================================================
+  // NORMALIZAR PLANTILLA
+  // ====================================================
 
-    throw new Error(
-      "El contenido de la notificación está vacío."
+  const plantilla =
+    normalizarPlantillaMeta(
+      plantillaMeta
     );
-  }
 
 
   // ====================================================
-  // DESTINATARIO
+  // NORMALIZAR PARÁMETROS
+  // ====================================================
+
+  const parametros =
+    normalizarParametrosPlantilla(
+      parametrosPlantilla
+    );
+
+
+  // ====================================================
+  // CONTENIDO ESTRUCTURADO
+  // ====================================================
+
+  const contenido =
+    crearContenidoEstructurado({
+      mensaje,
+
+      parametrosPlantilla:
+        parametros,
+    });
+
+
+  // ====================================================
+  // FECHA PROGRAMADA
+  // ====================================================
+
+  const fechaProgramada =
+    normalizarFechaProgramada(
+      fechaProgramadaIntento
+    );
+
+
+  // ====================================================
+  // OBTENER DESTINATARIO DESDE BD
   // ====================================================
 
   const destinatario =
@@ -252,14 +557,44 @@ async function crearEnvioWhatsAppPendiente(
     );
 
 
-  /*
-   * La alerta del sistema NO debe desaparecer
-   * porque temporalmente no exista un número
-   * configurado.
-   *
-   * Por eso no lanzamos error en este caso.
-   */
+  // ====================================================
+  // SIN INSPECTOR CON WHATSAPP
+  // ====================================================
+  //
+  // La alerta principal se conserva.
+  //
+  // No se lanza excepción porque la ausencia temporal
+  // de teléfono no debe eliminar la alerta.
+  // ====================================================
+
   if (!destinatario) {
+
+    return {
+      creado:
+        false,
+
+      motivo:
+        "SIN_DESTINATARIO_WHATSAPP",
+
+      envio:
+        null,
+    };
+  }
+
+
+  // ====================================================
+  // NORMALIZAR TELÉFONO
+  // ====================================================
+
+  const telefono =
+    String(
+      destinatario
+        .telefono_whatsapp ??
+      ""
+    ).trim();
+
+
+  if (!telefono) {
 
     return {
       creado:
@@ -321,22 +656,33 @@ async function crearEnvioWhatsAppPendiente(
 
           $7,
 
-          NULL,
           $8,
+          $9,
           NULL,
 
           NULL,
           NULL,
           NULL,
 
-          CURRENT_TIMESTAMP,
+          COALESCE(
+            $10::timestamptz,
+            CURRENT_TIMESTAMP
+          ),
+
           NULL,
           CURRENT_TIMESTAMP,
           NULL,
           NULL
         )
 
-        ON CONFLICT DO NOTHING
+        ON CONFLICT
+        (
+          alerta_id,
+          secuencia_notificacion,
+          canal,
+          intento
+        )
+        DO NOTHING
 
         RETURNING
           id,
@@ -344,10 +690,17 @@ async function crearEnvioWhatsAppPendiente(
           secuencia_notificacion,
           canal,
           intento,
+
           usuario_destinatario_id,
           destinatario,
+
           estado,
+
+          plantilla_meta,
           contenido_enviado,
+
+          proveedor_mensaje_id,
+
           fecha_programada_intento,
           fecha_actualizacion
       `,
@@ -356,27 +709,28 @@ async function crearEnvioWhatsAppPendiente(
 
         secuenciaNumero,
 
-        CANAL
-          .WHATSAPP,
+        CANAL_WHATSAPP,
 
         intentoNumero,
 
         destinatario
           .id_usuario,
 
-        destinatario
-          .telefono_whatsapp,
+        telefono,
 
-        ESTADO_ENVIO
-          .PENDIENTE,
+        ESTADO_PENDIENTE,
+
+        plantilla,
 
         contenido,
+
+        fechaProgramada,
       ]
     );
 
 
   // ====================================================
-  // INSERT REALIZADO
+  // ENVÍO CREADO
   // ====================================================
 
   if (
@@ -397,10 +751,7 @@ async function crearEnvioWhatsAppPendiente(
 
 
   // ====================================================
-  // YA EXISTÍA
-  // ====================================================
-  //
-  // Protege contra ejecuciones duplicadas.
+  // ENVÍO YA EXISTENTE
   // ====================================================
 
   const {
@@ -415,18 +766,35 @@ async function crearEnvioWhatsAppPendiente(
           secuencia_notificacion,
           canal,
           intento,
+
           usuario_destinatario_id,
           destinatario,
+
           estado,
+
+          plantilla_meta,
           contenido_enviado,
+
+          proveedor_mensaje_id,
+
+          codigo_error,
+          detalle_error,
+          error_reintentable,
+
           fecha_programada_intento,
-          fecha_actualizacion
+          fecha_intento,
+          fecha_actualizacion,
+          fecha_entregado,
+          fecha_leido
 
         FROM alertas_envios
 
         WHERE alerta_id = $1
+
           AND secuencia_notificacion = $2
+
           AND canal = $3
+
           AND intento = $4
 
         LIMIT 1
@@ -436,8 +804,7 @@ async function crearEnvioWhatsAppPendiente(
 
         secuenciaNumero,
 
-        CANAL
-          .WHATSAPP,
+        CANAL_WHATSAPP,
 
         intentoNumero,
       ]
@@ -463,6 +830,10 @@ async function crearEnvioWhatsAppPendiente(
 // ======================================================
 
 module.exports = {
+
+  MAX_SECUENCIA_NOTIFICACION,
+
+  MAX_INTENTOS_WHATSAPP,
 
   obtenerDestinatarioWhatsApp,
 

@@ -7,12 +7,19 @@ const pool = require(
 // CONSTANTES
 // ======================================================
 
-const MAX_INTENTOS_WHATSAPP = 3;
+const MAX_INTENTOS_WHATSAPP =
+  3;
+
 
 const ESTADOS = {
-  PENDIENTE: "PENDIENTE",
-  ACEPTADO: "ACEPTADO",
-  FALLIDO: "FALLIDO",
+  PENDIENTE:
+    "PENDIENTE",
+
+  ACEPTADO:
+    "ACEPTADO",
+
+  FALLIDO:
+    "FALLIDO",
 };
 
 
@@ -20,12 +27,28 @@ const ESTADOS = {
 // CONFIGURACIÓN DE REINTENTOS
 // ======================================================
 //
-// Los retrasos se cuentan desde el fallo.
+// REGLA FUNCIONAL:
 //
-// Intento 2: 1 minuto después.
-// Intento 3: 5 minutos después.
+// intento 1
+//   ↓ falla
+// intento 2
+//   ↓ falla
+// intento 3
+//   ↓ falla
+// correo de respaldo
 //
-// Se pueden modificar mediante .env.
+// El correo NO se envía desde este archivo.
+//
+// Este servicio únicamente indicará:
+//
+// requiereEvaluarRespaldoEmail: true
+//
+// después de que fallen los 3 intentos.
+//
+// Los tiempos entre intentos se controlan por .env.
+//
+// WHATSAPP_REINTENTO_2_MIN=1
+// WHATSAPP_REINTENTO_3_MIN=5
 // ======================================================
 
 function obtenerMinutos(
@@ -33,12 +56,18 @@ function obtenerMinutos(
   valorDefecto
 ) {
 
-  const valor = Number(
-    process.env[variable]
-  );
+  const valor =
+    Number(
+      process.env[
+        variable
+      ]
+    );
+
 
   return (
-    Number.isSafeInteger(valor) &&
+    Number.isSafeInteger(
+      valor
+    ) &&
     valor > 0 &&
     valor <= 1440
   )
@@ -47,27 +76,35 @@ function obtenerMinutos(
 }
 
 
+// ======================================================
+// OBTENER ESPERA DEL SIGUIENTE INTENTO
+// ======================================================
+
 function obtenerEsperaReintento(
   siguienteIntento
 ) {
 
-  if (siguienteIntento === 2) {
+  if (
+    siguienteIntento === 2
+  ) {
 
     return obtenerMinutos(
       "WHATSAPP_REINTENTO_2_MIN",
       1
     );
-
   }
 
-  if (siguienteIntento === 3) {
+
+  if (
+    siguienteIntento === 3
+  ) {
 
     return obtenerMinutos(
       "WHATSAPP_REINTENTO_3_MIN",
       5
     );
-
   }
+
 
   throw new Error(
     "Número de reintento inválido."
@@ -83,21 +120,59 @@ function validarId(
   valor
 ) {
 
-  const id = String(
-    valor ?? ""
-  ).trim();
+  const id =
+    String(
+      valor ??
+      ""
+    ).trim();
+
 
   if (
-    !/^[1-9]\d*$/.test(id)
+    !/^[1-9]\d*$/.test(
+      id
+    )
   ) {
 
     throw new Error(
       "Identificador de envío inválido."
     );
-
   }
 
+
   return id;
+}
+
+
+// ======================================================
+// VALIDAR INTENTO
+// ======================================================
+
+function validarIntento(
+  valor
+) {
+
+  const intento =
+    Number(
+      valor
+    );
+
+
+  if (
+    !Number.isSafeInteger(
+      intento
+    ) ||
+    intento < 1 ||
+    intento >
+      MAX_INTENTOS_WHATSAPP
+  ) {
+
+    throw new Error(
+      "El intento de WhatsApp registrado no es válido."
+    );
+  }
+
+
+  return intento;
 }
 
 
@@ -105,11 +180,12 @@ function validarId(
 // EJECUTAR TRANSACCIÓN SOBRE UN ENVÍO
 // ======================================================
 //
-// FOR UPDATE evita que dos procesos
-// registren simultáneamente el resultado
-// del mismo intento.
+// FOR UPDATE:
 //
-// Solo se modifica un envío PENDIENTE.
+// evita que dos procesos modifiquen simultáneamente
+// el resultado del mismo intento.
+//
+// Únicamente se modifica un registro PENDIENTE.
 // ======================================================
 
 async function procesarResultado(
@@ -117,17 +193,41 @@ async function procesarResultado(
   operacion
 ) {
 
-  const id = validarId(
-    envioId
-  );
+  const id =
+    validarId(
+      envioId
+    );
 
-  const client = await pool.connect();
+
+  if (
+    typeof operacion !==
+    "function"
+  ) {
+
+    throw new Error(
+      "La operación de procesamiento no es válida."
+    );
+  }
+
+
+  const client =
+    await pool.connect();
+
+
+  let transaccionActiva =
+    false;
+
 
   try {
 
     await client.query(
       "BEGIN"
     );
+
+
+    transaccionActiva =
+      true;
+
 
     const { rows } =
       await client.query(
@@ -141,48 +241,66 @@ async function procesarResultado(
 
           FOR UPDATE
         `,
-        [id]
+        [
+          id,
+        ]
       );
 
 
-    if (!rows.length) {
+    if (
+      !rows.length
+    ) {
 
       throw new Error(
         "El envío indicado no existe."
       );
-
     }
 
 
-    const envio = rows[0];
+    const envio =
+      rows[0];
 
 
     if (
-      envio.canal !== "WHATSAPP"
+      envio.canal !==
+      "WHATSAPP"
     ) {
 
       throw new Error(
         "El envío no corresponde al canal WhatsApp."
       );
-
     }
 
 
     if (
-      envio.estado !== ESTADOS.PENDIENTE
+      envio.estado !==
+      ESTADOS.PENDIENTE
     ) {
 
       await client.query(
         "COMMIT"
       );
 
+
+      transaccionActiva =
+        false;
+
+
       return {
-        accion: "SIN_CAMBIOS",
-        motivo: "ENVIO_YA_PROCESADO",
+        accion:
+          "SIN_CAMBIOS",
+
+        motivo:
+          "ENVIO_YA_PROCESADO",
+
         envio,
       };
-
     }
+
+
+    validarIntento(
+      envio.intento
+    );
 
 
     const resultado =
@@ -196,25 +314,39 @@ async function procesarResultado(
       "COMMIT"
     );
 
+
+    transaccionActiva =
+      false;
+
+
     return resultado;
 
 
-  } catch (error) {
+  } catch (
+    error
+  ) {
 
-    try {
+    if (
+      transaccionActiva
+    ) {
 
-      await client.query(
-        "ROLLBACK"
-      );
+      try {
 
-    } catch (rollbackError) {
+        await client.query(
+          "ROLLBACK"
+        );
 
-      console.error(
-        "Error revirtiendo resultado de envío:",
-        rollbackError.message
-      );
+      } catch (
+        rollbackError
+      ) {
 
+        console.error(
+          "Error revirtiendo resultado de envío:",
+          rollbackError.message
+        );
+      }
     }
+
 
     throw error;
 
@@ -222,9 +354,7 @@ async function procesarResultado(
   } finally {
 
     client.release();
-
   }
-
 }
 
 
@@ -232,11 +362,21 @@ async function procesarResultado(
 // REGISTRAR ACEPTACIÓN DE META
 // ======================================================
 //
-// Se utilizará únicamente después de que
-// Meta responda satisfactoriamente y
-// devuelva el identificador del mensaje.
+// Meta aceptó la solicitud y devolvió un message ID.
 //
-// No representa entrega ni lectura.
+// IMPORTANTE:
+//
+// ACEPTADO significa:
+//
+// Meta recibió la solicitud.
+//
+// No necesariamente:
+//
+// - entregado;
+// - leído.
+//
+// Esos estados se manejarán posteriormente mediante
+// webhook.
 // ======================================================
 
 async function registrarAceptacionMeta({
@@ -244,17 +384,20 @@ async function registrarAceptacionMeta({
   proveedorMensajeId,
 }) {
 
-  const mensajeId = String(
-    proveedorMensajeId ?? ""
-  ).trim();
+  const mensajeId =
+    String(
+      proveedorMensajeId ??
+      ""
+    ).trim();
 
 
-  if (!mensajeId) {
+  if (
+    !mensajeId
+  ) {
 
     throw new Error(
       "Meta no devolvió un identificador de mensaje."
     );
-
   }
 
 
@@ -274,7 +417,8 @@ async function registrarAceptacionMeta({
             SET
               estado = $2,
 
-              proveedor_mensaje_id = $3,
+              proveedor_mensaje_id =
+                $3,
 
               fecha_intento =
                 CURRENT_TIMESTAMP,
@@ -282,37 +426,50 @@ async function registrarAceptacionMeta({
               fecha_actualizacion =
                 CURRENT_TIMESTAMP,
 
-              codigo_error = NULL,
-              detalle_error = NULL,
-              error_reintentable = NULL
+              codigo_error =
+                NULL,
+
+              detalle_error =
+                NULL,
+
+              error_reintentable =
+                NULL
 
             WHERE id = $1
 
             RETURNING
               id,
               alerta_id,
+              secuencia_notificacion,
               canal,
               intento,
               estado,
               proveedor_mensaje_id,
-              fecha_intento
+              fecha_intento,
+              fecha_actualizacion
           `,
           [
             envio.id,
+
             ESTADOS.ACEPTADO,
+
             mensajeId,
           ]
         );
 
 
       return {
-        accion: "META_ACEPTO_ENVIO",
-        envio: rows[0],
-      };
+        accion:
+          "META_ACEPTO_ENVIO",
 
+        envio:
+          rows[0],
+
+        requiereEvaluarRespaldoEmail:
+          false,
+      };
     }
   );
-
 }
 
 
@@ -320,13 +477,26 @@ async function registrarAceptacionMeta({
 // REGISTRAR FALLO DE META
 // ======================================================
 //
-// El error solo se registra después de
-// un intento real de comunicación con Meta.
+// IMPORTANTE:
 //
-// Si corresponde reintentar, se crea
-// otro registro PENDIENTE.
+// errorReintentable:
 //
-// El envío fallido conserva su historia.
+// Se conserva en BD únicamente como información
+// técnica proveniente de Meta.
+//
+// NO decide si se hará el intento 2 o 3.
+//
+// REGLA FUNCIONAL:
+//
+// Mientras intento < 3:
+//
+// crear siguiente intento.
+//
+// Cuando intento = 3 y vuelve a fallar:
+//
+// requiereEvaluarRespaldoEmail = true
+//
+// El correo todavía NO se envía aquí.
 // ======================================================
 
 async function registrarFalloMeta({
@@ -342,20 +512,30 @@ async function registrarFalloMeta({
   ) {
 
     throw new Error(
-      "Debe indicarse si el error permite reintento."
+      "Debe indicarse si el error permite reintento técnicamente."
     );
-
   }
 
 
-  const codigo = String(
-    codigoError ?? "ERROR_ENVIO"
-  ).trim() || "ERROR_ENVIO";
+  const codigo =
+    String(
+      codigoError ??
+      "ERROR_ENVIO"
+    )
+      .trim()
+      .slice(
+        0,
+        100
+      ) ||
+    "ERROR_ENVIO";
 
 
-  const detalle = String(
-    detalleError ?? "Fallo al enviar el mensaje."
-  ).trim() || "Fallo al enviar el mensaje.";
+  const detalle =
+    String(
+      detalleError ??
+      "Fallo al enviar el mensaje."
+    ).trim() ||
+    "Fallo al enviar el mensaje.";
 
 
   return procesarResultado(
@@ -366,11 +546,19 @@ async function registrarFalloMeta({
       envio
     ) => {
 
+      const intentoActual =
+        validarIntento(
+          envio.intento
+        );
+
+
       // ==================================================
-      // MARCAR INTENTO ACTUAL COMO FALLIDO
+      // 1. MARCAR INTENTO ACTUAL COMO FALLIDO
       // ==================================================
 
-      const { rows } =
+      const {
+        rows,
+      } =
         await client.query(
           `
             UPDATE alertas_envios
@@ -379,8 +567,11 @@ async function registrarFalloMeta({
               estado = $2,
 
               codigo_error = $3,
+
               detalle_error = $4,
-              error_reintentable = $5,
+
+              error_reintentable =
+                $5,
 
               fecha_intento =
                 CURRENT_TIMESTAMP,
@@ -397,13 +588,26 @@ async function registrarFalloMeta({
               canal,
               intento,
               estado,
-              error_reintentable
+
+              plantilla_meta,
+              contenido_enviado,
+
+              codigo_error,
+              detalle_error,
+              error_reintentable,
+
+              fecha_intento,
+              fecha_actualizacion
           `,
           [
             envio.id,
+
             ESTADOS.FALLIDO,
+
             codigo,
+
             detalle,
+
             errorReintentable,
           ]
         );
@@ -414,31 +618,40 @@ async function registrarFalloMeta({
 
 
       // ==================================================
-      // EVALUAR SI CORRESPONDE REINTENTAR
+      // 2. VERIFICAR SI YA FALLARON LOS 3 INTENTOS
       // ==================================================
 
-      const siguienteIntento =
-        Number(envio.intento) + 1;
-
-
       if (
-        !errorReintentable ||
-        siguienteIntento >
-          MAX_INTENTOS_WHATSAPP
+        intentoActual >=
+        MAX_INTENTOS_WHATSAPP
       ) {
 
         return {
-          accion: "FALLO_SIN_REINTENTO",
-          envio: envioFallido,
-          requiereEvaluarRespaldoEmail: true,
-        };
+          accion:
+            "FALLO_SIN_REINTENTO",
 
+          motivo:
+            "MAX_INTENTOS_WHATSAPP_ALCANZADO",
+
+          envio:
+            envioFallido,
+
+          intentosAgotados:
+            true,
+
+          requiereEvaluarRespaldoEmail:
+            true,
+        };
       }
 
 
       // ==================================================
-      // PROGRAMAR SIGUIENTE INTENTO
+      // 3. CREAR SIGUIENTE INTENTO
       // ==================================================
+
+      const siguienteIntento =
+        intentoActual + 1;
+
 
       const esperaMinutos =
         obtenerEsperaReintento(
@@ -460,11 +673,21 @@ async function registrarFalloMeta({
               destinatario,
 
               estado,
+
               plantilla_meta,
               contenido_enviado,
 
+              proveedor_mensaje_id,
+
+              codigo_error,
+              detalle_error,
+              error_reintentable,
+
               fecha_programada_intento,
-              fecha_actualizacion
+              fecha_intento,
+              fecha_actualizacion,
+              fecha_entregado,
+              fecha_leido
             )
 
             VALUES
@@ -478,16 +701,32 @@ async function registrarFalloMeta({
               $5,
 
               'PENDIENTE',
+
               $6,
               $7,
 
-              CURRENT_TIMESTAMP
-                + ($8::integer * INTERVAL '1 minute'),
+              NULL,
+
+              NULL,
+              NULL,
+              NULL,
 
               CURRENT_TIMESTAMP
+                + (
+                    $8::integer *
+                    INTERVAL '1 minute'
+                  ),
+
+              NULL,
+
+              CURRENT_TIMESTAMP,
+
+              NULL,
+              NULL
             )
 
-            ON CONFLICT (
+            ON CONFLICT
+            (
               alerta_id,
               secuencia_notificacion,
               canal,
@@ -498,49 +737,164 @@ async function registrarFalloMeta({
             RETURNING
               id,
               alerta_id,
+              secuencia_notificacion,
+              canal,
               intento,
+
+              usuario_destinatario_id,
+              destinatario,
+
               estado,
-              fecha_programada_intento
+
+              plantilla_meta,
+
+              fecha_programada_intento,
+              fecha_actualizacion
           `,
           [
             envio.alerta_id,
-            envio.secuencia_notificacion,
+
+            envio
+              .secuencia_notificacion,
+
             siguienteIntento,
 
-            envio.usuario_destinatario_id,
+            envio
+              .usuario_destinatario_id,
+
             envio.destinatario,
 
-            envio.plantilla_meta,
-            envio.contenido_enviado,
+            envio
+              .plantilla_meta,
+
+            envio
+              .contenido_enviado,
 
             esperaMinutos,
           ]
         );
 
 
+      // ==================================================
+      // 4. REINTENTO CREADO
+      // ==================================================
+
       if (
-        !reintento.rows.length
+        reintento.rows.length >
+        0
+      ) {
+
+        return {
+          accion:
+            "REINTENTO_PROGRAMADO",
+
+          envioFallido,
+
+          siguienteEnvio:
+            reintento.rows[0],
+
+          siguienteIntento,
+
+          esperaMinutos,
+
+          intentosAgotados:
+            false,
+
+          requiereEvaluarRespaldoEmail:
+            false,
+        };
+      }
+
+
+      // ==================================================
+      // 5. REINTENTO YA EXISTÍA
+      // ==================================================
+      //
+      // No generamos duplicados.
+      //
+      // Recuperamos el registro existente.
+      // ==================================================
+
+      const {
+        rows:
+          existentes,
+      } =
+        await client.query(
+          `
+            SELECT
+              id,
+              alerta_id,
+              secuencia_notificacion,
+              canal,
+              intento,
+
+              usuario_destinatario_id,
+              destinatario,
+
+              estado,
+
+              plantilla_meta,
+
+              fecha_programada_intento,
+              fecha_actualizacion
+
+            FROM alertas_envios
+
+            WHERE alerta_id = $1
+
+              AND secuencia_notificacion =
+                  $2
+
+              AND canal =
+                  'WHATSAPP'
+
+              AND intento =
+                  $3
+
+            LIMIT 1
+          `,
+          [
+            envio.alerta_id,
+
+            envio
+              .secuencia_notificacion,
+
+            siguienteIntento,
+          ]
+        );
+
+
+      if (
+        !existentes.length
       ) {
 
         throw new Error(
-          "Ya existe un registro para este reintento. Se revirtió la operación para revisar la inconsistencia."
+          "No fue posible crear ni recuperar el siguiente intento de WhatsApp."
         );
-
       }
 
 
       return {
-        accion: "REINTENTO_PROGRAMADO",
+        accion:
+          "REINTENTO_YA_EXISTE",
 
         envioFallido,
 
         siguienteEnvio:
-          reintento.rows[0],
-      };
+          existentes[0],
 
+        siguienteIntento,
+
+        esperaMinutos,
+
+        intentosAgotados:
+          false,
+
+        requiereEvaluarRespaldoEmail:
+          false,
+      };
     }
   );
-
 }
 
 

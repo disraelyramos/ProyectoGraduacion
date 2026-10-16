@@ -14,7 +14,7 @@ import {
 import ModalBase from "../../components/modals/ModalBase";
 
 import GestionarUsuarios from "./GestionarUsuarios";
-import GestionarModulos from "./GestionarModulos";
+import GestionarModulos from "./GestionarModulos.jsx";
 
 import {
   showBackendAlert,
