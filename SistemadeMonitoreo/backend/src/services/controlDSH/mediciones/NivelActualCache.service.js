@@ -7,18 +7,55 @@ const pool = require(
 // CONFIGURACION
 // ======================================================
 
+function obtenerEnteroPositivo(
+  nombre,
+  respaldo
+) {
+
+  const valor =
+    Number(
+      process.env[nombre]
+    );
+
+
+  return (
+    Number.isSafeInteger(valor) &&
+    valor > 0
+  )
+    ? valor
+    : respaldo;
+}
+
+
+// ======================================================
+// TIEMPO MAXIMO QUE UNA LECTURA PUEDE CONSIDERARSE ACTUAL
+// ======================================================
+//
+// PRODUCCION:
+//
+// NIVEL_CACHE_MAX_AGE_MS=15000
+//
+// Si el ESP deja de enviar durante mas de este tiempo,
+// el nivel actual pasa estrictamente a 0 %.
+//
+// ======================================================
+
+const NIVEL_CACHE_MAX_AGE_MS =
+  obtenerEnteroPositivo(
+    "NIVEL_CACHE_MAX_AGE_MS",
+    15000
+  );
+
+
+// ======================================================
+// INTERVALO PARA HISTORIAL
+// ======================================================
+
 const HISTORIAL_INTERVAL_MS =
-  Number(
-    process.env
-      .NIVEL_HISTORIAL_INTERVAL_MS
-  ) > 0
-
-    ? Number(
-        process.env
-          .NIVEL_HISTORIAL_INTERVAL_MS
-      )
-
-    : 300000;
+  obtenerEnteroPositivo(
+    "NIVEL_HISTORIAL_INTERVAL_MS",
+    300000
+  );
 
 
 // ======================================================
@@ -84,6 +121,135 @@ function toNumber(
   )
     ? numero
     : null;
+}
+
+
+// ======================================================
+// CALCULAR ANTIGUEDAD DE UNA LECTURA
+// ======================================================
+
+function calcularAntiguedadMs(
+  registro
+) {
+
+  if (
+    !registro ||
+    !registro.fechaActualizacion
+  ) {
+
+    return Infinity;
+  }
+
+
+  const fecha =
+    registro.fechaActualizacion
+      instanceof Date
+
+      ? registro.fechaActualizacion
+
+      : new Date(
+          registro.fechaActualizacion
+        );
+
+
+  const tiempo =
+    fecha.getTime();
+
+
+  if (
+    Number.isNaN(
+      tiempo
+    )
+  ) {
+
+    return Infinity;
+  }
+
+
+  return Math.max(
+    0,
+    Date.now() - tiempo
+  );
+}
+
+
+// ======================================================
+// SABER SI UNA LECTURA SIGUE VIGENTE
+// ======================================================
+
+function esNivelVigente(
+  registro
+) {
+
+  const antiguedadMs =
+    calcularAntiguedadMs(
+      registro
+    );
+
+
+  return (
+    Number.isFinite(
+      antiguedadMs
+    ) &&
+    antiguedadMs <=
+      NIVEL_CACHE_MAX_AGE_MS
+  );
+}
+
+
+// ======================================================
+// CREAR RESPUESTA EN CERO
+// ======================================================
+//
+// IMPORTANTE:
+//
+// 0 % aqui significa:
+//
+// "No existe una lectura reciente del modulo".
+//
+// De esta manera el frontend nunca conserva
+// indefinidamente un valor antiguo.
+//
+// ======================================================
+
+function crearNivelCero({
+  contenedorId,
+  registro = null,
+}) {
+
+  const antiguedadMs =
+    registro
+      ? calcularAntiguedadMs(
+          registro
+        )
+      : null;
+
+
+  return {
+
+    contenedorId:
+      Number(
+        contenedorId
+      ),
+
+    porcentaje:
+      0,
+
+    proveedor:
+      registro?.proveedor ||
+      null,
+
+    fechaActualizacion:
+      registro
+        ?.fechaActualizacion ||
+      null,
+
+    vigente:
+      false,
+
+    antiguedadMs,
+
+  };
 }
 
 
@@ -229,6 +395,11 @@ async function guardarHistorialNivel({
 // ======================================================
 // ACTUALIZAR NIVEL
 // ======================================================
+//
+// Solamente una nueva lectura recibida desde
+// el ESP renueva fechaActualizacion.
+//
+// ======================================================
 
 async function actualizarNivel({
   contenedorId,
@@ -277,11 +448,11 @@ async function actualizarNivel({
     fechaActualizacion
       instanceof Date
 
-        ? fechaActualizacion
+      ? fechaActualizacion
 
-        : new Date(
-            fechaActualizacion
-          );
+      : new Date(
+          fechaActualizacion
+        );
 
 
   if (
@@ -319,7 +490,7 @@ async function actualizarNivel({
 
 
   // ====================================================
-  // CACHE
+  // ACTUALIZAR CACHE
   // ====================================================
 
   nivelesCache.set(
@@ -329,7 +500,7 @@ async function actualizarNivel({
 
 
   // ====================================================
-  // PRIMER HISTORIAL / HISTORIAL VENCIDO
+  // GUARDAR HISTORIAL SI CORRESPONDE
   // ====================================================
 
   if (
@@ -367,7 +538,15 @@ async function actualizarNivel({
 
 
   return {
+
     ...registro,
+
+    vigente:
+      true,
+
+    antiguedadMs:
+      0,
+
   };
 }
 
@@ -376,10 +555,16 @@ async function actualizarNivel({
 // OBTENER NIVEL
 // ======================================================
 //
-// Ya NO expira a los 15 segundos.
+// REGLA ESTRICTA:
 //
-// El último nivel confirmado continúa siendo
-// el nivel actual hasta recibir uno nuevo.
+// SIN REGISTRO
+//      => 0 %
+//
+// <= NIVEL_CACHE_MAX_AGE_MS
+//      => porcentaje real
+//
+// > NIVEL_CACHE_MAX_AGE_MS
+//      => 0 %
 //
 // ======================================================
 
@@ -407,24 +592,64 @@ function obtenerNivel(
     );
 
 
+  // ====================================================
+  // NUNCA HA RECIBIDO LECTURA
+  // ====================================================
+
   if (
     !registro
   ) {
 
-    return null;
+    return crearNivelCero({
+
+      contenedorId:
+        contenedorIdNumero,
+
+    });
   }
 
 
   const antiguedadMs =
-    Date.now() -
-    registro
-      .fechaActualizacion
-      .getTime();
+    calcularAntiguedadMs(
+      registro
+    );
 
+
+  // ====================================================
+  // LECTURA VENCIDA
+  // ====================================================
+
+  if (
+    !esNivelVigente(
+      registro
+    )
+  ) {
+
+    return crearNivelCero({
+
+      contenedorId:
+        contenedorIdNumero,
+
+      registro,
+
+    });
+  }
+
+
+  // ====================================================
+  // LECTURA VIGENTE
+  // ====================================================
 
   return {
 
     ...registro,
+
+    porcentaje:
+      Number(
+        Number(
+          registro.porcentaje
+        ).toFixed(2)
+      ),
 
     vigente:
       true,
@@ -437,6 +662,18 @@ function obtenerNivel(
 
 // ======================================================
 // OBTENER NIVEL VIGENTE
+// ======================================================
+//
+// IMPORTANTE:
+//
+// Aunque la lectura haya vencido,
+// se devuelve un objeto con porcentaje 0.
+//
+// Esto evita que otro servicio:
+// - recupere el ultimo valor viejo;
+// - vuelva a mostrarlo;
+// - mantenga un 82 %, 73 %, etc.
+//
 // ======================================================
 
 function obtenerNivelVigente(
@@ -453,9 +690,18 @@ function obtenerNivelVigente(
 // GUARDAR HISTORIAL DESDE CACHE
 // ======================================================
 //
-// Utilizado por NivelMonitor.
+// MUY IMPORTANTE:
 //
-// El ESP NO necesita reenviar el mismo nivel.
+// Solo se guarda historial si la lectura
+// SIGUE VIGENTE.
+//
+// Si el ESP se desconecto y pasan mas de
+// NIVEL_CACHE_MAX_AGE_MS:
+//
+// - no vuelve a guardar el porcentaje viejo;
+// - no fabrica lecturas;
+// - no renueva fecha;
+// - no mantiene vivo el valor.
 //
 // ======================================================
 
@@ -468,6 +714,20 @@ async function guardarHistorialCache() {
     ]
     of nivelesCache.entries()
   ) {
+
+    // ==================================================
+    // NO GUARDAR LECTURAS VENCIDAS
+    // ==================================================
+
+    if (
+      !esNivelVigente(
+        registro
+      )
+    ) {
+
+      continue;
+    }
+
 
     if (
       !debeGuardarHistorial(
@@ -509,12 +769,15 @@ async function guardarHistorialCache() {
 // RECUPERAR ULTIMOS NIVELES DE LA BD
 // ======================================================
 //
-// Si Railway reinicia:
-// - la memoria queda vacía;
-// - recuperamos la última lectura
-//   nivel_porcentaje existente.
+// Railway puede reiniciar y perder la memoria.
 //
-// NO modifica la BD.
+// Recuperamos la ultima lectura historica,
+// PERO NO se considera vigente automaticamente.
+//
+// obtenerNivel() verificara su fecha.
+//
+// Si tiene mas de NIVEL_CACHE_MAX_AGE_MS,
+// inmediatamente se devolvera 0 %.
 //
 // ======================================================
 
@@ -577,9 +840,24 @@ async function cargarUltimosNivelesDesdeHistorial() {
       );
 
 
+    const fechaActualizacion =
+      new Date(
+        fila.fecha_hora
+      );
+
+
     if (
       !Number.isFinite(
         porcentaje
+      ) ||
+
+      porcentaje < 0 ||
+
+      porcentaje > 100 ||
+
+      Number.isNaN(
+        fechaActualizacion
+          .getTime()
       )
     ) {
 
@@ -598,10 +876,7 @@ async function cargarUltimosNivelesDesdeHistorial() {
         proveedor:
           "historial",
 
-        fechaActualizacion:
-          new Date(
-            fila.fecha_hora
-          ),
+        fechaActualizacion,
 
       }
     );
@@ -610,9 +885,7 @@ async function cargarUltimosNivelesDesdeHistorial() {
     ultimoHistorialPorContenedor
       .set(
         contenedorId,
-        new Date(
-          fila.fecha_hora
-        )
+        fechaActualizacion
           .getTime()
       );
   }
@@ -664,6 +937,7 @@ function eliminarNivel(
 function limpiarCache() {
 
   nivelesCache.clear();
+
 
   ultimoHistorialPorContenedor
     .clear();
