@@ -1431,7 +1431,9 @@ const Dashboard = ({
               "No disponible",
 
             subtitle:
-              "Pendiente de predicción",
+              errorPredicciones
+                ? "Error al consultar predicción"
+                : "Datos insuficientes",
           };
         }
 
@@ -1440,30 +1442,25 @@ const Dashboard = ({
         // SOLO PRESENTAR DATOS VALIDADOS POR EL BACKEND
         // ================================================
 
-        const disponibles =
-          predicciones.filter(
-            (item) =>
+        // Sin historial suficiente o con tiempos absurdos,
+        // no presentar una predicción como válida.
+        const disponibles = predicciones.filter((item) => {
+          const dias = item?.dias_para_alto;
+          const texto = item?.tiempo_para_alto_texto;
+          const ciclos = item?.ciclos_utilizados;
 
-              item?.estado ===
-                "OK" &&
-
-              typeof item
-                .dias_para_alto ===
-                "number" &&
-
-              Number.isFinite(
-                item
-                  .dias_para_alto
-              ) &&
-
-              typeof item
-                .tiempo_para_alto_texto ===
-                "string" &&
-
-              item
-                .tiempo_para_alto_texto
-                .trim()
+          return (
+            item?.estado === "OK" &&
+            typeof dias === "number" &&
+            Number.isFinite(dias) &&
+            dias >= 0 &&
+            dias <= 3650 && // Límite visual de seguridad: 10 años.
+            Number.isInteger(ciclos) &&
+            ciclos >= 2 &&
+            typeof texto === "string" &&
+            /^\d{1,4} días?(?: y \d{1,2} horas?)?$/.test(texto.trim())
           );
+        });
 
 
         if (
