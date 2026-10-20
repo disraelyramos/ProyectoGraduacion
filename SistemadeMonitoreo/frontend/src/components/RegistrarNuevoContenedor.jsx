@@ -8,6 +8,8 @@ import {
 } from "../utils/alerts";
 import axios from "axios";
 
+const API_URL = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+
 const RegistrarNuevoContenedor = ({
     show,
     handleClose,
@@ -54,17 +56,26 @@ const RegistrarNuevoContenedor = ({
             const token = localStorage.getItem("token");
             const headers = { Authorization: `Bearer ${token}` };
 
+            if (!API_URL) throw new Error("VITE_API_URL no está configurada");
+
             const [resUbicaciones, resTipos, resEstados] = await Promise.all([
-                axios.get("/api/ubicaciones", { headers }),
-                axios.get("/api/tipos-residuo", { headers }),
-                axios.get("/api/estados-contenedor", { headers }),
+                axios.get(`${API_URL}/api/ubicaciones`, { headers }),
+                axios.get(`${API_URL}/api/tipos-residuo`, { headers }),
+                axios.get(`${API_URL}/api/estados-contenedor`, { headers }),
             ]);
+
+            if (![resUbicaciones.data, resTipos.data, resEstados.data].every(Array.isArray)) {
+                throw new Error("Los catálogos no devolvieron arreglos JSON válidos");
+            }
 
             setUbicaciones(resUbicaciones.data);
             setTiposResiduo(resTipos.data);
             setEstadosContenedor(resEstados.data);
         } catch (error) {
             console.error("Error cargando selects:", error);
+            setUbicaciones([]);
+            setTiposResiduo([]);
+            setEstadosContenedor([]);
             showErrorAlert("No se pudieron cargar los datos del servidor.");
         }
     };
@@ -72,6 +83,8 @@ const RegistrarNuevoContenedor = ({
     const guardarContenedor = async () => {
         const token = localStorage.getItem("token");
         const headers = { Authorization: `Bearer ${token}` };
+
+        if (!API_URL) throw new Error("VITE_API_URL no está configurada");
 
         const payload = {
             ubicacion,
@@ -83,13 +96,13 @@ const RegistrarNuevoContenedor = ({
 
         if (modoEdicion && contenedorEditar?.id_contenedor) {
             return axios.put(
-                `/api/contenedores/${contenedorEditar.id_contenedor}`,
+                `${API_URL}/api/contenedores/${contenedorEditar.id_contenedor}`,
                 payload,
                 { headers }
             );
         }
 
-        return axios.post("/api/contenedores", payload, { headers });
+        return axios.post(`${API_URL}/api/contenedores`, payload, { headers });
     };
 
     const validarCapacidades = () => {
