@@ -1,15 +1,21 @@
-const pool = require(
-  "../../../config/db"
-);
+
+"use strict";
+
+const pool = require("../../../config/db");
 
 const AlertaEnviosService = require(
   "./AlertaEnvios.service"
 );
 
+const NivelCacheService = require(
+  "../mediciones/NivelActualCache.service"
+);
 
 // ======================================================
 // CONSTANTES
 // ======================================================
+
+const ZONA_HORARIA = "America/Guatemala";
 
 const TIPOS_PERMITIDOS = [
   "NIVEL_AVISO",
@@ -17,634 +23,679 @@ const TIPOS_PERMITIDOS = [
   "PROGRAMADA",
 ];
 
+const TIPOS_NIVEL = new Set([
+  "NIVEL_AVISO",
+  "NIVEL_ALTO",
+]);
 
-const CANAL_WHATSAPP =
-  "WHATSAPP";
+const CANAL_WHATSAPP = "WHATSAPP";
+const CANAL_EMAIL = "EMAIL";
 
-const CANAL_EMAIL =
-  "EMAIL";
+const ESTADO_ALERTA_ACTIVA = "ACTIVA";
+const ESTADO_ENVIO_ACEPTADO = "ACEPTADO";
 
-const ESTADO_ALERTA_ACTIVA =
-  "ACTIVA";
-
-const ESTADO_ENVIO_ACEPTADO =
-  "ACEPTADO";
-
-
-// Aviso inicial:
-//
-// secuencia 1
-//
-// Recordatorios:
-//
-// secuencia 2 = recordatorio 1
-// secuencia 3 = recordatorio 2
-// secuencia 4 = recordatorio 3
-
-const MAX_SECUENCIA_NOTIFICACION =
-  4;
-
-const MAX_RECORDATORIOS =
-  3;
-
+const MAX_SECUENCIA_NOTIFICACION = 4;
+const MAX_RECORDATORIOS = 3;
 
 // ======================================================
-// CONFIGURACIÓN
+// CONFIGURACIÓN DESDE .ENV
 // ======================================================
 
 function obtenerIntervaloRecordatorioMin() {
-
-  const valor =
-    Number(
-      process.env
-        .WHATSAPP_RECORDATORIO_INTERVAL_MIN
-    );
-
+  const valor = Number(
+    process.env.WHATSAPP_RECORDATORIO_INTERVAL_MIN
+  );
 
   if (
-    Number.isSafeInteger(
-      valor
-    ) &&
+    Number.isSafeInteger(valor) &&
     valor >= 1 &&
     valor <= 1440
   ) {
-
     return valor;
   }
-
 
   return 5;
 }
 
-
 function obtenerIntervaloMonitorMs() {
-
-  const valor =
-    Number(
-      process.env
-        .WHATSAPP_RECORDATORIOS_MONITOR_INTERVAL_MS
-    );
-
+  const valor = Number(
+    process.env.WHATSAPP_RECORDATORIOS_MONITOR_INTERVAL_MS
+  );
 
   if (
-    Number.isSafeInteger(
-      valor
-    ) &&
+    Number.isSafeInteger(valor) &&
     valor >= 1000 &&
     valor <= 3600000
   ) {
-
     return valor;
   }
-
 
   return 5000;
 }
 
-
 function obtenerLimitePorCiclo() {
-
-  const valor =
-    Number(
-      process.env
-        .WHATSAPP_RECORDATORIOS_LIMIT
-    );
-
+  const valor = Number(
+    process.env.WHATSAPP_RECORDATORIOS_LIMIT
+  );
 
   if (
-    Number.isSafeInteger(
-      valor
-    ) &&
+    Number.isSafeInteger(valor) &&
     valor >= 1 &&
     valor <= 100
   ) {
-
     return valor;
   }
-
 
   return 20;
 }
 
-
 // ======================================================
-// ESTADO INTERNO
+// ESTADO INTERNO DEL MONITOR
 // ======================================================
 
-let timerMonitor =
-  null;
-
-let ejecucionEnCurso =
-  false;
-
+let timerMonitor = null;
+let ejecucionEnCurso = false;
 
 // ======================================================
 // LEER CONTENIDO ESTRUCTURADO
-// ======================================================
-//
-// AlertaEnvios.service guarda:
-//
-// {
-//   version: 1,
-//   mensaje: "...",
-//   parametros: [...]
-// }
 // ======================================================
 
 function leerContenidoEstructurado(
   contenidoEnviado
 ) {
-
-  const contenido =
-    String(
-      contenidoEnviado ??
-      ""
-    ).trim();
-
+  const contenido = String(
+    contenidoEnviado ?? ""
+  ).trim();
 
   if (!contenido) {
-
     throw new Error(
       "El envío inicial no contiene información."
     );
   }
 
-
   let datos;
 
-
   try {
-
-    datos =
-      JSON.parse(
-        contenido
-      );
-
-  } catch (
-    error
-  ) {
-
+    datos = JSON.parse(contenido);
+  } catch {
     throw new Error(
       "El contenido del envío inicial no tiene formato estructurado."
     );
   }
 
-
   if (
     !datos ||
-    typeof datos !==
-      "object" ||
-    Array.isArray(
-      datos
-    )
+    typeof datos !== "object" ||
+    Array.isArray(datos)
   ) {
-
     throw new Error(
       "El contenido estructurado del envío inicial es inválido."
     );
   }
 
-
-  if (
-    Number(
-      datos.version
-    ) !== 1
-  ) {
-
+  if (Number(datos.version) !== 1) {
     throw new Error(
       "La versión del envío inicial no es compatible."
     );
   }
 
-
   if (
-    !Array.isArray(
-      datos.parametros
-    ) ||
-    datos.parametros.length ===
-      0
+    !Array.isArray(datos.parametros) ||
+    datos.parametros.length === 0
   ) {
-
     throw new Error(
       "El envío inicial no contiene parámetros de plantilla."
     );
   }
 
+  const parametros = datos.parametros.map(
+    (parametro, index) => {
+      const texto = String(
+        parametro ?? ""
+      ).trim();
 
-  const parametros =
-    datos.parametros.map(
-      (
-        parametro,
-        index
-      ) => {
-
-        const texto =
-          String(
-            parametro ??
-            ""
-          ).trim();
-
-
-        if (!texto) {
-
-          throw new Error(
-            `El parámetro ${
-              index + 1
-            } del envío inicial está vacío.`
-          );
-        }
-
-
-        return texto;
+      if (!texto) {
+        throw new Error(
+          `El parámetro ${index + 1} del envío inicial está vacío.`
+        );
       }
-    );
 
+      return texto;
+    }
+  );
 
   return {
-    mensaje:
-      String(
-        datos.mensaje ??
-        ""
-      ).trim(),
-
+    mensaje: String(datos.mensaje ?? "").trim(),
     parametros,
   };
 }
 
-
 // ======================================================
-// OBTENER ENVÍO BASE
-// ======================================================
-//
-// Siempre utilizamos la plantilla y los parámetros
-// del AVISO INICIAL.
-//
-// De esta forma:
-//
-// NIVEL -> alerta_nivel_contenedor
-// PROGRAMADA -> recordatorio_programado
-//
-// No inventamos plantillas.
+// CONSULTAR ENVÍO INICIAL
 // ======================================================
 
 async function obtenerEnvioBase(
   client,
   alertaId
 ) {
+  const { rows } = await client.query(
+    `
+      SELECT
+        id,
+        alerta_id,
+        secuencia_notificacion,
+        canal,
+        plantilla_meta,
+        contenido_enviado
 
-  const { rows } =
-    await client.query(
-      `
-        SELECT
-          id,
-          alerta_id,
-          secuencia_notificacion,
-          canal,
+      FROM alertas_envios
 
-          plantilla_meta,
-          contenido_enviado
+      WHERE alerta_id = $1
 
-        FROM alertas_envios
+        AND secuencia_notificacion = 1
 
-        WHERE alerta_id = $1
+        AND canal = $2
 
-          AND secuencia_notificacion = 1
+        AND plantilla_meta IS NOT NULL
 
-          AND canal = $2
+        AND TRIM(plantilla_meta) <> ''
 
-          AND plantilla_meta
-            IS NOT NULL
+        AND contenido_enviado IS NOT NULL
 
-          AND TRIM(
-            plantilla_meta
-          ) <> ''
+        AND TRIM(contenido_enviado) <> ''
 
-          AND contenido_enviado
-            IS NOT NULL
+      ORDER BY id ASC
 
-          AND TRIM(
-            contenido_enviado
-          ) <> ''
+      LIMIT 1
+    `,
+    [
+      alertaId,
+      CANAL_WHATSAPP,
+    ]
+  );
 
-        ORDER BY
-          id ASC
-
-        LIMIT 1
-      `,
-      [
-        alertaId,
-        CANAL_WHATSAPP,
-      ]
-    );
-
-
-  return rows[0] ||
-    null;
+  return rows[0] || null;
 }
 
+// ======================================================
+// VALIDAR NIVEL VIGENTE DEL ESP8266
+// ======================================================
+//
+// Solo NIVEL_AVISO y NIVEL_ALTO.
+//
+// Lectura vigente y porcentaje >= umbral:
+// permite generar recordatorio.
+//
+// Lectura inferior al umbral:
+// suspende recordatorio.
+//
+// Lectura vencida:
+// suspende sin interpretar 0 % como nivel real.
+//
+// No reinicia el ciclo de alertas.
+// No modifica indicadores de recolección.
+//
+// ======================================================
+
+function validarNivelParaRecordatorio(alerta) {
+  if (!TIPOS_NIVEL.has(alerta.tipo)) {
+    return {
+      permitido: true,
+      motivo: "NO_REQUIERE_VALIDACION_NIVEL",
+    };
+  }
+
+  const contenedorId = Number(
+    alerta.contenedor_id
+  );
+
+  const umbral = Number(
+    alerta.umbral_configurado
+  );
+
+  if (
+    !Number.isSafeInteger(contenedorId) ||
+    contenedorId <= 0 ||
+    alerta.umbral_configurado === null ||
+    alerta.umbral_configurado === undefined ||
+    !Number.isFinite(umbral) ||
+    umbral < 0 ||
+    umbral > 100
+  ) {
+    return {
+      permitido: false,
+      motivo: "DATOS_ALERTA_NIVEL_INVALIDOS",
+    };
+  }
+
+  const lectura =
+    NivelCacheService.obtenerNivelVigente(
+      contenedorId
+    );
+
+  if (!lectura || lectura.vigente !== true) {
+    return {
+      permitido: false,
+      motivo: "SIN_LECTURA_VIGENTE",
+      contenedorId,
+    };
+  }
+
+  const porcentaje = Number(
+    lectura.porcentaje
+  );
+
+  if (
+    !Number.isFinite(porcentaje) ||
+    porcentaje < 0 ||
+    porcentaje > 100
+  ) {
+    return {
+      permitido: false,
+      motivo: "LECTURA_NIVEL_INVALIDA",
+      contenedorId,
+    };
+  }
+
+  if (porcentaje < umbral) {
+    return {
+      permitido: false,
+      motivo: "NIVEL_DEBAJO_DEL_UMBRAL",
+      contenedorId,
+      porcentaje,
+      umbral,
+    };
+  }
+
+  return {
+    permitido: true,
+    motivo: "NIVEL_VIGENTE_EN_UMBRAL",
+    contenedorId,
+    porcentaje,
+    umbral,
+  };
+}
 
 // ======================================================
-// BUSCAR SIGUIENTE ALERTA QUE REQUIERE RECORDATORIO
+// VALIDAR FECHA DE ALERTA PROGRAMADA
 // ======================================================
 //
-// Solo:
+// REGLA NUEVA:
 //
-// NIVEL_AVISO
-// NIVEL_ALTO
-// PROGRAMADA
+// PROGRAMADA solo puede generar recordatorios
+// el mismo día de fecha_programada_original,
+// tomando como referencia America/Guatemala.
 //
-// NO PREDICTIVA.
+// La comparación se realiza en PostgreSQL.
 //
-// Una nueva secuencia solamente puede crearse cuando
-// la secuencia anterior fue completada.
+// No depende de la zona horaria de Railway.
 //
-// Se considera completada cuando:
+// Para alertas de nivel no aplica.
 //
-// WhatsApp fue ACEPTADO
+// ======================================================
+
+async function validarFechaProgramada(
+  client,
+  alerta
+) {
+  if (alerta.tipo !== "PROGRAMADA") {
+    return {
+      permitido: true,
+      motivo: "NO_ES_ALERTA_PROGRAMADA",
+    };
+  }
+
+  if (
+    alerta.fecha_programada_original === null ||
+    alerta.fecha_programada_original === undefined
+  ) {
+    return {
+      permitido: false,
+      motivo: "FECHA_PROGRAMADA_NO_DISPONIBLE",
+    };
+  }
+
+  const { rows } = await client.query(
+    `
+      SELECT
+        (
+          $1::timestamptz AT TIME ZONE $2
+        )::date
+        =
+        (
+          clock_timestamp() AT TIME ZONE $2
+        )::date
+        AS corresponde_hoy
+    `,
+    [
+      alerta.fecha_programada_original,
+      ZONA_HORARIA,
+    ]
+  );
+
+  const permitido =
+    rows[0]?.corresponde_hoy === true;
+
+  return {
+    permitido,
+    motivo: permitido
+      ? "FECHA_PROGRAMADA_VIGENTE"
+      : "FECHA_PROGRAMADA_FUERA_DEL_DIA",
+  };
+}
+
+// ======================================================
+// VALIDAR RECORDATORIO SEGÚN TIPO
+// ======================================================
 //
-// O:
+// NIVEL:
+// valida la lectura real del ESP8266.
 //
-// WhatsApp falló 3 veces y el EMAIL de respaldo
-// fue ACEPTADO.
+// PROGRAMADA:
+// valida el día original de programación.
 //
-// Esto evita crear recordatorios mientras todavía
-// se están ejecutando los reintentos técnicos.
+// ======================================================
+
+async function validarRecordatorio(
+  client,
+  alerta
+) {
+  if (alerta.tipo === "PROGRAMADA") {
+    return validarFechaProgramada(
+      client,
+      alerta
+    );
+  }
+
+  return validarNivelParaRecordatorio(
+    alerta
+  );
+}
+
+// ======================================================
+// OBTENER SIGUIENTE ALERTA ELEGIBLE
+// ======================================================
+//
+// Se conservan:
+//
+// - Solo alertas ACTIVAS.
+// - Hasta 3 recordatorios.
+// - Intervalos configurados por .env.
+// - No incluir PREDICTIVA.
+// - Esperar envío anterior ACEPTADO.
+// - No recordar NIVEL_AVISO cuando existe
+//   NIVEL_ALTO posterior activo.
+//
+// NUEVO:
+//
+// PROGRAMADA debe corresponder a HOY
+// según America/Guatemala.
+//
 // ======================================================
 
 async function obtenerSiguienteAlerta(
-  client
+  client,
+  alertasExcluidas = []
 ) {
-
   const intervaloMin =
     obtenerIntervaloRecordatorioMin();
 
+  const limite =
+    obtenerLimitePorCiclo();
 
-  const { rows } =
-    await client.query(
-      `
-        WITH ultima_secuencia AS
-        (
-          SELECT
-            ae.alerta_id,
-
-            MAX(
-              ae.secuencia_notificacion
-            )::integer
-              AS ultima_secuencia
-
-          FROM alertas_envios ae
-
-          WHERE ae.canal = $1
-
-          GROUP BY
-            ae.alerta_id
-        )
-
+  const { rows } = await client.query(
+    `
+      WITH ultima_secuencia AS (
         SELECT
-          a.id,
-          a.tipo,
-          a.contenedor_id,
-          a.motivo,
-          a.mensaje,
-          a.estado,
-          a.fecha_creacion,
-          a.fecha_activacion,
+          ae.alerta_id,
 
-          us.ultima_secuencia,
+          MAX(
+            ae.secuencia_notificacion
+          )::integer AS ultima_secuencia
 
-          completada.fecha_completada
+        FROM alertas_envios ae
 
-        FROM alertas a
+        WHERE ae.canal = $1
 
-        JOIN ultima_secuencia us
-          ON us.alerta_id =
-             a.id
+        GROUP BY ae.alerta_id
+      )
 
-        JOIN LATERAL
-        (
-          SELECT
-            MAX(
-              ae2.fecha_intento
-            ) AS fecha_completada
+      SELECT
+        a.id,
+        a.tipo,
+        a.contenedor_id,
+        a.motivo,
+        a.mensaje,
+        a.estado,
+        a.umbral_configurado,
 
-          FROM alertas_envios ae2
+        a.fecha_programada_original,
 
-          WHERE ae2.alerta_id =
-                a.id
+        a.fecha_creacion,
+        a.fecha_activacion,
 
-            AND ae2.secuencia_notificacion =
-                us.ultima_secuencia
+        us.ultima_secuencia,
 
-            AND ae2.estado =
-                $2
+        completada.fecha_completada
 
-            AND ae2.canal IN
-            (
-              $1,
-              $3
-            )
-        )
-          AS completada
-          ON TRUE
+      FROM alertas a
 
-        WHERE a.estado = $4
+      INNER JOIN ultima_secuencia us
+        ON us.alerta_id = a.id
 
-          AND a.tipo =
-              ANY(
-                $5::text[]
+      JOIN LATERAL (
+        SELECT
+          MAX(ae2.fecha_intento)
+            AS fecha_completada
+
+        FROM alertas_envios ae2
+
+        WHERE ae2.alerta_id = a.id
+
+          AND ae2.secuencia_notificacion =
+              us.ultima_secuencia
+
+          AND ae2.estado = $2
+
+          AND ae2.canal IN ($1, $3)
+
+      ) AS completada
+        ON TRUE
+
+      WHERE a.estado = $4
+
+        AND a.tipo = ANY($5::text[])
+
+        AND us.ultima_secuencia >= 1
+
+        AND us.ultima_secuencia < $6
+
+        AND completada.fecha_completada
+            IS NOT NULL
+
+        AND completada.fecha_completada
+            + (
+                $7::integer *
+                INTERVAL '1 minute'
               )
+            <= clock_timestamp()
 
-          AND us.ultima_secuencia
-              >= 1
+        -- ==========================================
+        -- NUEVA REGLA PARA ALERTAS PROGRAMADAS
+        -- ==========================================
+        --
+        -- Las alertas de nivel no se afectan.
+        --
+        -- PROGRAMADA solo se procesa si
+        -- su fecha original corresponde a hoy.
+        --
+        -- ==========================================
 
-          AND us.ultima_secuencia
-              < $6
+        AND (
+          a.tipo <> 'PROGRAMADA'
 
-          AND completada.fecha_completada
+          OR (
+            a.fecha_programada_original
               IS NOT NULL
 
-          AND completada.fecha_completada
-              + (
-                  $7::integer *
-                  INTERVAL '1 minute'
-                )
-              <= CURRENT_TIMESTAMP
-
-
-          -- ============================================
-          -- SI YA EXISTE NIVEL_ALTO,
-          -- NO SEGUIR RECORDANDO NIVEL_AVISO
-          -- ============================================
-
-          AND NOT
-          (
-            a.tipo =
-              'NIVEL_AVISO'
-
-            AND EXISTS
+            AND (
+              a.fecha_programada_original
+                AT TIME ZONE $10
+            )::date
+            =
             (
-              SELECT
-                1
-
-              FROM alertas alta
-
-              WHERE alta.tipo =
-                    'NIVEL_ALTO'
-
-                AND alta.contenedor_id =
-                    a.contenedor_id
-
-                AND alta.estado =
-                    'ACTIVA'
-
-                AND alta.fecha_creacion
-                    >= a.fecha_creacion
-            )
+              clock_timestamp()
+                AT TIME ZONE $10
+            )::date
           )
+        )
 
+        -- ==========================================
+        -- EVITAR RECORDATORIOS DE NIVEL INFERIOR
+        -- SI YA EXISTE NIVEL ALTO ACTIVO
+        -- ==========================================
 
-          -- ============================================
-          -- SOLO REGISTROS NUEVOS CON PLANTILLA META
-          -- ============================================
+        AND NOT (
+          a.tipo = 'NIVEL_AVISO'
 
-          AND EXISTS
-          (
-            SELECT
-              1
+          AND EXISTS (
+            SELECT 1
 
-            FROM alertas_envios inicial
+            FROM alertas alta
 
-            WHERE inicial.alerta_id =
-                  a.id
+            WHERE alta.tipo = 'NIVEL_ALTO'
 
-              AND inicial.secuencia_notificacion =
-                  1
+              AND alta.contenedor_id =
+                  a.contenedor_id
 
-              AND inicial.canal =
-                  $1
+              AND alta.estado = 'ACTIVA'
 
-              AND inicial.plantilla_meta
-                  IS NOT NULL
-
-              AND TRIM(
-                inicial.plantilla_meta
-              ) <> ''
+              AND alta.fecha_creacion >=
+                  a.fecha_creacion
           )
+        )
 
-        ORDER BY
-          completada.fecha_completada ASC,
-          a.id ASC
+        -- ==========================================
+        -- REQUERIR ENVÍO INICIAL CON PLANTILLA
+        -- ==========================================
 
-        LIMIT 1
+        AND EXISTS (
+          SELECT 1
 
-        FOR UPDATE OF a
-        SKIP LOCKED
-      `,
-      [
-        CANAL_WHATSAPP,
+          FROM alertas_envios inicial
 
-        ESTADO_ENVIO_ACEPTADO,
+          WHERE inicial.alerta_id = a.id
 
-        CANAL_EMAIL,
+            AND inicial.secuencia_notificacion = 1
 
-        ESTADO_ALERTA_ACTIVA,
+            AND inicial.canal = $1
 
-        TIPOS_PERMITIDOS,
+            AND inicial.plantilla_meta
+              IS NOT NULL
 
-        MAX_SECUENCIA_NOTIFICACION,
+            AND TRIM(
+              inicial.plantilla_meta
+            ) <> ''
+        )
 
-        intervaloMin,
-      ]
-    );
+        AND NOT (
+          a.id = ANY($9::integer[])
+        )
 
+      ORDER BY
+        completada.fecha_completada ASC,
+        a.id ASC
 
-  return rows[0] ||
-    null;
+      LIMIT $8
+
+      FOR UPDATE OF a
+      SKIP LOCKED
+    `,
+    [
+      CANAL_WHATSAPP,
+      ESTADO_ENVIO_ACEPTADO,
+      CANAL_EMAIL,
+      ESTADO_ALERTA_ACTIVA,
+      TIPOS_PERMITIDOS,
+      MAX_SECUENCIA_NOTIFICACION,
+      intervaloMin,
+      limite,
+      alertasExcluidas,
+      ZONA_HORARIA,
+    ]
+  );
+
+  for (const alerta of rows) {
+    const validacion =
+      await validarRecordatorio(
+        client,
+        alerta
+      );
+
+    if (!validacion.permitido) {
+      continue;
+    }
+
+    return alerta;
+  }
+
+  return null;
 }
-
 
 // ======================================================
 // CREAR SIGUIENTE RECORDATORIO
 // ======================================================
 
-async function crearSiguienteRecordatorio() {
-
-  const client =
-    await pool.connect();
-
-
-  let transaccionActiva =
-    false;
-
+async function crearSiguienteRecordatorio(
+  alertasExcluidas = []
+) {
+  const client = await pool.connect();
+  let transaccionActiva = false;
 
   try {
-
-    await client.query(
-      "BEGIN"
-    );
-
-
-    transaccionActiva =
-      true;
-
+    await client.query("BEGIN");
+    transaccionActiva = true;
 
     // ==================================================
-    // 1. BUSCAR ALERTA
+    // 1. BUSCAR ALERTA ELEGIBLE
     // ==================================================
 
     const alerta =
       await obtenerSiguienteAlerta(
-        client
+        client,
+        alertasExcluidas
       );
-
 
     if (!alerta) {
-
-      await client.query(
-        "COMMIT"
-      );
-
-
-      transaccionActiva =
-        false;
-
+      await client.query("COMMIT");
+      transaccionActiva = false;
 
       return {
-        accion:
-          "SIN_RECORDATORIOS_PENDIENTES",
+        accion: "SIN_RECORDATORIOS_PENDIENTES",
       };
     }
-
 
     // ==================================================
     // 2. DETERMINAR SIGUIENTE SECUENCIA
     // ==================================================
 
-    const ultimaSecuencia =
-      Number(
-        alerta
-          .ultima_secuencia
-      );
-
+    const ultimaSecuencia = Number(
+      alerta.ultima_secuencia
+    );
 
     if (
-      !Number.isSafeInteger(
-        ultimaSecuencia
-      ) ||
+      !Number.isSafeInteger(ultimaSecuencia) ||
       ultimaSecuencia < 1 ||
       ultimaSecuencia >=
         MAX_SECUENCIA_NOTIFICACION
     ) {
-
       throw new Error(
         "La secuencia actual de la alerta no es válida."
       );
     }
 
-
     const siguienteSecuencia =
       ultimaSecuencia + 1;
-
 
     // ==================================================
     // 3. OBTENER PLANTILLA ORIGINAL
@@ -656,74 +707,77 @@ async function crearSiguienteRecordatorio() {
         alerta.id
       );
 
-
     if (!envioBase) {
-
       throw new Error(
         "No existe un envío inicial válido para generar el recordatorio."
       );
     }
 
-
-    const plantilla =
-      String(
-        envioBase
-          .plantilla_meta ??
-        ""
-      ).trim();
-
+    const plantilla = String(
+      envioBase.plantilla_meta ?? ""
+    ).trim();
 
     if (!plantilla) {
-
       throw new Error(
         "El envío inicial no contiene plantilla Meta."
       );
     }
 
-
     const contenido =
       leerContenidoEstructurado(
-        envioBase
-          .contenido_enviado
+        envioBase.contenido_enviado
       );
 
-
     // ==================================================
-    // 4. MENSAJE
+    // 4. PREPARAR MENSAJE
     // ==================================================
 
     const mensaje =
       contenido.mensaje ||
       String(
-        alerta.mensaje ??
-        ""
+        alerta.mensaje ?? ""
       ).trim();
 
-
     if (!mensaje) {
-
       throw new Error(
         "La alerta no contiene mensaje para el recordatorio."
       );
     }
 
+    // ==================================================
+    // 5. REVALIDAR ANTES DE CREAR ENVÍO
+    // ==================================================
+    //
+    // NIVEL:
+    // vuelve a consultar el ESP8266.
+    //
+    // PROGRAMADA:
+    // vuelve a verificar el día Guatemala.
+    //
+    // Esto cubre un cambio de día mientras
+    // se preparaba el recordatorio.
+    //
+    // ==================================================
+
+    const validacionFinal =
+      await validarRecordatorio(
+        client,
+        alerta
+      );
+
+    if (!validacionFinal.permitido) {
+      await client.query("COMMIT");
+      transaccionActiva = false;
+
+      return {
+        accion: "RECORDATORIO_SUSPENDIDO",
+        alertaId: alerta.id,
+        motivo: validacionFinal.motivo,
+      };
+    }
 
     // ==================================================
-    // 5. CREAR PENDIENTE
-    // ==================================================
-    //
-    // Recordatorio 1:
-    // secuencia = 2
-    //
-    // Recordatorio 2:
-    // secuencia = 3
-    //
-    // Recordatorio 3:
-    // secuencia = 4
-    //
-    // Cada uno comienza con:
-    //
-    // intento = 1
+    // 6. CREAR ENVÍO PENDIENTE
     // ==================================================
 
     const resultadoEnvio =
@@ -731,13 +785,9 @@ async function crearSiguienteRecordatorio() {
         .crearEnvioWhatsAppPendiente(
           client,
           {
-            alertaId:
-              alerta.id,
-
+            alertaId: alerta.id,
             mensaje,
-
-            plantillaMeta:
-              plantilla,
+            plantillaMeta: plantilla,
 
             parametrosPlantilla:
               contenido.parametros,
@@ -745,113 +795,97 @@ async function crearSiguienteRecordatorio() {
             secuenciaNotificacion:
               siguienteSecuencia,
 
-            intento:
-              1,
+            intento: 1,
 
-            fechaProgramadaIntento:
-              null,
+            fechaProgramadaIntento: null,
           }
         );
 
-
     // ==================================================
-    // SIN INSPECTOR
+    // 7. SIN DESTINATARIO
     // ==================================================
 
     if (
       resultadoEnvio.motivo ===
       "SIN_DESTINATARIO_WHATSAPP"
     ) {
-
-      await client.query(
-        "COMMIT"
-      );
-
-
-      transaccionActiva =
-        false;
-
+      await client.query("COMMIT");
+      transaccionActiva = false;
 
       return {
-        accion:
-          "SIN_DESTINATARIO",
-
-        alertaId:
-          alerta.id,
-
+        accion: "SIN_DESTINATARIO",
+        alertaId: alerta.id,
         siguienteSecuencia,
       };
     }
 
-
-    if (
-      !resultadoEnvio
-        .envio
-        ?.id
-    ) {
-
+    if (!resultadoEnvio.envio?.id) {
       throw new Error(
         "No fue posible crear el recordatorio de WhatsApp."
       );
     }
 
+    // ==================================================
+    // 8. VERIFICACIÓN FINAL PARA PROGRAMADA
+    // ==================================================
+    //
+    // Si el día cambió después de crear el registro,
+    // revertimos la transacción completa.
+    //
+    // Así tampoco queda el nuevo envío en la cola.
+    //
+    // ==================================================
+
+    if (alerta.tipo === "PROGRAMADA") {
+      const ultimaValidacion =
+        await validarFechaProgramada(
+          client,
+          alerta
+        );
+
+      if (!ultimaValidacion.permitido) {
+        await client.query("ROLLBACK");
+        transaccionActiva = false;
+
+        return {
+          accion: "RECORDATORIO_SUSPENDIDO",
+          alertaId: alerta.id,
+          motivo: "FECHA_PROGRAMADA_FUERA_DEL_DIA",
+        };
+      }
+    }
 
     // ==================================================
-    // 6. CONFIRMAR
+    // 9. CONFIRMAR
     // ==================================================
 
-    await client.query(
-      "COMMIT"
-    );
-
-
-    transaccionActiva =
-      false;
-
+    await client.query("COMMIT");
+    transaccionActiva = false;
 
     return {
-      accion:
-        "RECORDATORIO_CREADO",
+      accion: resultadoEnvio.creado
+        ? "RECORDATORIO_CREADO"
+        : "RECORDATORIO_YA_EXISTE",
 
-      alertaId:
-        alerta.id,
+      alertaId: alerta.id,
 
-      tipo:
-        alerta.tipo,
+      tipo: alerta.tipo,
 
-      secuencia:
-        siguienteSecuencia,
+      secuencia: siguienteSecuencia,
 
       numeroRecordatorio:
         siguienteSecuencia - 1,
 
-      envioId:
-        resultadoEnvio
-          .envio
-          .id,
+      envioId: resultadoEnvio.envio.id,
 
       plantilla,
     };
 
-
-  } catch (
-    error
-  ) {
-
-    if (
-      transaccionActiva
-    ) {
-
+  } catch (error) {
+    if (transaccionActiva) {
       try {
-
-        await client.query(
-          "ROLLBACK"
-        );
-
-      } catch (
-        rollbackError
-      ) {
-
+        await client.query("ROLLBACK");
+      } catch (rollbackError) {
         console.error(
           "Error revirtiendo recordatorio WhatsApp:",
           rollbackError.message
@@ -859,206 +893,126 @@ async function crearSiguienteRecordatorio() {
       }
     }
 
-
     throw error;
 
-
   } finally {
-
     client.release();
   }
 }
 
-
 // ======================================================
-// EJECUTAR CICLO
+// EJECUTAR CICLO DEL MONITOR
 // ======================================================
 
 async function ejecutarCiclo() {
-
-  if (
-    ejecucionEnCurso
-  ) {
-
+  if (ejecucionEnCurso) {
     return {
-      accion:
-        "CICLO_EN_PROCESO",
+      accion: "CICLO_EN_PROCESO",
     };
   }
 
+  ejecucionEnCurso = true;
 
-  ejecucionEnCurso =
-    true;
-
-
-  const resultados =
-    [];
-
+  const resultados = [];
+  const alertasExcluidas = new Set();
 
   try {
-
     const limite =
       obtenerLimitePorCiclo();
 
-
-    for (
-      let i = 0;
-      i < limite;
-      i++
-    ) {
-
+    for (let i = 0; i < limite; i++) {
       const resultado =
-        await crearSiguienteRecordatorio();
-
+        await crearSiguienteRecordatorio(
+          Array.from(alertasExcluidas)
+        );
 
       if (
         resultado.accion ===
         "SIN_RECORDATORIOS_PENDIENTES"
       ) {
-
         break;
       }
 
+      resultados.push(resultado);
 
-      resultados.push(
-        resultado
-      );
-
-
-      // ================================================
-      // SIN DESTINATARIO
-      // ================================================
-      //
-      // No repetimos inmediatamente el mismo registro
-      // dentro del mismo ciclo.
-      // ================================================
+      if (resultado.alertaId) {
+        alertasExcluidas.add(
+          resultado.alertaId
+        );
+      }
 
       if (
         resultado.accion ===
         "SIN_DESTINATARIO"
       ) {
-
         break;
       }
-
 
       if (
         resultado.accion ===
         "RECORDATORIO_CREADO"
       ) {
-
         console.log(
-          `Recordatorio WhatsApp ${resultado.numeroRecordatorio}/3 creado | alerta ${resultado.alertaId} | envío ${resultado.envioId}`
+          `Recordatorio WhatsApp ${resultado.numeroRecordatorio}/${MAX_RECORDATORIOS} creado | alerta ${resultado.alertaId} | envío ${resultado.envioId}`
         );
       }
     }
 
-
     return {
-      accion:
-        "CICLO_COMPLETADO",
-
-      total:
-        resultados.length,
-
+      accion: "CICLO_COMPLETADO",
+      total: resultados.length,
       resultados,
     };
 
-
-  } catch (
-    error
-  ) {
-
+  } catch (error) {
     console.error(
       "Error ejecutando recordatorios WhatsApp:",
       error.message
     );
 
-
     return {
-      accion:
-        "ERROR_RECORDATORIOS_WHATSAPP",
-
-      error:
-        error.message,
-
+      accion: "ERROR_RECORDATORIOS_WHATSAPP",
+      error: error.message,
       resultados,
     };
 
-
   } finally {
-
-    ejecucionEnCurso =
-      false;
+    ejecucionEnCurso = false;
   }
 }
-
 
 // ======================================================
 // INICIAR MONITOR
 // ======================================================
 
 async function iniciarMonitor() {
-
-  if (
-    timerMonitor
-  ) {
-
+  if (timerMonitor) {
     return {
-      iniciado:
-        false,
-
-      motivo:
-        "MONITOR_YA_INICIADO",
+      iniciado: false,
+      motivo: "MONITOR_YA_INICIADO",
     };
   }
-
 
   const intervaloMs =
     obtenerIntervaloMonitorMs();
 
-
-  // ====================================================
-  // PRIMER CICLO
-  // ====================================================
-
   await ejecutarCiclo();
 
-
-  // ====================================================
-  // CICLOS POSTERIORES
-  // ====================================================
-
-  timerMonitor =
-    setInterval(
-      () => {
-
-        ejecutarCiclo()
-          .catch(
-            (
-              error
-            ) => {
-
-              console.error(
-                "Error inesperado en monitor de recordatorios WhatsApp:",
-                error.message
-              );
-            }
-          );
-
-      },
-      intervaloMs
-    );
-
+  timerMonitor = setInterval(() => {
+    ejecutarCiclo().catch(error => {
+      console.error(
+        "Error inesperado en monitor de recordatorios WhatsApp:",
+        error.message
+      );
+    });
+  }, intervaloMs);
 
   console.log(
     `Monitor de recordatorios WhatsApp activo cada ${intervaloMs} ms.`
   );
 
-
   return {
-    iniciado:
-      true,
+    iniciado: true,
 
     intervaloMs,
 
@@ -1070,49 +1024,30 @@ async function iniciarMonitor() {
   };
 }
 
-
 // ======================================================
 // DETENER MONITOR
 // ======================================================
 
 function detenerMonitor() {
-
-  if (
-    timerMonitor
-  ) {
-
-    clearInterval(
-      timerMonitor
-    );
-
-
-    timerMonitor =
-      null;
+  if (timerMonitor) {
+    clearInterval(timerMonitor);
+    timerMonitor = null;
   }
 
-
-  ejecucionEnCurso =
-    false;
-
+  ejecucionEnCurso = false;
 
   return {
-    detenido:
-      true,
+    detenido: true,
   };
 }
-
 
 // ======================================================
 // EXPORTACIONES
 // ======================================================
 
 module.exports = {
-
   iniciarMonitor,
-
   detenerMonitor,
-
   ejecutarCiclo,
-
   crearSiguienteRecordatorio,
 };

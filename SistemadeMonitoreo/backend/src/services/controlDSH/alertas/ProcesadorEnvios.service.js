@@ -1,298 +1,186 @@
-const pool = require(
-  "../../../config/db"
-);
+
+"use strict";
+
+const pool = require("../../../config/db");
 
 const {
   enviarPlantillaWhatsApp,
   MetaWhatsAppError,
-} = require(
-  "./MetaWhatsApp.service"
-);
+} = require("./MetaWhatsApp.service");
 
 const {
   registrarAceptacionMeta,
   registrarFalloMeta,
-} = require(
-  "./ResultadoEnvios.service"
-);
+} = require("./ResultadoEnvios.service");
 
 const {
   enviarRespaldoEmail,
-} = require(
-  "./RespaldoEmail.service"
+} = require("./RespaldoEmail.service");
+
+const NivelCacheService = require(
+  "../mediciones/NivelActualCache.service"
 );
 
-
 // ======================================================
-// CONFIGURACIÓN
-// ======================================================
-
-const CANAL_WHATSAPP =
-  "WHATSAPP";
-
-const ESTADO_PENDIENTE =
-  "PENDIENTE";
-
-const MAX_INTENTOS_WHATSAPP =
-  3;
-
-const LIMITE_MAXIMO_CONSULTA =
-  100;
-
-
-// ======================================================
-// VALIDAR ENTERO POSITIVO
+// CONSTANTES
 // ======================================================
 
-function validarEnteroPositivo(
-  valor,
-  nombre
-) {
+const CANAL_WHATSAPP = "WHATSAPP";
+const ESTADO_PENDIENTE = "PENDIENTE";
+const ESTADO_ALERTA_ACTIVA = "ACTIVA";
 
-  const numero =
-    Number(valor);
+const ZONA_HORARIA = "America/Guatemala";
 
+const TIPOS_NIVEL = new Set([
+  "NIVEL_AVISO",
+  "NIVEL_ALTO",
+]);
+
+const MAX_INTENTOS_WHATSAPP = 3;
+const LIMITE_MAXIMO_CONSULTA = 100;
+
+// ======================================================
+// VALIDACIONES
+// ======================================================
+
+function validarEnteroPositivo(valor, nombre) {
+  const numero = Number(valor);
 
   if (
-    !Number.isSafeInteger(
-      numero
-    ) ||
+    !Number.isSafeInteger(numero) ||
     numero <= 0
   ) {
-
-    throw new Error(
-      `${nombre} inválido.`
-    );
+    throw new Error(`${nombre} inválido.`);
   }
-
 
   return numero;
 }
 
-
-// ======================================================
-// VALIDAR LÍMITE
-// ======================================================
-
-function validarLimite(
-  valor
-) {
-
-  const limite =
-    validarEnteroPositivo(
-      valor,
-      "Límite"
-    );
-
-
+function validarLimite(valor) {
   return Math.min(
-    limite,
+    validarEnteroPositivo(valor, "Límite"),
     LIMITE_MAXIMO_CONSULTA
   );
 }
 
-
 // ======================================================
-// OBTENER IDIOMA
+// CONFIGURACIÓN DE WHATSAPP
 // ======================================================
 
 function obtenerIdiomaWhatsApp() {
-
-  const idioma =
-    String(
-      process.env
-        .WHATSAPP_LANGUAGE ||
-      "es"
-    ).trim();
-
+  const idioma = String(
+    process.env.WHATSAPP_LANGUAGE || "es"
+  ).trim();
 
   if (!idioma) {
-
     throw new Error(
       "WHATSAPP_LANGUAGE no está configurado correctamente."
     );
   }
 
-
   return idioma;
 }
-
 
 // ======================================================
 // LEER CONTENIDO ESTRUCTURADO
 // ======================================================
 
-function leerContenidoEstructurado(
-  contenidoEnviado
-) {
-
-  const contenido =
-    String(
-      contenidoEnviado ??
-      ""
-    ).trim();
-
+function leerContenidoEstructurado(contenidoEnviado) {
+  const contenido = String(
+    contenidoEnviado ?? ""
+  ).trim();
 
   if (!contenido) {
-
     throw new Error(
       "El envío no contiene información para procesar."
     );
   }
 
-
   let datos;
 
-
   try {
-
-    datos =
-      JSON.parse(
-        contenido
-      );
-
-  } catch (
-    error
-  ) {
-
+    datos = JSON.parse(contenido);
+  } catch {
     throw new Error(
       "El contenido del envío no tiene el formato estructurado esperado."
     );
   }
 
-
   if (
     !datos ||
-    typeof datos !==
-      "object" ||
-    Array.isArray(
-      datos
-    )
+    typeof datos !== "object" ||
+    Array.isArray(datos)
   ) {
-
     throw new Error(
       "El contenido estructurado del envío no es válido."
     );
   }
 
-
-  if (
-    Number(
-      datos.version
-    ) !== 1
-  ) {
-
+  if (Number(datos.version) !== 1) {
     throw new Error(
       "La versión del contenido del envío no es compatible."
     );
   }
 
-
   if (
-    !Array.isArray(
-      datos.parametros
-    ) ||
-    datos.parametros.length ===
-      0
+    !Array.isArray(datos.parametros) ||
+    datos.parametros.length === 0
   ) {
-
     throw new Error(
       "El envío no contiene parámetros para la plantilla de WhatsApp."
     );
   }
 
+  const parametros = datos.parametros.map(
+    (parametro, index) => {
+      const texto = String(
+        parametro ?? ""
+      ).trim();
 
-  const parametros =
-    datos.parametros.map(
-      (
-        parametro,
-        index
-      ) => {
-
-        const texto =
-          String(
-            parametro ??
-            ""
-          ).trim();
-
-
-        if (!texto) {
-
-          throw new Error(
-            `El parámetro ${
-              index + 1
-            } de WhatsApp está vacío.`
-          );
-        }
-
-
-        return texto;
+      if (!texto) {
+        throw new Error(
+          `El parámetro ${index + 1} de WhatsApp está vacío.`
+        );
       }
-    );
 
+      return texto;
+    }
+  );
 
   return {
-    version:
-      1,
-
-    mensaje:
-      String(
-        datos.mensaje ??
-        ""
-      ).trim(),
-
+    version: 1,
+    mensaje: String(datos.mensaje ?? "").trim(),
     parametros,
   };
 }
 
-
 // ======================================================
-// NORMALIZAR PLANTILLA
+// NORMALIZAR PLANTILLA META
 // ======================================================
 
-function normalizarPlantilla(
-  value
-) {
-
-  const plantilla =
-    String(
-      value ??
-      ""
-    ).trim();
-
+function normalizarPlantilla(value) {
+  const plantilla = String(value ?? "").trim();
 
   if (!plantilla) {
-
     throw new Error(
       "El envío no contiene una plantilla de Meta."
     );
   }
 
-
-  if (
-    !/^[a-z0-9_]+$/.test(
-      plantilla
-    )
-  ) {
-
+  if (!/^[a-z0-9_]+$/.test(plantilla)) {
     throw new Error(
       "La plantilla de Meta del envío no es válida."
     );
   }
 
-
   return plantilla;
 }
 
-
 // ======================================================
-// OBTENER CÓDIGO DE ERROR
+// MANEJO DE ERRORES DE META
 // ======================================================
 
-function obtenerCodigoError(
-  error
-) {
-
+function obtenerCodigoError(error) {
   const valor =
     error?.codigo ??
     error?.code ??
@@ -303,77 +191,146 @@ function obtenerCodigoError(
     ) ??
     "META_WHATSAPP_ERROR";
 
-
-  return String(
-    valor
-  )
-    .trim()
-    .slice(
-      0,
-      100
-    ) ||
-    "META_WHATSAPP_ERROR";
+  return (
+    String(valor).trim().slice(0, 100) ||
+    "META_WHATSAPP_ERROR"
+  );
 }
 
-
-// ======================================================
-// OBTENER DETALLE
-// ======================================================
-
-function obtenerDetalleError(
-  error
-) {
-
-  const mensaje =
+function obtenerDetalleError(error) {
+  return (
     String(
       error?.message ??
       "No fue posible enviar el mensaje mediante WhatsApp."
-    ).trim();
-
-
-  return mensaje ||
-    "No fue posible enviar el mensaje mediante WhatsApp.";
+    ).trim() ||
+    "No fue posible enviar el mensaje mediante WhatsApp."
+  );
 }
 
-
-// ======================================================
-// OBTENER BANDERA TÉCNICA DE META
-// ======================================================
-//
-// ResultadoEnvios.service ya garantiza los 3 intentos.
-//
-// Esta bandera se conserva únicamente para trazabilidad.
-// ======================================================
-
-function obtenerErrorReintentable(
-  error
-) {
-
-  if (
-    typeof error?.reintentable ===
-    "boolean"
-  ) {
-
+function obtenerErrorReintentable(error) {
+  if (typeof error?.reintentable === "boolean") {
     return error.reintentable;
   }
-
-
-  /*
-   * Si hubo un error de red o resultado desconocido,
-   * lo registramos técnicamente como reintentable.
-   */
-  if (
-    error?.resultadoDesconocido ===
-    true
-  ) {
-
-    return true;
-  }
-
 
   return true;
 }
 
+// ======================================================
+// VALIDAR NIVEL VIGENTE DEL ESP8266
+// ======================================================
+//
+// Solo aplica a NIVEL_AVISO y NIVEL_ALTO.
+//
+// Si la lectura:
+// - está vencida;
+// - no existe;
+// - está por debajo del umbral;
+// el envío se suspende.
+//
+// No se interpreta un nivel no vigente como 0 % real.
+//
+// No se modifican alertas ni intentos técnicos.
+//
+// ======================================================
+
+function validarNivelAntesDeEnviar(envio) {
+  if (!TIPOS_NIVEL.has(envio.tipo_alerta)) {
+    return {
+      permitido: true,
+      motivo: "ALERTA_SIN_VALIDACION_NIVEL",
+    };
+  }
+
+  const contenedorId = Number(
+    envio.contenedor_id
+  );
+
+  const umbral = Number(
+    envio.umbral_configurado
+  );
+
+  if (
+    !Number.isSafeInteger(contenedorId) ||
+    contenedorId <= 0 ||
+    envio.umbral_configurado === null ||
+    envio.umbral_configurado === undefined ||
+    !Number.isFinite(umbral) ||
+    umbral < 0 ||
+    umbral > 100
+  ) {
+    return {
+      permitido: false,
+      motivo: "DATOS_ALERTA_INVALIDOS",
+    };
+  }
+
+  const lectura =
+    NivelCacheService.obtenerNivelVigente(
+      contenedorId
+    );
+
+  if (!lectura || lectura.vigente !== true) {
+    return {
+      permitido: false,
+      motivo: "SIN_LECTURA_VIGENTE",
+      contenedorId,
+    };
+  }
+
+  const porcentaje = Number(
+    lectura.porcentaje
+  );
+
+  if (
+    !Number.isFinite(porcentaje) ||
+    porcentaje < 0 ||
+    porcentaje > 100
+  ) {
+    return {
+      permitido: false,
+      motivo: "LECTURA_INVALIDA",
+      contenedorId,
+    };
+  }
+
+  if (porcentaje < umbral) {
+    return {
+      permitido: false,
+      motivo: "NIVEL_DEBAJO_DEL_UMBRAL",
+      contenedorId,
+      porcentaje,
+      umbral,
+    };
+  }
+
+  return {
+    permitido: true,
+    motivo: "NIVEL_VALIDADO",
+    contenedorId,
+    porcentaje,
+    umbral,
+  };
+}
+
+// ======================================================
+// CONDICIÓN SQL PARA ALERTAS PROGRAMADAS
+// ======================================================
+//
+// Una alerta PROGRAMADA solamente puede enviarse
+// durante el día de fecha_programada_original
+// en America/Guatemala.
+//
+// Para otros tipos no aplica.
+//
+// Se utiliza en:
+// 1. Selección de la cola.
+// 2. Reconsulta antes del envío.
+// 3. Última verificación antes de llamar a Meta.
+//
+// Si Railway se reinicia al día siguiente,
+// los envíos PROGRAMADA vencidos quedan excluidos.
+//
+// ======================================================
 
 // ======================================================
 // OBTENER ENVÍOS PENDIENTES
@@ -382,203 +339,288 @@ function obtenerErrorReintentable(
 async function obtenerEnviosPendientes({
   limite = 20,
 } = {}) {
+  const limiteValidado = validarLimite(limite);
 
-  const limiteValidado =
-    validarLimite(
-      limite
-    );
+  const { rows } = await pool.query(
+    `
+      SELECT
+        ae.id,
+        ae.alerta_id,
+        ae.secuencia_notificacion,
+        ae.canal,
+        ae.intento,
 
+        ae.usuario_destinatario_id,
+        ae.destinatario,
 
-  const { rows } =
-    await pool.query(
-      `
-        SELECT
-          ae.id,
-          ae.alerta_id,
-          ae.secuencia_notificacion,
-          ae.canal,
-          ae.intento,
+        ae.estado,
+        ae.plantilla_meta,
+        ae.contenido_enviado,
 
-          ae.usuario_destinatario_id,
-          ae.destinatario,
+        ae.fecha_programada_intento,
+        ae.fecha_intento,
 
-          ae.estado,
+        a.tipo AS tipo_alerta,
+        a.motivo AS motivo_alerta,
+        a.contenedor_id,
+        a.umbral_configurado,
+        a.fecha_programada_original
 
-          ae.plantilla_meta,
-          ae.contenido_enviado,
+      FROM alertas_envios ae
 
-          ae.fecha_programada_intento,
-          ae.fecha_intento,
+      INNER JOIN alertas a
+        ON a.id = ae.alerta_id
 
-          a.tipo AS tipo_alerta,
-          a.motivo AS motivo_alerta
+      WHERE ae.canal = $1
+        AND ae.estado = $2
+        AND a.estado = $3
 
-        FROM alertas_envios ae
+        AND ae.fecha_programada_intento
+          <= clock_timestamp()
 
-        JOIN alertas a
-          ON a.id =
-             ae.alerta_id
+        AND ae.plantilla_meta IS NOT NULL
+        AND TRIM(ae.plantilla_meta) <> ''
 
-        WHERE ae.canal = $1
+        AND ae.contenido_enviado IS NOT NULL
+        AND TRIM(ae.contenido_enviado) <> ''
 
-          AND ae.estado = $2
+        AND (
+          a.tipo <> 'PROGRAMADA'
 
-          AND ae.fecha_programada_intento
-            <= CURRENT_TIMESTAMP
+          OR (
+            a.fecha_programada_original
+              IS NOT NULL
 
-          AND ae.plantilla_meta
-            IS NOT NULL
+            AND (
+              a.fecha_programada_original
+                AT TIME ZONE $4
+            )::date
+            =
+            (
+              clock_timestamp()
+                AT TIME ZONE $4
+            )::date
 
-          AND TRIM(
-            ae.plantilla_meta
-          ) <> ''
+            AND a.fecha_programada_original
+                <= clock_timestamp()
+          )
+        )
 
-          AND ae.contenido_enviado
-            IS NOT NULL
+      ORDER BY
+        ae.fecha_programada_intento ASC,
+        ae.id ASC
 
-          AND TRIM(
-            ae.contenido_enviado
-          ) <> ''
-
-        ORDER BY
-          ae.fecha_programada_intento ASC,
-          ae.id ASC
-
-        LIMIT $3
-      `,
-      [
-        CANAL_WHATSAPP,
-        ESTADO_PENDIENTE,
-        limiteValidado,
-      ]
-    );
-
+      LIMIT $5
+    `,
+    [
+      CANAL_WHATSAPP,
+      ESTADO_PENDIENTE,
+      ESTADO_ALERTA_ACTIVA,
+      ZONA_HORARIA,
+      limiteValidado,
+    ]
+  );
 
   return rows;
 }
 
-
 // ======================================================
 // OBTENER ENVÍO ACTUAL
 // ======================================================
+//
+// Segunda protección:
+//
+// Aunque un registro estuviera en la consulta
+// inicial, debe seguir:
+// - PENDIENTE;
+// - con alerta ACTIVA;
+// - dentro del día correcto si es PROGRAMADA.
+//
+// ======================================================
 
-async function obtenerEnvioActual(
-  client,
-  envioId
-) {
+async function obtenerEnvioActual(client, envioId) {
+  const id = validarEnteroPositivo(
+    envioId,
+    "Envío"
+  );
 
-  const id =
-    validarEnteroPositivo(
-      envioId,
-      "Envío"
-    );
+  const { rows } = await client.query(
+    `
+      SELECT
+        ae.id,
+        ae.alerta_id,
+        ae.secuencia_notificacion,
+        ae.canal,
+        ae.intento,
 
+        ae.usuario_destinatario_id,
+        ae.destinatario,
 
-  const { rows } =
-    await client.query(
-      `
-        SELECT
-          ae.id,
-          ae.alerta_id,
-          ae.secuencia_notificacion,
-          ae.canal,
-          ae.intento,
+        ae.estado,
+        ae.plantilla_meta,
+        ae.contenido_enviado,
 
-          ae.usuario_destinatario_id,
-          ae.destinatario,
+        ae.fecha_programada_intento,
+        ae.fecha_intento,
 
-          ae.estado,
+        a.tipo AS tipo_alerta,
+        a.motivo AS motivo_alerta,
+        a.contenedor_id,
+        a.umbral_configurado,
+        a.fecha_programada_original
 
-          ae.plantilla_meta,
-          ae.contenido_enviado,
+      FROM alertas_envios ae
 
-          ae.fecha_programada_intento,
-          ae.fecha_intento,
+      INNER JOIN alertas a
+        ON a.id = ae.alerta_id
 
-          a.tipo AS tipo_alerta,
-          a.motivo AS motivo_alerta
+      WHERE ae.id = $1
+        AND ae.canal = $2
+        AND ae.estado = $3
+        AND a.estado = $4
 
-        FROM alertas_envios ae
+        AND ae.fecha_programada_intento
+          <= clock_timestamp()
 
-        JOIN alertas a
-          ON a.id =
-             ae.alerta_id
+        AND (
+          a.tipo <> 'PROGRAMADA'
 
-        WHERE ae.id = $1
+          OR (
+            a.fecha_programada_original
+              IS NOT NULL
 
-          AND ae.canal = $2
+            AND (
+              a.fecha_programada_original
+                AT TIME ZONE $5
+            )::date
+            =
+            (
+              clock_timestamp()
+                AT TIME ZONE $5
+            )::date
 
-          AND ae.estado = $3
+            AND a.fecha_programada_original
+                <= clock_timestamp()
+          )
+        )
 
-          AND ae.fecha_programada_intento
-            <= CURRENT_TIMESTAMP
+      LIMIT 1
+    `,
+    [
+      id,
+      CANAL_WHATSAPP,
+      ESTADO_PENDIENTE,
+      ESTADO_ALERTA_ACTIVA,
+      ZONA_HORARIA,
+    ]
+  );
 
-        LIMIT 1
-      `,
-      [
-        id,
-        CANAL_WHATSAPP,
-        ESTADO_PENDIENTE,
-      ]
-    );
-
-
-  return rows[0] ||
-    null;
+  return rows[0] || null;
 }
 
+// ======================================================
+// VERIFICAR PROGRAMADA INMEDIATAMENTE ANTES DE META
+// ======================================================
+//
+// Consulta la BD sin confiar en el frontend.
+//
+// No aplica a alertas de nivel ni predictivas.
+//
+// ======================================================
+
+async function validarProgramadaAntesDeEnviar(
+  client,
+  envio
+) {
+  if (envio.tipo_alerta !== "PROGRAMADA") {
+    return {
+      permitido: true,
+      motivo: "NO_ES_PROGRAMADA",
+    };
+  }
+
+  const { rows } = await client.query(
+    `
+      SELECT EXISTS (
+        SELECT 1
+
+        FROM alertas a
+
+        JOIN alertas_envios ae
+          ON ae.alerta_id = a.id
+
+        WHERE ae.id = $1
+          AND ae.estado = 'PENDIENTE'
+
+          AND a.estado = 'ACTIVA'
+          AND a.tipo = 'PROGRAMADA'
+
+          AND a.fecha_programada_original
+              IS NOT NULL
+
+          AND a.fecha_programada_original
+              <= clock_timestamp()
+
+          AND (
+            a.fecha_programada_original
+              AT TIME ZONE $2
+          )::date
+          =
+          (
+            clock_timestamp()
+              AT TIME ZONE $2
+          )::date
+      ) AS permitido
+    `,
+    [
+      envio.id,
+      ZONA_HORARIA,
+    ]
+  );
+
+  const permitido =
+    rows[0]?.permitido === true;
+
+  return {
+    permitido,
+    motivo: permitido
+      ? "PROGRAMADA_VIGENTE"
+      : "PROGRAMADA_FUERA_DE_FECHA",
+  };
+}
 
 // ======================================================
 // BLOQUEAR ENVÍO
 // ======================================================
 
-async function intentarBloquearEnvio(
-  client,
-  envioId
-) {
+async function intentarBloquearEnvio(client, envioId) {
+  const id = validarEnteroPositivo(
+    envioId,
+    "Envío"
+  );
 
-  const id =
-    validarEnteroPositivo(
-      envioId,
-      "Envío"
-    );
+  const { rows } = await client.query(
+    `
+      SELECT
+        pg_try_advisory_lock(
+          $1::bigint
+        ) AS adquirido
+    `,
+    [id]
+  );
 
-
-  const { rows } =
-    await client.query(
-      `
-        SELECT
-          pg_try_advisory_lock(
-            $1::bigint
-          ) AS adquirido
-      `,
-      [
-        id,
-      ]
-    );
-
-
-  return rows[0]
-    ?.adquirido ===
-    true;
+  return rows[0]?.adquirido === true;
 }
-
 
 // ======================================================
 // LIBERAR BLOQUEO
 // ======================================================
 
-async function liberarBloqueoEnvio(
-  client,
-  envioId
-) {
-
-  const id =
-    validarEnteroPositivo(
-      envioId,
-      "Envío"
-    );
-
+async function liberarBloqueoEnvio(client, envioId) {
+  const id = validarEnteroPositivo(
+    envioId,
+    "Envío"
+  );
 
   await client.query(
     `
@@ -587,111 +629,71 @@ async function liberarBloqueoEnvio(
           $1::bigint
         )
     `,
-    [
-      id,
-    ]
+    [id]
   );
 }
 
-
 // ======================================================
-// ENVIAR A META
+// ENVIAR A META WHATSAPP
 // ======================================================
 
-async function enviarAMeta(
-  envio
-) {
-
-  const plantilla =
-    normalizarPlantilla(
-      envio
-        .plantilla_meta
-    );
-
+async function enviarAMeta(envio) {
+  const plantilla = normalizarPlantilla(
+    envio.plantilla_meta
+  );
 
   const contenido =
     leerContenidoEstructurado(
-      envio
-        .contenido_enviado
+      envio.contenido_enviado
     );
 
-
-  const idioma =
-    obtenerIdiomaWhatsApp();
-
+  const idioma = obtenerIdiomaWhatsApp();
 
   return enviarPlantillaWhatsApp({
-    destinatario:
-      envio.destinatario,
+    destinatario: envio.destinatario,
 
     plantilla,
-
-    nombrePlantilla:
-      plantilla,
+    nombrePlantilla: plantilla,
 
     idioma,
+    codigoIdioma: idioma,
 
-    codigoIdioma:
-      idioma,
-
-    parametros:
-      contenido.parametros,
-
-    parametrosBody:
-      contenido.parametros,
+    parametros: contenido.parametros,
+    parametrosBody: contenido.parametros,
   });
 }
 
-
 // ======================================================
-// EJECUTAR RESPALDO EMAIL DE FORMA SEGURA
+// RESPALDO EMAIL
 // ======================================================
 //
-// Solo se llama cuando ResultadoEnvios.service indica
-// que los 3 intentos de WhatsApp se agotaron.
+// Se mantiene solamente después de agotar
+// los tres intentos técnicos de WhatsApp.
+//
 // ======================================================
 
 async function ejecutarRespaldoEmailSeguro(
   envioWhatsAppId
 ) {
-
   try {
-
     return await enviarRespaldoEmail({
       envioWhatsAppId,
     });
-
-  } catch (
-    error
-  ) {
-
+  } catch (error) {
     console.error(
       "Error ejecutando respaldo por correo:",
       error.message
     );
 
-
     return {
-      accion:
-        "ERROR_RESPALDO_EMAIL",
-
-      error:
-        error.message,
+      accion: "ERROR_RESPALDO_EMAIL",
+      error: error.message,
     };
   }
 }
 
-
 // ======================================================
 // PROCESAR FALLO DE WHATSAPP
-// ======================================================
-//
-// Centralizamos aquí:
-//
-// 1. registrar fallo;
-// 2. crear siguiente intento;
-// 3. después del tercero:
-//    enviar correo de respaldo.
 // ======================================================
 
 async function procesarFalloWhatsApp({
@@ -701,66 +703,40 @@ async function procesarFalloWhatsApp({
   errorReintentable,
   esErrorMeta = false,
 }) {
-
   const resultadoFallo =
     await registrarFalloMeta({
-      envioId:
-        envio.id,
-
+      envioId: envio.id,
       codigoError,
-
       detalleError,
-
       errorReintentable,
     });
 
-
   const requiereRespaldo =
     resultadoFallo
-      ?.requiereEvaluarRespaldoEmail ===
-    true;
+      ?.requiereEvaluarRespaldoEmail === true;
 
+  let respaldoEmail = null;
 
-  let respaldoEmail =
-    null;
-
-
-  // ====================================================
-  // SOLO DESPUÉS DEL TERCER FALLO
-  // ====================================================
-
-  if (
-    requiereRespaldo
-  ) {
-
+  if (requiereRespaldo) {
     respaldoEmail =
       await ejecutarRespaldoEmailSeguro(
         envio.id
       );
   }
 
-
   return {
-    envioId:
-      envio.id,
-
-    alertaId:
-      envio.alerta_id,
+    envioId: envio.id,
+    alertaId: envio.alerta_id,
 
     secuenciaNotificacion:
-      envio
-        .secuencia_notificacion,
+      envio.secuencia_notificacion,
 
-    intento:
-      envio.intento,
+    intento: envio.intento,
 
-    accion:
-      "WHATSAPP_FALLO",
-
+    accion: "WHATSAPP_FALLO",
     esErrorMeta,
 
-    resultado:
-      resultadoFallo,
+    resultado: resultadoFallo,
 
     requiereEvaluarRespaldoEmail:
       requiereRespaldo,
@@ -769,52 +745,39 @@ async function procesarFalloWhatsApp({
   };
 }
 
-
 // ======================================================
 // PROCESAR UN ENVÍO PENDIENTE
 // ======================================================
 //
-// REGLA:
+// Conserva:
+// - máximo 3 intentos de WhatsApp;
+// - respaldo por correo;
+// - bloqueos contra procesamiento simultáneo;
+// - trazabilidad de los resultados.
 //
-// WhatsApp intento 1
-//        ↓ falla
-// WhatsApp intento 2
-//        ↓ falla
-// WhatsApp intento 3
-//        ↓ falla
-// EMAIL DE RESPALDO
+// Protecciones:
+// - alerta ACTIVA;
+// - nivel vigente para NIVEL_AVISO/NIVEL_ALTO;
+// - fecha correcta para PROGRAMADA.
 //
-// Si WhatsApp funciona:
-//
-// NO EMAIL.
 // ======================================================
 
 async function procesarEnvioPendiente(
   envioOriginal
 ) {
+  const envioId = validarEnteroPositivo(
+    envioOriginal?.id,
+    "Envío"
+  );
 
-  const envioId =
-    validarEnteroPositivo(
-      envioOriginal?.id,
-      "Envío"
-    );
+  const client = await pool.connect();
 
-
-  const client =
-    await pool.connect();
-
-
-  let bloqueoAdquirido =
-    false;
-
-  let destruirConexion =
-    false;
-
+  let bloqueoAdquirido = false;
+  let destruirConexion = false;
 
   try {
-
     // ==================================================
-    // 1. BLOQUEAR
+    // 1. BLOQUEAR ENVÍO
     // ==================================================
 
     bloqueoAdquirido =
@@ -823,229 +786,200 @@ async function procesarEnvioPendiente(
         envioId
       );
 
-
-    if (
-      !bloqueoAdquirido
-    ) {
-
+    if (!bloqueoAdquirido) {
       return {
         envioId,
-
         accion:
           "ENVIO_EN_PROCESO_POR_OTRO_WORKER",
       };
     }
 
-
     // ==================================================
-    // 2. RECONSULTAR
+    // 2. RECONSULTAR ESTADO ACTUAL
     // ==================================================
 
-    const envio =
-      await obtenerEnvioActual(
-        client,
-        envioId
-      );
-
+    const envio = await obtenerEnvioActual(
+      client,
+      envioId
+    );
 
     if (!envio) {
-
       return {
         envioId,
-
-        accion:
-          "ENVIO_YA_NO_ESTA_PENDIENTE",
+        accion: "ENVIO_NO_ELEGIBLE",
       };
     }
 
+    // ==================================================
+    // 3. VALIDAR NIVEL DEL ESP8266
+    // ==================================================
+
+    const validacionNivel =
+      validarNivelAntesDeEnviar(envio);
+
+    if (!validacionNivel.permitido) {
+      return {
+        envioId,
+        alertaId: envio.alerta_id,
+
+        accion: "ENVIO_NIVEL_SUSPENDIDO",
+
+        motivo: validacionNivel.motivo,
+
+        nivel_actual:
+          validacionNivel.porcentaje ?? null,
+
+        umbral:
+          validacionNivel.umbral ?? null,
+      };
+    }
 
     // ==================================================
-    // 3. VALIDAR INTENTO
+    // 4. VALIDAR INTENTO TÉCNICO
     // ==================================================
 
-    const intento =
-      validarEnteroPositivo(
-        envio.intento,
-        "Intento"
-      );
+    const intento = validarEnteroPositivo(
+      envio.intento,
+      "Intento"
+    );
 
-
-    if (
-      intento >
-      MAX_INTENTOS_WHATSAPP
-    ) {
-
+    if (intento > MAX_INTENTOS_WHATSAPP) {
       throw new Error(
         "El envío supera el máximo de intentos de WhatsApp."
       );
     }
 
-
     // ==================================================
-    // 4. VALIDAR DATOS
+    // 5. VALIDAR PLANTILLA Y CONTENIDO
     // ==================================================
 
     normalizarPlantilla(
-      envio
-        .plantilla_meta
+      envio.plantilla_meta
     );
-
 
     leerContenidoEstructurado(
-      envio
-        .contenido_enviado
+      envio.contenido_enviado
     );
 
+    // ==================================================
+    // 6. ÚLTIMA VALIDACIÓN DE FECHA PROGRAMADA
+    // ==================================================
+
+    const validacionFecha =
+      await validarProgramadaAntesDeEnviar(
+        client,
+        envio
+      );
+
+    if (!validacionFecha.permitido) {
+      return {
+        envioId,
+        alertaId: envio.alerta_id,
+
+        accion: "ENVIO_PROGRAMADO_SUSPENDIDO",
+
+        motivo: validacionFecha.motivo,
+      };
+    }
 
     // ==================================================
-    // 5. ENVIAR A META
+    // 7. ENVIAR A META
     // ==================================================
 
     let respuestaMeta;
 
-
     try {
+      respuestaMeta = await enviarAMeta(
+        envio
+      );
 
-      respuestaMeta =
-        await enviarAMeta(
-          envio
-        );
-
-    } catch (
-      error
-    ) {
-
+    } catch (error) {
       return procesarFalloWhatsApp({
         envio,
 
         codigoError:
-          obtenerCodigoError(
-            error
-          ),
+          obtenerCodigoError(error),
 
         detalleError:
-          obtenerDetalleError(
-            error
-          ),
+          obtenerDetalleError(error),
 
         errorReintentable:
-          obtenerErrorReintentable(
-            error
-          ),
+          obtenerErrorReintentable(error),
 
         esErrorMeta:
-          error instanceof
-          MetaWhatsAppError,
+          error instanceof MetaWhatsAppError,
       });
     }
 
-
     // ==================================================
-    // 6. VALIDAR MESSAGE ID
+    // 8. VALIDAR MESSAGE ID
     // ==================================================
 
-    const proveedorMensajeId =
-      String(
-        respuestaMeta
-          ?.proveedorMensajeId ??
-        ""
-      ).trim();
+    const proveedorMensajeId = String(
+      respuestaMeta?.proveedorMensajeId ?? ""
+    ).trim();
 
-
-    if (
-      !proveedorMensajeId
-    ) {
-
+    if (!proveedorMensajeId) {
       return procesarFalloWhatsApp({
         envio,
 
-        codigoError:
-          "META_SIN_MESSAGE_ID",
+        codigoError: "META_SIN_MESSAGE_ID",
 
         detalleError:
           "Meta respondió sin devolver un identificador de mensaje.",
 
-        errorReintentable:
-          true,
-
-        esErrorMeta:
-          false,
+        errorReintentable: true,
+        esErrorMeta: false,
       });
     }
 
-
     // ==================================================
-    // 7. META ACEPTÓ
+    // 9. REGISTRAR ACEPTACIÓN META
     // ==================================================
 
     const resultadoAceptacion =
       await registrarAceptacionMeta({
-        envioId:
-          envio.id,
-
+        envioId: envio.id,
         proveedorMensajeId,
       });
 
-
     return {
-      envioId:
-        envio.id,
-
-      alertaId:
-        envio.alerta_id,
+      envioId: envio.id,
+      alertaId: envio.alerta_id,
 
       secuenciaNotificacion:
-        envio
-          .secuencia_notificacion,
+        envio.secuencia_notificacion,
 
-      intento:
-        envio.intento,
+      intento: envio.intento,
 
-      accion:
-        "WHATSAPP_ACEPTADO",
+      accion: "WHATSAPP_ACEPTADO",
 
       proveedorMensajeId,
 
       estadoMeta:
-        respuestaMeta
-          ?.estadoMeta ??
-        null,
+        respuestaMeta?.estadoMeta ?? null,
 
-      resultado:
-        resultadoAceptacion,
+      resultado: resultadoAceptacion,
 
-      requiereEvaluarRespaldoEmail:
-        false,
+      requiereEvaluarRespaldoEmail: false,
 
-      respaldoEmail:
-        null,
+      respaldoEmail: null,
     };
 
-
   } finally {
-
     // ==================================================
-    // LIBERAR BLOQUEO
+    // 10. LIBERAR BLOQUEO
     // ==================================================
 
-    if (
-      bloqueoAdquirido
-    ) {
-
+    if (bloqueoAdquirido) {
       try {
-
         await liberarBloqueoEnvio(
           client,
           envioId
         );
 
-      } catch (
-        error
-      ) {
-
-        destruirConexion =
-          true;
-
+      } catch (error) {
+        destruirConexion = true;
 
         console.error(
           "No fue posible liberar el bloqueo del envío WhatsApp:",
@@ -1055,13 +989,9 @@ async function procesarEnvioPendiente(
       }
     }
 
-
-    client.release(
-      destruirConexion
-    );
+    client.release(destruirConexion);
   }
 }
-
 
 // ======================================================
 // PROCESAR COLA
@@ -1070,88 +1000,59 @@ async function procesarEnvioPendiente(
 async function procesarEnviosPendientes({
   limite = 20,
 } = {}) {
-
   const pendientes =
     await obtenerEnviosPendientes({
       limite,
     });
 
+  const resultados = [];
 
-  const resultados =
-    [];
-
-
-  for (
-    const envio
-    of pendientes
-  ) {
-
+  for (const envio of pendientes) {
     try {
-
       const resultado =
         await procesarEnvioPendiente(
           envio
         );
 
+      resultados.push(resultado);
 
-      resultados.push(
-        resultado
-      );
-
-    } catch (
-      error
-    ) {
-
+    } catch (error) {
       console.error(
         `Error procesando envío WhatsApp ${envio.id}:`,
         error.message
       );
 
-
       resultados.push({
-        envioId:
-          envio.id,
+        envioId: envio.id,
+        alertaId: envio.alerta_id,
 
-        alertaId:
-          envio.alerta_id,
+        accion: "ERROR_PROCESANDO_ENVIO",
 
-        accion:
-          "ERROR_PROCESANDO_ENVIO",
-
-        error:
-          error.message,
+        error: error.message,
       });
     }
   }
 
-
   return {
-    totalPendientes:
-      pendientes.length,
-
-    totalProcesados:
-      resultados.length,
-
+    totalPendientes: pendientes.length,
+    totalProcesados: resultados.length,
     resultados,
   };
 }
 
-
 // ======================================================
-// CONSULTAR INTENTOS
+// CONSULTAR INTENTOS DE WHATSAPP
 // ======================================================
 
 async function obtenerIntentosWhatsApp({
   alertaId,
   secuenciaNotificacion = 1,
 }) {
-
   const alertaIdValidado =
     validarEnteroPositivo(
       alertaId,
       "Alerta"
     );
-
 
   const secuenciaValidada =
     validarEnteroPositivo(
@@ -1159,56 +1060,50 @@ async function obtenerIntentosWhatsApp({
       "Secuencia de notificación"
     );
 
+  const { rows } = await pool.query(
+    `
+      SELECT
+        id,
+        alerta_id,
+        secuencia_notificacion,
 
-  const { rows } =
-    await pool.query(
-      `
-        SELECT
-          id,
-          alerta_id,
-          secuencia_notificacion,
+        canal,
+        intento,
+        estado,
 
-          canal,
-          intento,
-          estado,
+        plantilla_meta,
 
-          plantilla_meta,
+        proveedor_mensaje_id,
 
-          proveedor_mensaje_id,
+        codigo_error,
+        detalle_error,
+        error_reintentable,
 
-          codigo_error,
-          detalle_error,
-          error_reintentable,
+        fecha_programada_intento,
+        fecha_intento,
+        fecha_actualizacion,
+        fecha_entregado,
+        fecha_leido
 
-          fecha_programada_intento,
-          fecha_intento,
-          fecha_actualizacion,
-          fecha_entregado,
-          fecha_leido
+      FROM alertas_envios
 
-        FROM alertas_envios
+      WHERE alerta_id = $1
+        AND secuencia_notificacion = $2
+        AND canal = $3
 
-        WHERE alerta_id = $1
-
-          AND secuencia_notificacion = $2
-
-          AND canal = $3
-
-        ORDER BY
-          intento ASC,
-          id ASC
-      `,
-      [
-        alertaIdValidado,
-        secuenciaValidada,
-        CANAL_WHATSAPP,
-      ]
-    );
-
+      ORDER BY
+        intento ASC,
+        id ASC
+    `,
+    [
+      alertaIdValidado,
+      secuenciaValidada,
+      CANAL_WHATSAPP,
+    ]
+  );
 
   return {
-    alertaId:
-      alertaIdValidado,
+    alertaId: alertaIdValidado,
 
     secuenciaNotificacion:
       secuenciaValidada,
@@ -1219,23 +1114,17 @@ async function obtenerIntentosWhatsApp({
     intentosRegistrados:
       rows.length,
 
-    intentos:
-      rows,
+    intentos: rows,
   };
 }
-
 
 // ======================================================
 // EXPORTACIONES
 // ======================================================
 
 module.exports = {
-
   obtenerEnviosPendientes,
-
   procesarEnvioPendiente,
-
   procesarEnviosPendientes,
-
   obtenerIntentosWhatsApp,
 };
