@@ -1,3 +1,6 @@
+
+"use strict";
+
 const prediccionService = require(
   "../../services/MachineLearning/prediccion.service"
 );
@@ -6,22 +9,28 @@ const alertaPredictivaService = require(
   "../../services/MachineLearning/alertaPredictiva.service"
 );
 
+const {
+  construirResumenPredicciones,
+} = require(
+  "../../services/MachineLearning/resumenPredicciones.service"
+);
+
 
 // ======================================================
 // OBTENER PREDICCIONES
 // ======================================================
 
-async function obtenerPredicciones(
-  req,
-  res
-) {
-
+async function obtenerPredicciones(req, res) {
   try {
 
-    const resultado =
-      await prediccionService
-        .ejecutarPrediccion();
+    // Ejecutar Machine Learning una sola vez.
+    const predicciones =
+      await prediccionService.ejecutarPrediccion();
 
+    // El backend selecciona la predicción
+    // prioritaria para la KPI del Dashboard.
+    const resultado =
+      construirResumenPredicciones(predicciones);
 
     return res.status(200).json({
       ok: true,
@@ -34,7 +43,6 @@ async function obtenerPredicciones(
       "ERROR PREDICCION ML:",
       error.message
     );
-
 
     return res.status(500).json({
       ok: false,
@@ -49,17 +57,11 @@ async function obtenerPredicciones(
 // EVALUAR ALERTAS PREDICTIVAS
 // ======================================================
 
-async function evaluarAlertasPredictivas(
-  req,
-  res
-) {
-
+async function evaluarAlertasPredictivas(req, res) {
   try {
 
     const resultado =
-      await alertaPredictivaService
-        .evaluarPredicciones();
-
+      await alertaPredictivaService.evaluarPredicciones();
 
     return res.status(200).json({
       ok: true,
@@ -72,7 +74,6 @@ async function evaluarAlertasPredictivas(
       "ERROR ALERTA PREDICTIVA:",
       error.message
     );
-
 
     return res.status(500).json({
       ok: false,
