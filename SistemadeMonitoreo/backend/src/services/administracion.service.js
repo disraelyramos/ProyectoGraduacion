@@ -61,7 +61,6 @@ function normalizarId(valor) {
 
 function normalizarTexto(valor) {
   if (typeof valor !== "string") return "";
-
   return xss(valor.trim());
 }
 
@@ -85,17 +84,8 @@ function correoValido(correo) {
 // NORMALIZAR CELULAR WHATSAPP
 // ======================================================
 //
-// FRONTEND:
-// 37068088
-//
-// POSTGRESQL:
-// +50237068088
-//
-// META WHATSAPP:
-// 50237068088
-//
-// El frontend envía exactamente 8 dígitos.
-// El backend agrega el prefijo +502.
+// Usuario ingresa: 37068088
+// PostgreSQL guarda: +50237068088
 //
 // ======================================================
 
@@ -143,20 +133,33 @@ function generarPasswordTemporal() {
   ];
 
   const obtenerCaracter = (caracteres) =>
-    caracteres[crypto.randomInt(caracteres.length)];
+    caracteres[
+      crypto.randomInt(caracteres.length)
+    ];
 
   const caracteres = grupos.map(obtenerCaracter);
   const todos = grupos.join("");
 
   while (caracteres.length < 14) {
-    caracteres.push(obtenerCaracter(todos));
+    caracteres.push(
+      obtenerCaracter(todos)
+    );
   }
 
-  for (let i = caracteres.length - 1; i > 0; i--) {
+  for (
+    let i = caracteres.length - 1;
+    i > 0;
+    i--
+  ) {
     const j = crypto.randomInt(i + 1);
 
-    [caracteres[i], caracteres[j]] =
-      [caracteres[j], caracteres[i]];
+    [
+      caracteres[i],
+      caracteres[j],
+    ] = [
+      caracteres[j],
+      caracteres[i],
+    ];
   }
 
   return caracteres.join("");
@@ -166,8 +169,8 @@ function generarPasswordTemporal() {
 // VALIDAR ACCESO A ADMINISTRACIÓN
 // ======================================================
 //
-// Los permisos se consultan en PostgreSQL.
-// No se utiliza un rol_id fijo.
+// Se consultan los permisos reales desde PostgreSQL.
+// No se utiliza ningún rol_id fijo.
 //
 // ======================================================
 
@@ -206,6 +209,47 @@ async function validarAccesoAdministracion(
       "No tiene permisos para acceder a esta sección."
     );
   }
+}
+
+// ======================================================
+// CONSULTAR PROTECCIÓN ADMINISTRATIVA
+// ======================================================
+//
+// Un usuario queda protegido si su rol tiene
+// permiso activo sobre el módulo administrativo.
+//
+// No se comprueba el nombre "Administrador".
+// No se utiliza rol_id = 1.
+//
+// ======================================================
+
+async function tienePermisoAdministracion(
+  db,
+  rolId
+) {
+  const resultado = await db.query(
+    `
+      SELECT EXISTS (
+        SELECT 1
+
+        FROM permisos p
+
+        INNER JOIN submodulo s
+          ON s.id = p.submodulo_id
+         AND s.modulo_id = p.modulo_id
+
+        WHERE p.rol_id = $1
+          AND p.active = TRUE
+          AND s.ruta = $2
+      ) AS protegido
+    `,
+    [
+      rolId,
+      RUTA_ADMINISTRACION,
+    ]
+  );
+
+  return resultado.rows[0].protegido === true;
 }
 
 // ======================================================
@@ -259,7 +303,6 @@ async function validarDuplicados(
       FROM usuarios
 
       WHERE LOWER(correo) = LOWER($1)
-
         AND (
           $2::integer IS NULL
           OR id_usuario <> $2
@@ -287,7 +330,6 @@ async function validarDuplicados(
       FROM usuarios
 
       WHERE LOWER(usuario) = LOWER($1)
-
         AND (
           $2::integer IS NULL
           OR id_usuario <> $2
@@ -415,9 +457,7 @@ exports.obtenerUsuarios = async ({
         u.id_usuario,
         u.nombre,
         u.correo,
-
         u.telefono_whatsapp AS telefono,
-
         u.usuario,
         u.fecha_creacion,
 
@@ -429,9 +469,25 @@ exports.obtenerUsuarios = async ({
 
         EXISTS (
           SELECT 1
+
           FROM recolecciones re
+
           WHERE re.usuario_id = u.id_usuario
-        ) AS tiene_procesos
+        ) AS tiene_procesos,
+
+        EXISTS (
+          SELECT 1
+
+          FROM permisos p
+
+          INNER JOIN submodulo s
+            ON s.id = p.submodulo_id
+           AND s.modulo_id = p.modulo_id
+
+          WHERE p.rol_id = u.rol_id
+            AND p.active = TRUE
+            AND s.ruta = $1
+        ) AS tiene_permiso_administracion
 
       FROM usuarios u
 
@@ -444,13 +500,17 @@ exports.obtenerUsuarios = async ({
       ORDER BY
         u.nombre ASC,
         u.id_usuario ASC
-    `
+    `,
+    [RUTA_ADMINISTRACION]
   );
 
   const usuarios = await Promise.all(
     resultado.rows.map(async (registro) => {
       const tieneProcesos =
         registro.tiene_procesos === true;
+
+      const tienePermisoAdmin =
+        registro.tiene_permiso_administracion === true;
 
       const sesionActiva =
         await tieneSesionActiva({
@@ -471,6 +531,23 @@ exports.obtenerUsuarios = async ({
           )
         );
 
+      // ==================================================
+      // PERMISO PARA ELIMINAR
+      // ==================================================
+      //
+      // No debe tener permiso administrativo.
+      // No debe tener procesos.
+      // No debe tener sesión activa.
+      // No puede ser la propia cuenta.
+      //
+      // ==================================================
+
+      const puedeEliminar =
+        !tienePermisoAdmin &&
+        !tieneProcesos &&
+        !sesionActiva &&
+        registro.id_usuario !== id;
+
       return {
         id_usuario: registro.id_usuario,
         nombre: registro.nombre,
@@ -488,12 +565,13 @@ exports.obtenerUsuarios = async ({
 
         tieneProcesos,
         tieneSesionActiva: sesionActiva,
+        tienePermisoAdministracion: tienePermisoAdmin,
 
         acciones: {
           puedeEditarCompleto: !tieneProcesos,
           puedeEditarCelular: tieneProcesos,
           puedeCambiarEstado,
-          puedeEliminar: !tieneProcesos,
+          puedeEliminar,
         },
       };
     })
@@ -571,7 +649,7 @@ exports.editarUsuario = async ({
     }
 
     // ==================================================
-    // VERIFICAR PROCESOS REGISTRADOS
+    // VERIFICAR PROCESOS
     // ==================================================
 
     const procesosResult = await client.query(
@@ -591,7 +669,7 @@ exports.editarUsuario = async ({
       procesosResult.rows[0].tiene_procesos === true;
 
     // ==================================================
-    // USUARIO CON PROCESOS: SOLO EDITAR CELULAR
+    // USUARIO CON PROCESOS: SOLO CELULAR
     // ==================================================
 
     if (tieneProcesos) {
@@ -606,9 +684,6 @@ exports.editarUsuario = async ({
           "Solo se permite actualizar el celular de usuarios con procesos registrados."
         );
       }
-
-      // El frontend envía únicamente 8 dígitos.
-      // El backend agrega automáticamente +502.
 
       const telefonoSeguro =
         normalizarTelefono(telefono);
@@ -647,7 +722,9 @@ exports.editarUsuario = async ({
       await client.query("COMMIT");
 
       return {
-        message: "Celular actualizado correctamente.",
+        message:
+          "Celular actualizado correctamente.",
+
         usuario: actualizado.rows[0],
       };
     }
@@ -696,8 +773,9 @@ exports.editarUsuario = async ({
       );
     }
 
-    // El teléfono es opcional en la edición completa.
-    // Si se proporciona, debe contener 8 dígitos.
+    // ==================================================
+    // CELULAR OPCIONAL
+    // ==================================================
 
     const telefonoSeguro =
       telefono === undefined
@@ -770,13 +848,16 @@ exports.editarUsuario = async ({
     await client.query("COMMIT");
 
     return {
-      message: "Usuario actualizado correctamente.",
+      message:
+        "Usuario actualizado correctamente.",
+
       usuario: actualizado.rows[0],
     };
 
   } catch (error) {
     try {
       await client.query("ROLLBACK");
+
     } catch (rollbackError) {
       console.error(
         "Error al revertir edición:",
@@ -877,10 +958,6 @@ exports.cambiarEstadoUsuario = async ({
       );
     }
 
-    // ==================================================
-    // IDENTIFICAR ESTADO ACTUAL
-    // ==================================================
-
     const estadoActual = String(
       usuarioResult.rows[0].estado
     ).trim().toLowerCase();
@@ -914,7 +991,7 @@ exports.cambiarEstadoUsuario = async ({
     }
 
     // ==================================================
-    // OBTENER ID DEL ESTADO DESDE POSTGRESQL
+    // BUSCAR ESTADO DESTINO
     // ==================================================
 
     const estadoDestino = await client.query(
@@ -983,6 +1060,7 @@ exports.cambiarEstadoUsuario = async ({
   } catch (error) {
     try {
       await client.query("ROLLBACK");
+
     } catch (rollbackError) {
       console.error(
         "Error al revertir estado:",
@@ -999,6 +1077,17 @@ exports.cambiarEstadoUsuario = async ({
 
 // ======================================================
 // ELIMINAR USUARIO
+// ======================================================
+//
+// REGLAS:
+//
+// 1. El usuario autenticado debe tener permisos.
+// 2. No puede eliminar su propia cuenta.
+// 3. No puede eliminar cuentas con permiso admin.
+// 4. No puede eliminar usuarios con sesión activa.
+// 5. No puede eliminar usuarios con recolecciones.
+// 6. Solo entonces se permite DELETE.
+//
 // ======================================================
 
 exports.eliminarUsuario = async ({
@@ -1023,18 +1112,24 @@ exports.eliminarUsuario = async ({
   try {
     await client.query("BEGIN");
 
+    // ==================================================
+    // VALIDAR PERMISOS DEL USUARIO AUTENTICADO
+    // ==================================================
+
     await validarAccesoAdministracion(
       administradorId,
       client
     );
 
     // ==================================================
-    // BUSCAR USUARIO
+    // BLOQUEAR REGISTRO DEL USUARIO OBJETIVO
     // ==================================================
 
     const usuario = await client.query(
       `
-        SELECT id_usuario
+        SELECT
+          id_usuario,
+          rol_id
 
         FROM usuarios
 
@@ -1052,6 +1147,10 @@ exports.eliminarUsuario = async ({
       );
     }
 
+    // ==================================================
+    // PROHIBIR ELIMINACIÓN DE LA PROPIA CUENTA
+    // ==================================================
+
     if (administradorId === objetivoId) {
       throw crearError(
         409,
@@ -1060,7 +1159,46 @@ exports.eliminarUsuario = async ({
     }
 
     // ==================================================
-    // VERIFICAR RECOLECCIONES
+    // PROTEGER CUENTAS ADMINISTRATIVAS
+    // ==================================================
+    //
+    // Consulta el permiso desde PostgreSQL.
+    // No depende del nombre del rol ni de su ID.
+    //
+    // ==================================================
+
+    const protegido =
+      await tienePermisoAdministracion(
+        client,
+        usuario.rows[0].rol_id
+      );
+
+    if (protegido) {
+      throw crearError(
+        409,
+        "No es posible eliminar este usuario porque tiene permisos de administración."
+      );
+    }
+
+    // ==================================================
+    // PROHIBIR ELIMINACIÓN CON SESIÓN ACTIVA
+    // ==================================================
+
+    const sesionActiva =
+      await tieneSesionActiva({
+        client,
+        usuarioId: objetivoId,
+      });
+
+    if (sesionActiva) {
+      throw crearError(
+        409,
+        "No es posible eliminar este usuario porque tiene una sesión activa."
+      );
+    }
+
+    // ==================================================
+    // PROHIBIR ELIMINACIÓN CON RECOLECCIONES
     // ==================================================
 
     const procesos = await client.query(
@@ -1084,7 +1222,7 @@ exports.eliminarUsuario = async ({
     }
 
     // ==================================================
-    // ELIMINAR
+    // ELIMINAR USUARIO
     // ==================================================
 
     const eliminado = await client.query(
@@ -1105,13 +1243,16 @@ exports.eliminarUsuario = async ({
     await client.query("COMMIT");
 
     return {
-      message: "Usuario eliminado correctamente.",
+      message:
+        "Usuario eliminado correctamente.",
+
       usuario: eliminado.rows[0],
     };
 
   } catch (error) {
     try {
       await client.query("ROLLBACK");
+
     } catch (rollbackError) {
       console.error(
         "Error al revertir eliminación:",
@@ -1137,8 +1278,9 @@ exports.eliminarUsuario = async ({
 // CREAR NUEVO USUARIO
 // ======================================================
 //
-// No solicita número de celular.
-// La columna telefono_whatsapp permanece en NULL.
+// No solicita teléfono.
+// Genera contraseña temporal.
+// Envía las credenciales por correo.
 //
 // ======================================================
 
@@ -1262,7 +1404,7 @@ exports.crearUsuario = async ({
       );
 
     // ==================================================
-    // INSERTAR USUARIO SIN TELÉFONO
+    // INSERTAR USUARIO
     // ==================================================
 
     const nuevoUsuarioResult = await client.query(
@@ -1416,6 +1558,7 @@ exports.crearUsuario = async ({
   } catch (error) {
     try {
       await client.query("ROLLBACK");
+
     } catch (rollbackError) {
       console.error(
         "Error al revertir creación:",
