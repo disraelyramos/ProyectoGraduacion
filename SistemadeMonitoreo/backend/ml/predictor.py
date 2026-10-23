@@ -1,5 +1,6 @@
 import os
 import json
+import math
 from pathlib import Path
 
 import pandas as pd
@@ -37,6 +38,25 @@ DB_NAME = os.getenv("DB_NAME")
 ML_MIN_LECTURAS = int(
     os.getenv("ML_MIN_LECTURAS", "8")
 )
+
+# Mínimo de crecimiento que permite una proyección útil.
+# Unidad: puntos porcentuales de llenado por día.
+ML_MIN_CRECIMIENTO_DIA = float(
+    os.getenv("ML_MIN_CRECIMIENTO_DIA", "0.1")
+)
+
+# Horizonte máximo de predicción admitido, en días.
+ML_MAX_DIAS_PREDICCION = int(
+    os.getenv("ML_MAX_DIAS_PREDICCION", "3650")
+)
+
+if (
+    ML_MIN_LECTURAS < 2
+    or not math.isfinite(ML_MIN_CRECIMIENTO_DIA)
+    or not 0 < ML_MIN_CRECIMIENTO_DIA <= 100
+    or ML_MAX_DIAS_PREDICCION <= 0
+):
+    raise RuntimeError("Configuración de Machine Learning inválida.")
 
 
 # =========================================================
@@ -308,6 +328,7 @@ def calcular_tendencia_historica(df):
 
         if (
             resultado
+            and math.isfinite(resultado["pendiente"])
             and resultado["pendiente"] > 0
         ):
             resultados.append(
@@ -400,7 +421,10 @@ def calcular_dias_para_umbral(
     if nivel_actual >= umbral:
         return 0.0
 
-    if crecimiento_dia <= 0:
+    if (
+        not math.isfinite(crecimiento_dia)
+        or crecimiento_dia < ML_MIN_CRECIMIENTO_DIA
+    ):
         return None
 
     dias = (
@@ -491,6 +515,17 @@ def predecir_contenedor(
         "crecimiento_promedio_dia"
     ]
 
+    # Una pendiente muy pequeña produce millones de días.
+    # No se publica ni se utiliza para alertas una estimación así.
+    if (
+        not math.isfinite(crecimiento)
+        or crecimiento < ML_MIN_CRECIMIENTO_DIA
+    ):
+        return {
+            "contenedor_id": contenedor_id,
+            "estado": "CRECIMIENTO_INSUFICIENTE"
+        }
+
     umbral_aviso = configuracion_alertas[
         "umbral_aviso"
     ]
@@ -514,6 +549,17 @@ def predecir_contenedor(
             umbral_alto
         )
     )
+
+    # Si no hay horizonte confiable, no retornar estado OK.
+    if (
+        dias_alto is None
+        or not math.isfinite(dias_alto)
+        or dias_alto > ML_MAX_DIAS_PREDICCION
+    ):
+        return {
+            "contenedor_id": contenedor_id,
+            "estado": "PREDICCION_NO_CONFIABLE"
+        }
 
     return {
 
