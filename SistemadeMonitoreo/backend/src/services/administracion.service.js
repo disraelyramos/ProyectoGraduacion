@@ -4,12 +4,15 @@
 const crypto = require("crypto");
 const xss = require("xss");
 const pool = require("../config/db");
+
 const {
   generarPasswordHash,
 } = require("./Auth/Password.service");
+
 const {
   enviarCorreo,
 } = require("./email.service");
+
 const {
   tieneSesionActiva,
 } = require("./Auth/Sesion.service");
@@ -22,7 +25,7 @@ const RUTA_ADMINISTRACION =
   "/administracion/nuevo-usuario";
 
 // ======================================================
-// FUNCIONES AUXILIARES
+// ERROR CONTROLADO
 // ======================================================
 
 function crearError(status, message) {
@@ -31,15 +34,34 @@ function crearError(status, message) {
   return error;
 }
 
+// ======================================================
+// NORMALIZAR ID
+// ======================================================
+
 function normalizarId(valor) {
+  if (
+    valor === null ||
+    valor === undefined ||
+    valor === "" ||
+    typeof valor === "boolean"
+  ) {
+    return null;
+  }
+
   const id = Number(valor);
-  return Number.isSafeInteger(id) && id > 0 ? id : null;
+
+  return Number.isSafeInteger(id) && id > 0
+    ? id
+    : null;
 }
 
+// ======================================================
+// NORMALIZAR TEXTO
+// ======================================================
+
 function normalizarTexto(valor) {
-  return typeof valor === "string"
-    ? xss(valor.trim())
-    : "";
+  if (typeof valor !== "string") return "";
+  return xss(valor.trim());
 }
 
 function normalizarCorreo(valor) {
@@ -50,28 +72,57 @@ function normalizarUsuario(valor) {
   return normalizarTexto(valor).toLowerCase();
 }
 
+// ======================================================
+// VALIDAR CORREO
+// ======================================================
+
 function correoValido(correo) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo);
 }
 
+// ======================================================
+// NORMALIZAR CELULAR WHATSAPP
+// ======================================================
+
 function normalizarTelefono(valor) {
-  if (typeof valor !== "string") return null;
+  if (typeof valor !== "string") {
+    return null;
+  }
 
-  const telefono = valor.trim();
+  const telefono = valor.trim().replace(/[\s-]/g, "");
 
-  // Celular de Guatemala, 8 dígitos.
-  return /^[345]\d{7}$/.test(telefono)
-    ? telefono
-    : null;
+  // Acepta 8 dígitos o +502 seguido de 8 dígitos.
+  const numero = telefono.startsWith("+502")
+    ? telefono.slice(4)
+    : telefono;
+
+  if (!/^[345]\d{7}$/.test(numero)) {
+    return null;
+  }
+
+  return `+502${numero}`;
 }
+
+// ======================================================
+// VALIDAR IDENTIDAD
+// ======================================================
 
 function validarIdentidad(valor) {
   const id = normalizarId(valor);
+
   if (!id) {
-    throw crearError(401, "Usuario no autenticado.");
+    throw crearError(
+      401,
+      "Usuario no autenticado."
+    );
   }
+
   return id;
 }
+
+// ======================================================
+// GENERAR CONTRASEÑA TEMPORAL
+// ======================================================
 
 function generarPasswordTemporal() {
   const grupos = [
@@ -81,18 +132,19 @@ function generarPasswordTemporal() {
     "!@#$%&*",
   ];
 
-  const obtener = (caracteres) =>
+  const obtenerCaracter = (caracteres) =>
     caracteres[crypto.randomInt(caracteres.length)];
 
-  const caracteres = grupos.map(obtener);
+  const caracteres = grupos.map(obtenerCaracter);
   const todos = grupos.join("");
 
   while (caracteres.length < 14) {
-    caracteres.push(obtener(todos));
+    caracteres.push(obtenerCaracter(todos));
   }
 
   for (let i = caracteres.length - 1; i > 0; i--) {
     const j = crypto.randomInt(i + 1);
+
     [caracteres[i], caracteres[j]] =
       [caracteres[j], caracteres[i]];
   }
@@ -101,26 +153,35 @@ function generarPasswordTemporal() {
 }
 
 // ======================================================
-// VALIDAR PERMISO REAL EN BASE DE DATOS
+// VALIDAR PERMISOS DESDE POSTGRESQL
 // ======================================================
 
-async function validarAccesoAdministracion(idUsuario, db = pool) {
-  const result = await db.query(
-    `SELECT 1
-     FROM usuarios u
-     INNER JOIN permisos p
-       ON p.rol_id = u.rol_id
-      AND p.active = TRUE
-     INNER JOIN submodulo s
-       ON s.id = p.submodulo_id
-      AND s.modulo_id = p.modulo_id
-     WHERE u.id_usuario = $1
-       AND s.ruta = $2
-     LIMIT 1`,
+async function validarAccesoAdministracion(
+  idUsuario,
+  db = pool
+) {
+  const resultado = await db.query(
+    `
+      SELECT 1
+      FROM usuarios u
+
+      INNER JOIN permisos p
+        ON p.rol_id = u.rol_id
+       AND p.active = TRUE
+
+      INNER JOIN submodulo s
+        ON s.id = p.submodulo_id
+       AND s.modulo_id = p.modulo_id
+
+      WHERE u.id_usuario = $1
+        AND s.ruta = $2
+
+      LIMIT 1
+    `,
     [idUsuario, RUTA_ADMINISTRACION]
   );
 
-  if (!result.rows.length) {
+  if (resultado.rows.length === 0) {
     throw crearError(
       403,
       "No tiene permisos para acceder a esta sección."
@@ -129,7 +190,34 @@ async function validarAccesoAdministracion(idUsuario, db = pool) {
 }
 
 // ======================================================
-// VALIDACIONES DE DUPLICADOS
+// VALIDAR CATÁLOGOS
+// ======================================================
+
+async function validarCatalogo(
+  db,
+  tabla,
+  id,
+  mensaje
+) {
+  if (!["roles", "estados_usuario"].includes(tabla)) {
+    throw crearError(
+      500,
+      "Catálogo no permitido."
+    );
+  }
+
+  const resultado = await db.query(
+    `SELECT 1 FROM ${tabla} WHERE id = $1 LIMIT 1`,
+    [id]
+  );
+
+  if (resultado.rows.length === 0) {
+    throw crearError(400, mensaje);
+  }
+}
+
+// ======================================================
+// VALIDAR CORREO Y USUARIO DUPLICADOS
 // ======================================================
 
 async function validarDuplicados(
@@ -139,14 +227,20 @@ async function validarDuplicados(
   idExcluir = null
 ) {
   const correoExiste = await db.query(
-    `SELECT 1 FROM usuarios
-     WHERE LOWER(correo) = LOWER($1)
-       AND ($2::integer IS NULL OR id_usuario <> $2)
-     LIMIT 1`,
+    `
+      SELECT 1
+      FROM usuarios
+      WHERE LOWER(correo) = LOWER($1)
+        AND (
+          $2::integer IS NULL
+          OR id_usuario <> $2
+        )
+      LIMIT 1
+    `,
     [correo, idExcluir]
   );
 
-  if (correoExiste.rows.length) {
+  if (correoExiste.rows.length > 0) {
     throw crearError(
       409,
       "Ya existe un usuario registrado con ese correo electrónico."
@@ -154,37 +248,39 @@ async function validarDuplicados(
   }
 
   const usuarioExiste = await db.query(
-    `SELECT 1 FROM usuarios
-     WHERE LOWER(usuario) = LOWER($1)
-       AND ($2::integer IS NULL OR id_usuario <> $2)
-     LIMIT 1`,
+    `
+      SELECT 1
+      FROM usuarios
+      WHERE LOWER(usuario) = LOWER($1)
+        AND (
+          $2::integer IS NULL
+          OR id_usuario <> $2
+        )
+      LIMIT 1
+    `,
     [usuario, idExcluir]
   );
 
-  if (usuarioExiste.rows.length) {
-    throw crearError(409, "El nombre de usuario ya está en uso.");
+  if (usuarioExiste.rows.length > 0) {
+    throw crearError(
+      409,
+      "El nombre de usuario ya está en uso."
+    );
   }
 }
 
-async function validarCatalogo(db, tabla, id, mensaje) {
-  if (!["roles", "estados_usuario"].includes(tabla)) {
-    throw crearError(500, "Catálogo no permitido.");
-  }
-
-  const result = await db.query(
-    `SELECT 1 FROM ${tabla} WHERE id = $1 LIMIT 1`,
-    [id]
-  );
-
-  if (!result.rows.length) {
-    throw crearError(400, mensaje);
-  }
-}
+// ======================================================
+// CONTROL DE ERRORES DE DUPLICADOS
+// ======================================================
 
 function manejarErrorDuplicado(error) {
-  if (error?.code !== "23505") throw error;
+  if (error?.code !== "23505") {
+    throw error;
+  }
 
-  const constraint = String(error.constraint || "").toLowerCase();
+  const constraint = String(
+    error.constraint || ""
+  ).toLowerCase();
 
   if (constraint.includes("correo")) {
     throw crearError(
@@ -193,15 +289,24 @@ function manejarErrorDuplicado(error) {
     );
   }
 
-  if (constraint.includes("usuario")) {
-    throw crearError(409, "El nombre de usuario ya está en uso.");
+  if (
+    constraint.includes("usuario") ||
+    constraint.includes("username")
+  ) {
+    throw crearError(
+      409,
+      "El nombre de usuario ya está en uso."
+    );
   }
 
   if (
     constraint.includes("telefono") ||
-    constraint.includes("celular")
+    constraint.includes("whatsapp")
   ) {
-    throw crearError(409, "El número de celular ya está registrado.");
+    throw crearError(
+      409,
+      "El número de celular ya está registrado."
+    );
   }
 
   throw crearError(
@@ -211,17 +316,27 @@ function manejarErrorDuplicado(error) {
 }
 
 // ======================================================
-// GET CATÁLOGOS
+// OBTENER CATÁLOGOS
 // ======================================================
 
-exports.obtenerCatalogos = async ({ idUsuario }) => {
+exports.obtenerCatalogos = async ({
+  idUsuario,
+}) => {
   const id = validarIdentidad(idUsuario);
+
   await validarAccesoAdministracion(id);
 
   const [roles, estados] = await Promise.all([
-    pool.query("SELECT id, nombre FROM roles ORDER BY nombre ASC"),
     pool.query(
-      "SELECT id, nombre FROM estados_usuario ORDER BY id ASC"
+      `SELECT id, nombre
+       FROM roles
+       ORDER BY nombre ASC`
+    ),
+
+    pool.query(
+      `SELECT id, nombre
+       FROM estados_usuario
+       ORDER BY id ASC`
     ),
   ]);
 
@@ -232,53 +347,73 @@ exports.obtenerCatalogos = async ({ idUsuario }) => {
 };
 
 // ======================================================
-// GET USUARIOS
+// OBTENER USUARIOS
 // ======================================================
 
-exports.obtenerUsuarios = async ({ idUsuario }) => {
+exports.obtenerUsuarios = async ({
+  idUsuario,
+}) => {
   const id = validarIdentidad(idUsuario);
+
   await validarAccesoAdministracion(id);
 
-  const result = await pool.query(
-    `SELECT
-       u.id_usuario,
-       u.nombre,
-       u.correo,
-       u.telefono,
-       u.usuario,
-       u.fecha_creacion,
-       r.id AS rol_id,
-       r.nombre AS rol,
-       e.id AS estado_id,
-       e.nombre AS estado,
-       EXISTS (
-         SELECT 1
-         FROM recolecciones re
-         WHERE re.usuario_id = u.id_usuario
-       ) AS tiene_procesos
-     FROM usuarios u
-     INNER JOIN roles r ON r.id = u.rol_id
-     INNER JOIN estados_usuario e ON e.id = u.estado_id
-     ORDER BY u.nombre ASC, u.id_usuario ASC`
+  const resultado = await pool.query(
+    `
+      SELECT
+        u.id_usuario,
+        u.nombre,
+        u.correo,
+        u.telefono_whatsapp AS telefono,
+        u.usuario,
+        u.fecha_creacion,
+
+        r.id AS rol_id,
+        r.nombre AS rol,
+
+        e.id AS estado_id,
+        e.nombre AS estado,
+
+        EXISTS (
+          SELECT 1
+          FROM recolecciones re
+          WHERE re.usuario_id = u.id_usuario
+        ) AS tiene_procesos
+
+      FROM usuarios u
+
+      INNER JOIN roles r
+        ON r.id = u.rol_id
+
+      INNER JOIN estados_usuario e
+        ON e.id = u.estado_id
+
+      ORDER BY
+        u.nombre ASC,
+        u.id_usuario ASC
+    `
   );
 
   const usuarios = await Promise.all(
-    result.rows.map(async (registro) => {
-      const tieneProcesos = registro.tiene_procesos === true;
+    resultado.rows.map(async (registro) => {
+      const tieneProcesos =
+        registro.tiene_procesos === true;
 
       const sesionActiva = await tieneSesionActiva({
         usuarioId: registro.id_usuario,
       });
 
-      const estadoActual = String(registro.estado || "")
-        .trim()
-        .toLowerCase();
+      const estadoActual = String(
+        registro.estado || ""
+      ).trim().toLowerCase();
 
       const puedeCambiarEstado =
         tieneProcesos &&
         (
           estadoActual === "inactivo" ||
-          (estadoActual === "activo" && !sesionActiva)
+          (
+            estadoActual === "activo" &&
+            !sesionActiva
+          )
         );
 
       return {
@@ -287,18 +422,21 @@ exports.obtenerUsuarios = async ({ idUsuario }) => {
         correo: registro.correo,
         telefono: registro.telefono,
         usuario: registro.usuario,
+
         rol_id: registro.rol_id,
         rol: registro.rol,
+
         estado_id: registro.estado_id,
         estado: registro.estado,
+
         fecha_creacion: registro.fecha_creacion,
+
         tieneProcesos,
         tieneSesionActiva: sesionActiva,
 
         acciones: {
           puedeEditarCompleto: !tieneProcesos,
           puedeEditarCelular: tieneProcesos,
-          puedeEditarCorreo: false,
           puedeCambiarEstado,
           puedeEliminar: !tieneProcesos,
         },
@@ -310,7 +448,7 @@ exports.obtenerUsuarios = async ({ idUsuario }) => {
 };
 
 // ======================================================
-// PUT EDITAR USUARIO
+// EDITAR USUARIO
 // ======================================================
 
 exports.editarUsuario = async ({
@@ -325,36 +463,75 @@ exports.editarUsuario = async ({
   const administradorId = validarIdentidad(
     idUsuarioAutenticado
   );
-  const objetivoId = normalizarId(idUsuarioObjetivo);
+
+  const objetivoId = normalizarId(
+    idUsuarioObjetivo
+  );
 
   if (!objetivoId) {
-    throw crearError(400, "El usuario seleccionado no es válido.");
+    throw crearError(
+      400,
+      "El usuario seleccionado no es válido."
+    );
   }
 
   const client = await pool.connect();
 
   try {
     await client.query("BEGIN");
-    await validarAccesoAdministracion(administradorId, client);
+
+    await validarAccesoAdministracion(
+      administradorId,
+      client
+    );
+
+    // ==================================================
+    // OBTENER USUARIO Y BLOQUEAR REGISTRO
+    // ==================================================
 
     const usuarioResult = await client.query(
-      `SELECT id_usuario, nombre, correo, telefono, usuario, rol_id
-       FROM usuarios WHERE id_usuario = $1 FOR UPDATE`,
+      `
+        SELECT
+          id_usuario,
+          nombre,
+          correo,
+          telefono_whatsapp AS telefono,
+          usuario,
+          rol_id
+
+        FROM usuarios
+
+        WHERE id_usuario = $1
+
+        FOR UPDATE
+      `,
       [objetivoId]
     );
 
-    if (!usuarioResult.rows.length) {
-      throw crearError(404, "El usuario no existe.");
+    if (usuarioResult.rows.length === 0) {
+      throw crearError(
+        404,
+        "El usuario no existe."
+      );
     }
 
-    const procesos = await client.query(
-      `SELECT EXISTS (
-         SELECT 1 FROM recolecciones WHERE usuario_id = $1
-       ) AS tiene_procesos`,
+    // ==================================================
+    // VERIFICAR PROCESOS
+    // ==================================================
+
+    const procesosResult = await client.query(
+      `
+        SELECT EXISTS (
+          SELECT 1
+          FROM recolecciones
+          WHERE usuario_id = $1
+        ) AS tiene_procesos
+      `,
       [objetivoId]
     );
 
-    const tieneProcesos = procesos.rows[0].tiene_procesos === true;
+    const tieneProcesos =
+      procesosResult.rows[0].tiene_procesos === true;
 
     // ==================================================
     // USUARIO CON PROCESOS: SOLO CELULAR
@@ -369,11 +546,12 @@ exports.editarUsuario = async ({
       ) {
         throw crearError(
           400,
-          "Solo se permite actualizar el celular de usuarios con procesos."
+          "Solo se permite actualizar el celular de usuarios con procesos registrados."
         );
       }
 
-      const telefonoSeguro = normalizarTelefono(telefono);
+      const telefonoSeguro =
+        normalizarTelefono(telefono);
 
       if (!telefonoSeguro) {
         throw crearError(
@@ -383,11 +561,23 @@ exports.editarUsuario = async ({
       }
 
       const actualizado = await client.query(
-        `UPDATE usuarios
-         SET telefono = $1
-         WHERE id_usuario = $2
-         RETURNING id_usuario, nombre, correo, telefono,
-                   usuario, rol_id, estado_id, fecha_creacion`,
+        `
+          UPDATE usuarios
+
+          SET telefono_whatsapp = $1
+
+          WHERE id_usuario = $2
+
+          RETURNING
+            id_usuario,
+            nombre,
+            correo,
+            telefono_whatsapp AS telefono,
+            usuario,
+            rol_id,
+            estado_id,
+            fecha_creacion
+        `,
         [telefonoSeguro, objetivoId]
       );
 
@@ -409,19 +599,31 @@ exports.editarUsuario = async ({
     const rolSeguro = normalizarId(rolId);
 
     if (!nombreSeguro) {
-      throw crearError(400, "El nombre completo es obligatorio.");
+      throw crearError(
+        400,
+        "El nombre completo es obligatorio."
+      );
     }
 
     if (!correoValido(correoSeguro)) {
-      throw crearError(400, "El correo electrónico no es válido.");
+      throw crearError(
+        400,
+        "El correo electrónico no es válido."
+      );
     }
 
     if (!usuarioSeguro) {
-      throw crearError(400, "El nombre de usuario es obligatorio.");
+      throw crearError(
+        400,
+        "El nombre de usuario es obligatorio."
+      );
     }
 
     if (!rolSeguro) {
-      throw crearError(400, "Debe seleccionar un rol válido.");
+      throw crearError(
+        400,
+        "Debe seleccionar un rol válido."
+      );
     }
 
     const telefonoSeguro =
@@ -429,7 +631,10 @@ exports.editarUsuario = async ({
         ? undefined
         : normalizarTelefono(telefono);
 
-    if (telefono !== undefined && !telefonoSeguro) {
+    if (
+      telefono !== undefined &&
+      !telefonoSeguro
+    ) {
       throw crearError(
         400,
         "Ingrese un celular guatemalteco válido de 8 dígitos."
@@ -450,16 +655,34 @@ exports.editarUsuario = async ({
       objetivoId
     );
 
+    // ==================================================
+    // ACTUALIZAR
+    // ==================================================
+
     const actualizado = await client.query(
-      `UPDATE usuarios
-       SET nombre = $1,
-           correo = $2,
-           usuario = $3,
-           rol_id = $4,
-           telefono = COALESCE($5, telefono)
-       WHERE id_usuario = $6
-       RETURNING id_usuario, nombre, correo, telefono,
-                 usuario, rol_id, estado_id, fecha_creacion`,
+      `
+        UPDATE usuarios
+
+        SET
+          nombre = $1,
+          correo = $2,
+          usuario = $3,
+          rol_id = $4,
+          telefono_whatsapp =
+            COALESCE($5, telefono_whatsapp)
+
+        WHERE id_usuario = $6
+
+        RETURNING
+          id_usuario,
+          nombre,
+          correo,
+          telefono_whatsapp AS telefono,
+          usuario,
+          rol_id,
+          estado_id,
+          fecha_creacion
+      `,
       [
         nombreSeguro,
         correoSeguro,
@@ -478,9 +701,14 @@ exports.editarUsuario = async ({
     };
 
   } catch (error) {
-    await client.query("ROLLBACK").catch((err) => {
-      console.error("Error al revertir edición:", err.message);
-    });
+    try {
+      await client.query("ROLLBACK");
+    } catch (rollbackError) {
+      console.error(
+        "Error al revertir edición:",
+        rollbackError.message
+      );
+    }
 
     manejarErrorDuplicado(error);
   } finally {
@@ -489,7 +717,7 @@ exports.editarUsuario = async ({
 };
 
 // ======================================================
-// PATCH CAMBIAR ESTADO
+// CAMBIAR ESTADO DE USUARIO
 // ======================================================
 
 exports.cambiarEstadoUsuario = async ({
@@ -499,49 +727,76 @@ exports.cambiarEstadoUsuario = async ({
   const administradorId = validarIdentidad(
     idUsuarioAutenticado
   );
-  const objetivoId = normalizarId(idUsuarioObjetivo);
+
+  const objetivoId = normalizarId(
+    idUsuarioObjetivo
+  );
 
   if (!objetivoId) {
-    throw crearError(400, "El usuario seleccionado no es válido.");
+    throw crearError(
+      400,
+      "El usuario seleccionado no es válido."
+    );
   }
 
   const client = await pool.connect();
 
   try {
     await client.query("BEGIN");
-    await validarAccesoAdministracion(administradorId, client);
 
-    const usuario = await client.query(
-      `SELECT u.id_usuario, u.nombre, u.estado_id,
-              e.nombre AS estado
-       FROM usuarios u
-       INNER JOIN estados_usuario e ON e.id = u.estado_id
-       WHERE u.id_usuario = $1
-       FOR UPDATE OF u`,
+    await validarAccesoAdministracion(
+      administradorId,
+      client
+    );
+
+    const usuarioResult = await client.query(
+      `
+        SELECT
+          u.id_usuario,
+          u.nombre,
+          u.estado_id,
+          e.nombre AS estado
+
+        FROM usuarios u
+
+        INNER JOIN estados_usuario e
+          ON e.id = u.estado_id
+
+        WHERE u.id_usuario = $1
+
+        FOR UPDATE OF u
+      `,
       [objetivoId]
     );
 
-    if (!usuario.rows.length) {
-      throw crearError(404, "El usuario no existe.");
+    if (usuarioResult.rows.length === 0) {
+      throw crearError(
+        404,
+        "El usuario no existe."
+      );
     }
 
     const procesos = await client.query(
-      `SELECT EXISTS (
-         SELECT 1 FROM recolecciones WHERE usuario_id = $1
-       ) AS tiene_procesos`,
+      `
+        SELECT EXISTS (
+          SELECT 1
+          FROM recolecciones
+          WHERE usuario_id = $1
+        ) AS tiene_procesos
+      `,
       [objetivoId]
     );
 
     if (!procesos.rows[0].tiene_procesos) {
       throw crearError(
         409,
-        "Este usuario no tiene procesos registrados."
+        "El estado de este usuario no puede modificarse mediante esta acción porque no tiene procesos registrados."
       );
     }
 
-    const estadoActual = String(usuario.rows[0].estado)
-      .trim()
-      .toLowerCase();
+    const estadoActual = String(
+      usuarioResult.rows[0].estado
+    ).trim().toLowerCase();
 
     let nuevoEstadoNombre;
 
@@ -559,22 +814,28 @@ exports.cambiarEstadoUsuario = async ({
       }
 
       nuevoEstadoNombre = "Inactivo";
+
     } else if (estadoActual === "inactivo") {
       nuevoEstadoNombre = "Activo";
+
     } else {
       throw crearError(
         409,
-        "El estado actual no permite esta operación."
+        "El estado actual no permite realizar esta operación."
       );
     }
 
     const estadoDestino = await client.query(
-      `SELECT id, nombre FROM estados_usuario
-       WHERE LOWER(nombre) = LOWER($1) LIMIT 1`,
+      `
+        SELECT id, nombre
+        FROM estados_usuario
+        WHERE LOWER(nombre) = LOWER($1)
+        LIMIT 1
+      `,
       [nuevoEstadoNombre]
     );
 
-    if (!estadoDestino.rows.length) {
+    if (estadoDestino.rows.length === 0) {
       throw crearError(
         500,
         `No existe el estado ${nuevoEstadoNombre}.`
@@ -582,11 +843,26 @@ exports.cambiarEstadoUsuario = async ({
     }
 
     const actualizado = await client.query(
-      `UPDATE usuarios SET estado_id = $1
-       WHERE id_usuario = $2
-       RETURNING id_usuario, nombre, correo, usuario,
-                 rol_id, estado_id, fecha_creacion`,
-      [estadoDestino.rows[0].id, objetivoId]
+      `
+        UPDATE usuarios
+
+        SET estado_id = $1
+
+        WHERE id_usuario = $2
+
+        RETURNING
+          id_usuario,
+          nombre,
+          correo,
+          usuario,
+          rol_id,
+          estado_id,
+          fecha_creacion
+      `,
+      [
+        estadoDestino.rows[0].id,
+        objetivoId,
+      ]
     );
 
     await client.query("COMMIT");
@@ -596,6 +872,7 @@ exports.cambiarEstadoUsuario = async ({
         nuevoEstadoNombre === "Activo"
           ? "Usuario activado correctamente."
           : "Usuario desactivado correctamente.",
+
       usuario: {
         ...actualizado.rows[0],
         estado: estadoDestino.rows[0].nombre,
@@ -603,9 +880,15 @@ exports.cambiarEstadoUsuario = async ({
     };
 
   } catch (error) {
-    await client.query("ROLLBACK").catch((err) => {
-      console.error("Error al revertir estado:", err.message);
-    });
+    try {
+      await client.query("ROLLBACK");
+    } catch (rollbackError) {
+      console.error(
+        "Error al revertir estado:",
+        rollbackError.message
+      );
+    }
+
     throw error;
   } finally {
     client.release();
@@ -613,7 +896,7 @@ exports.cambiarEstadoUsuario = async ({
 };
 
 // ======================================================
-// DELETE USUARIO
+// ELIMINAR USUARIO
 // ======================================================
 
 exports.eliminarUsuario = async ({
@@ -623,36 +906,60 @@ exports.eliminarUsuario = async ({
   const administradorId = validarIdentidad(
     idUsuarioAutenticado
   );
-  const objetivoId = normalizarId(idUsuarioObjetivo);
+
+  const objetivoId = normalizarId(
+    idUsuarioObjetivo
+  );
 
   if (!objetivoId) {
-    throw crearError(400, "El usuario seleccionado no es válido.");
-  }
-
-  if (administradorId === objetivoId) {
-    throw crearError(409, "No puede eliminar su propio usuario.");
+    throw crearError(
+      400,
+      "El usuario seleccionado no es válido."
+    );
   }
 
   const client = await pool.connect();
 
   try {
     await client.query("BEGIN");
-    await validarAccesoAdministracion(administradorId, client);
+
+    await validarAccesoAdministracion(
+      administradorId,
+      client
+    );
 
     const usuario = await client.query(
-      `SELECT id_usuario FROM usuarios
-       WHERE id_usuario = $1 FOR UPDATE`,
+      `
+        SELECT id_usuario
+        FROM usuarios
+        WHERE id_usuario = $1
+        FOR UPDATE
+      `,
       [objetivoId]
     );
 
-    if (!usuario.rows.length) {
-      throw crearError(404, "El usuario no existe.");
+    if (usuario.rows.length === 0) {
+      throw crearError(
+        404,
+        "El usuario no existe."
+      );
+    }
+
+    if (administradorId === objetivoId) {
+      throw crearError(
+        409,
+        "No puede eliminar su propio usuario."
+      );
     }
 
     const procesos = await client.query(
-      `SELECT EXISTS (
-         SELECT 1 FROM recolecciones WHERE usuario_id = $1
-       ) AS tiene_procesos`,
+      `
+        SELECT EXISTS (
+          SELECT 1
+          FROM recolecciones
+          WHERE usuario_id = $1
+        ) AS tiene_procesos
+      `,
       [objetivoId]
     );
 
@@ -664,8 +971,17 @@ exports.eliminarUsuario = async ({
     }
 
     const eliminado = await client.query(
-      `DELETE FROM usuarios WHERE id_usuario = $1
-       RETURNING id_usuario, nombre, correo, usuario`,
+      `
+        DELETE FROM usuarios
+
+        WHERE id_usuario = $1
+
+        RETURNING
+          id_usuario,
+          nombre,
+          correo,
+          usuario
+      `,
       [objetivoId]
     );
 
@@ -677,14 +993,19 @@ exports.eliminarUsuario = async ({
     };
 
   } catch (error) {
-    await client.query("ROLLBACK").catch((err) => {
-      console.error("Error al revertir eliminación:", err.message);
-    });
+    try {
+      await client.query("ROLLBACK");
+    } catch (rollbackError) {
+      console.error(
+        "Error al revertir eliminación:",
+        rollbackError.message
+      );
+    }
 
     if (error?.code === "23503") {
       throw crearError(
         409,
-        "No es posible eliminar este usuario porque tiene información relacionada."
+        "No es posible eliminar este usuario porque tiene información relacionada en el sistema."
       );
     }
 
@@ -695,7 +1016,7 @@ exports.eliminarUsuario = async ({
 };
 
 // ======================================================
-// POST CREAR USUARIO
+// CREAR NUEVO USUARIO
 // ======================================================
 
 exports.crearUsuario = async ({
@@ -713,30 +1034,54 @@ exports.crearUsuario = async ({
   const nombreSeguro = normalizarTexto(nombre);
   const correoSeguro = normalizarCorreo(correo);
   const usuarioSeguro = normalizarUsuario(usuario);
+
   const rolSeguro = normalizarId(rolId);
   const estadoSeguro = normalizarId(estadoId);
 
   if (!nombreSeguro) {
-    throw crearError(400, "El nombre completo es obligatorio.");
+    throw crearError(
+      400,
+      "El nombre completo es obligatorio."
+    );
   }
 
   if (!correoValido(correoSeguro)) {
-    throw crearError(400, "El correo electrónico no es válido.");
+    throw crearError(
+      400,
+      "El correo electrónico no es válido."
+    );
   }
 
   if (!usuarioSeguro) {
-    throw crearError(400, "El nombre de usuario es obligatorio.");
+    throw crearError(
+      400,
+      "El nombre de usuario es obligatorio."
+    );
   }
 
-  if (!rolSeguro || !estadoSeguro) {
-    throw crearError(400, "Seleccione un rol y estado válidos.");
+  if (!rolSeguro) {
+    throw crearError(
+      400,
+      "Debe seleccionar un rol válido."
+    );
+  }
+
+  if (!estadoSeguro) {
+    throw crearError(
+      400,
+      "Debe seleccionar un estado válido."
+    );
   }
 
   const client = await pool.connect();
 
   try {
     await client.query("BEGIN");
-    await validarAccesoAdministracion(administradorId, client);
+
+    await validarAccesoAdministracion(
+      administradorId,
+      client
+    );
 
     await validarCatalogo(
       client,
@@ -758,24 +1103,60 @@ exports.crearUsuario = async ({
       usuarioSeguro
     );
 
-    const passwordTemporal = generarPasswordTemporal();
-    const passwordHash = await generarPasswordHash(
-      passwordTemporal
-    );
+    // ==================================================
+    // GENERAR CONTRASEÑA
+    // ==================================================
+
+    const passwordTemporal =
+      generarPasswordTemporal();
+
+    const passwordHash =
+      await generarPasswordHash(
+        passwordTemporal
+      );
+
+    // ==================================================
+    // INSERTAR USUARIO
+    // ==================================================
 
     const nuevoUsuarioResult = await client.query(
-      `INSERT INTO usuarios (
-         nombre, correo, usuario, password_hash,
-         rol_id, estado_id, intentos_fallidos,
-         bloqueado_hasta, ultimo_login,
-         debe_cambiar_password, fecha_ultimo_cambio
-       )
-       VALUES (
-         $1, $2, $3, $4, $5, $6,
-         0, NULL, NULL, TRUE, NULL
-       )
-       RETURNING id_usuario, nombre, correo,
-                 usuario, rol_id, estado_id`,
+      `
+        INSERT INTO usuarios (
+          nombre,
+          correo,
+          usuario,
+          password_hash,
+          rol_id,
+          estado_id,
+          intentos_fallidos,
+          bloqueado_hasta,
+          ultimo_login,
+          debe_cambiar_password,
+          fecha_ultimo_cambio
+        )
+
+        VALUES (
+          $1,
+          $2,
+          $3,
+          $4,
+          $5,
+          $6,
+          0,
+          NULL,
+          NULL,
+          TRUE,
+          NULL
+        )
+
+        RETURNING
+          id_usuario,
+          nombre,
+          correo,
+          usuario,
+          rol_id,
+          estado_id
+      `,
       [
         nombreSeguro,
         correoSeguro,
@@ -786,28 +1167,75 @@ exports.crearUsuario = async ({
       ]
     );
 
-    const nuevoUsuario = nuevoUsuarioResult.rows[0];
+    const nuevoUsuario =
+      nuevoUsuarioResult.rows[0];
+
+    // ==================================================
+    // PREPARAR CORREO DE ACCESO
+    // ==================================================
 
     const asunto =
       "Acceso al Sistema de Monitoreo Bioinfeccioso";
 
     const html = `
-      <div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;color:#24313d">
+      <div style="
+        font-family: Arial, sans-serif;
+        max-width: 620px;
+        margin: 0 auto;
+        color: #24313d;
+      ">
         <h2>Sistema de Monitoreo Bioinfeccioso</h2>
+
         <p>Hola <strong>${nombreSeguro}</strong>,</p>
-        <p>Se ha creado una cuenta para usted.</p>
+
+        <p>
+          Se ha creado una cuenta para usted
+          en el Sistema de Monitoreo Bioinfeccioso.
+        </p>
+
         <p>Utilice las siguientes credenciales:</p>
-        <div style="padding:16px;background:#f5f7fa;border:1px solid #d9e0e6;border-radius:8px">
-          <p><strong>Usuario:</strong> ${usuarioSeguro}</p>
-          <p><strong>Contraseña temporal:</strong> ${passwordTemporal}</p>
+
+        <div style="
+          padding: 16px;
+          margin: 20px 0;
+          background: #f5f7fa;
+          border: 1px solid #d9e0e6;
+          border-radius: 8px;
+        ">
+          <p>
+            <strong>Usuario:</strong>
+            ${usuarioSeguro}
+          </p>
+
+          <p>
+            <strong>Contraseña temporal:</strong>
+            ${passwordTemporal}
+          </p>
         </div>
-        <p>Por seguridad, al iniciar sesión por primera vez deberá establecer una nueva contraseña.</p>
-        <p>No comparta sus credenciales.</p>
+
+        <p>
+          Por seguridad, al iniciar sesión por
+          primera vez deberá establecer una
+          nueva contraseña.
+        </p>
+
+        <p>
+          No comparta sus credenciales
+          de acceso con otras personas.
+        </p>
       </div>
     `;
 
+    // ==================================================
+    // ENVIAR CORREO
+    // ==================================================
+
     try {
-      await enviarCorreo(correoSeguro, asunto, html);
+      await enviarCorreo(
+        correoSeguro,
+        asunto,
+        html
+      );
     } catch (error) {
       throw crearError(
         502,
@@ -815,18 +1243,28 @@ exports.crearUsuario = async ({
       );
     }
 
+    // ==================================================
+    // CONFIRMAR TRANSACCIÓN
+    // ==================================================
+
     await client.query("COMMIT");
 
     return {
       message:
         "Usuario creado correctamente. Las credenciales temporales fueron enviadas por correo.",
+
       usuario: nuevoUsuario,
     };
 
   } catch (error) {
-    await client.query("ROLLBACK").catch((err) => {
-      console.error("Error al revertir creación:", err.message);
-    });
+    try {
+      await client.query("ROLLBACK");
+    } catch (rollbackError) {
+      console.error(
+        "Error al revertir creación:",
+        rollbackError.message
+      );
+    }
 
     manejarErrorDuplicado(error);
   } finally {
