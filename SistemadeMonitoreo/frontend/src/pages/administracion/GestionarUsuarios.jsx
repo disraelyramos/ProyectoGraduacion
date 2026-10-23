@@ -59,8 +59,33 @@ const formatearFecha = (fecha) => {
   });
 };
 
+// ======================================================
+// CELULAR GUATEMALA
+// ======================================================
+//
+// PostgreSQL: +50237068088
+// Frontend:   37068088
+//
+// Se elimina +502 únicamente para presentarlo.
+// El backend se encarga de agregarlo al guardar.
+//
+// ======================================================
+
+const obtenerCelularLocal = (valor) => {
+  const telefono = String(valor ?? "").trim();
+
+  if (!telefono) return "";
+
+  return telefono.replace(/^\+502/, "");
+};
+
 const telefonoValido = (telefono) =>
-  /^[345]\d{7}$/.test(telefono);
+  /^[345]\d{7}$/.test(String(telefono));
+
+const limpiarTelefono = (valor) =>
+  String(valor ?? "")
+    .replace(/\D/g, "")
+    .slice(0, 8);
 
 // ======================================================
 // COMPONENTE
@@ -146,7 +171,9 @@ const GestionarUsuarios = ({ onVolver }) => {
         return;
       }
 
-      if (mostrarCarga) setCargando(true);
+      if (mostrarCarga) {
+        setCargando(true);
+      }
 
       try {
         const response = await axios.get(
@@ -169,7 +196,9 @@ const GestionarUsuarios = ({ onVolver }) => {
           "No fue posible cargar los usuarios."
         );
       } finally {
-        if (mostrarCarga) setCargando(false);
+        if (mostrarCarga) {
+          setCargando(false);
+        }
       }
     },
     [manejarError]
@@ -186,7 +215,9 @@ const GestionarUsuarios = ({ onVolver }) => {
   const usuariosFiltrados = useMemo(() => {
     const termino = normalizarBusqueda(busqueda);
 
-    if (!termino) return usuarios;
+    if (!termino) {
+      return usuarios;
+    }
 
     return usuarios.filter((item) => {
       const nombre = normalizarBusqueda(item.nombre);
@@ -200,14 +231,19 @@ const GestionarUsuarios = ({ onVolver }) => {
   }, [busqueda, usuarios]);
 
   // ====================================================
-  // CARGAR ROLES
+  // CARGAR ROLES DESDE POSTGRESQL
   // ====================================================
 
   const cargarRoles = async () => {
-    if (roles.length > 0) return true;
+    if (roles.length > 0) {
+      return true;
+    }
 
     const token = await obtenerToken();
-    if (!token) return false;
+
+    if (!token) {
+      return false;
+    }
 
     setCargandoRoles(true);
 
@@ -221,11 +257,12 @@ const GestionarUsuarios = ({ onVolver }) => {
         }
       );
 
-      setRoles(
+      const rolesObtenidos =
         Array.isArray(response.data?.roles)
           ? response.data.roles
-          : []
-      );
+          : [];
+
+      setRoles(rolesObtenidos);
 
       return true;
     } catch (error) {
@@ -245,13 +282,17 @@ const GestionarUsuarios = ({ onVolver }) => {
   // ====================================================
 
   const abrirEdicionCompleta = async (item) => {
-    if (item.acciones?.puedeEditarCompleto !== true) {
+    if (
+      item.acciones?.puedeEditarCompleto !== true
+    ) {
       return;
     }
 
     const cargado = await cargarRoles();
 
-    if (!cargado) return;
+    if (!cargado) {
+      return;
+    }
 
     setUsuarioEdicion(item);
     setModoEdicion("completo");
@@ -263,7 +304,9 @@ const GestionarUsuarios = ({ onVolver }) => {
   // ====================================================
 
   const abrirEdicionCelular = (item) => {
-    if (item.acciones?.puedeEditarCelular !== true) {
+    if (
+      item.acciones?.puedeEditarCelular !== true
+    ) {
       return;
     }
 
@@ -277,7 +320,9 @@ const GestionarUsuarios = ({ onVolver }) => {
   // ====================================================
 
   const cerrarModalEdicion = () => {
-    if (guardandoEdicion) return;
+    if (guardandoEdicion) {
+      return;
+    }
 
     setIsEditModalOpen(false);
     setUsuarioEdicion(null);
@@ -291,13 +336,22 @@ const GestionarUsuarios = ({ onVolver }) => {
   const guardarEdicion = async (event) => {
     event.preventDefault();
 
-    if (guardandoEdicion || !usuarioEdicion) {
+    if (
+      guardandoEdicion ||
+      !usuarioEdicion
+    ) {
       return;
     }
 
-    const formData = new FormData(event.currentTarget);
+    const formData = new FormData(
+      event.currentTarget
+    );
 
     let datos;
+
+    // ==================================================
+    // EDICIÓN ÚNICAMENTE DE CELULAR
+    // ==================================================
 
     if (modoEdicion === "celular") {
       const telefono = String(
@@ -312,11 +366,21 @@ const GestionarUsuarios = ({ onVolver }) => {
               "Ingrese un celular guatemalteco válido de 8 dígitos.",
           },
         });
+
         return;
       }
 
-      // Solo se envía el teléfono.
-      datos = { telefono };
+      // Únicamente enviamos los 8 dígitos.
+      // El backend agrega +502.
+
+      datos = {
+        telefono,
+      };
+
+    // ==================================================
+    // EDICIÓN COMPLETA
+    // ==================================================
+
     } else if (modoEdicion === "completo") {
       datos = {
         nombre: String(
@@ -331,8 +395,12 @@ const GestionarUsuarios = ({ onVolver }) => {
           formData.get("usuario") || ""
         ).trim(),
 
-        rol_id: Number(formData.get("rol_id")),
+        rol_id: Number(
+          formData.get("rol_id")
+        ),
       };
+
+      // Celular opcional en edición completa.
 
       const telefono = String(
         formData.get("telefono") || ""
@@ -347,11 +415,16 @@ const GestionarUsuarios = ({ onVolver }) => {
                 "El celular debe tener 8 dígitos válidos.",
             },
           });
+
           return;
         }
 
         datos.telefono = telefono;
       }
+
+      // ==================================================
+      // VALIDAR CAMPOS OBLIGATORIOS
+      // ==================================================
 
       if (
         !datos.nombre ||
@@ -367,10 +440,19 @@ const GestionarUsuarios = ({ onVolver }) => {
               "Complete correctamente todos los campos obligatorios.",
           },
         });
+
         return;
       }
 
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(datos.correo)) {
+      // ==================================================
+      // VALIDAR CORREO
+      // ==================================================
+
+      if (
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+          datos.correo
+        )
+      ) {
         await showBackendAlert({
           status: 400,
           data: {
@@ -378,13 +460,19 @@ const GestionarUsuarios = ({ onVolver }) => {
               "El formato del correo electrónico no es válido.",
           },
         });
+
         return;
       }
     } else {
       return;
     }
 
-    const soloCelular = modoEdicion === "celular";
+    // ==================================================
+    // CONFIRMAR ACTUALIZACIÓN
+    // ==================================================
+
+    const soloCelular =
+      modoEdicion === "celular";
 
     await showConfirmAlert(
       soloCelular
@@ -397,7 +485,10 @@ const GestionarUsuarios = ({ onVolver }) => {
 
       async () => {
         const token = await obtenerToken();
-        if (!token) return;
+
+        if (!token) {
+          return;
+        }
 
         setGuardandoEdicion(true);
 
@@ -422,6 +513,7 @@ const GestionarUsuarios = ({ onVolver }) => {
           setModoEdicion(null);
 
           // El backend es la fuente de verdad.
+
           await cargarUsuarios({
             mostrarCarga: false,
           });
@@ -443,12 +535,15 @@ const GestionarUsuarios = ({ onVolver }) => {
   // ====================================================
 
   const cambiarEstado = async (item) => {
-    if (item.acciones?.puedeCambiarEstado !== true) {
+    if (
+      item.acciones?.puedeCambiarEstado !== true
+    ) {
       return;
     }
 
     const desactivar =
-      String(item.estado).toLowerCase() === "activo";
+      String(item.estado).toLowerCase() ===
+      "activo";
 
     await showConfirmAlert(
       desactivar
@@ -456,12 +551,17 @@ const GestionarUsuarios = ({ onVolver }) => {
         : "¿Desea activar este usuario?",
 
       `${item.nombre} será ${
-        desactivar ? "desactivado" : "activado"
+        desactivar
+          ? "desactivado"
+          : "activado"
       }.`,
 
       async () => {
         const token = await obtenerToken();
-        if (!token) return;
+
+        if (!token) {
+          return;
+        }
 
         setProcesandoId(item.id_usuario);
 
@@ -502,17 +602,23 @@ const GestionarUsuarios = ({ onVolver }) => {
   // ====================================================
 
   const eliminarUsuario = async (item) => {
-    if (item.acciones?.puedeEliminar !== true) {
+    if (
+      item.acciones?.puedeEliminar !== true
+    ) {
       return;
     }
 
     await showConfirmAlert(
       "¿Desea eliminar este usuario?",
+
       `Se eliminará permanentemente a ${item.nombre}.`,
 
       async () => {
         const token = await obtenerToken();
-        if (!token) return;
+
+        if (!token) {
+          return;
+        }
 
         setProcesandoId(item.id_usuario);
 
@@ -548,7 +654,7 @@ const GestionarUsuarios = ({ onVolver }) => {
   };
 
   // ====================================================
-  // VISTA
+  // VISTA PRINCIPAL
   // ====================================================
 
   return (
@@ -556,7 +662,9 @@ const GestionarUsuarios = ({ onVolver }) => {
       <section className="system-page">
         <div className="system-container">
 
-          {/* CABECERA */}
+          {/* ========================================
+              CABECERA
+          ======================================== */}
 
           <div className="system-page-header">
             <div>
@@ -565,7 +673,8 @@ const GestionarUsuarios = ({ onVolver }) => {
               </h1>
 
               <p className="system-subtitle">
-                Consulta y administra los usuarios registrados en el sistema.
+                Consulta y administra los usuarios
+                registrados en el sistema.
               </p>
             </div>
 
@@ -579,11 +688,15 @@ const GestionarUsuarios = ({ onVolver }) => {
             </button>
           </div>
 
-          {/* BUSCADOR */}
+          {/* ========================================
+              BUSCADOR
+          ======================================== */}
 
           <div className="system-card gestion-usuarios-search-card">
             <div className="gestion-usuarios-search">
-              <FaSearch className="gestion-usuarios-search-icon" />
+              <FaSearch
+                className="gestion-usuarios-search-icon"
+              />
 
               <input
                 type="search"
@@ -597,7 +710,9 @@ const GestionarUsuarios = ({ onVolver }) => {
             </div>
           </div>
 
-          {/* TABLA */}
+          {/* ========================================
+              TABLA DE USUARIOS
+          ======================================== */}
 
           <div className="system-card">
             {cargando ? (
@@ -612,7 +727,8 @@ const GestionarUsuarios = ({ onVolver }) => {
             ) : usuariosFiltrados.length === 0 ? (
               <div className="system-empty-state">
                 <p>
-                  No se encontraron usuarios con esa búsqueda.
+                  No se encontraron usuarios
+                  con esa búsqueda.
                 </p>
               </div>
             ) : (
@@ -626,6 +742,7 @@ const GestionarUsuarios = ({ onVolver }) => {
                       <th>Rol</th>
                       <th>Estado</th>
                       <th>Fecha creación</th>
+
                       <th className="system-table-actions">
                         Acciones
                       </th>
@@ -634,12 +751,16 @@ const GestionarUsuarios = ({ onVolver }) => {
 
                   <tbody>
                     {usuariosFiltrados.map((item) => {
-                      const acciones = item.acciones || {};
+                      const acciones =
+                        item.acciones || {};
+
                       const procesando =
-                        procesandoId === item.id_usuario;
+                        procesandoId ===
+                        item.id_usuario;
 
                       const esActivo =
-                        String(item.estado).toLowerCase() ===
+                        String(item.estado)
+                          .toLowerCase() ===
                         "activo";
 
                       return (
@@ -648,6 +769,8 @@ const GestionarUsuarios = ({ onVolver }) => {
                           <td>{item.correo}</td>
                           <td>{item.usuario}</td>
                           <td>{item.rol}</td>
+
+                          {/* ESTADO */}
 
                           <td>
                             <span
@@ -661,23 +784,32 @@ const GestionarUsuarios = ({ onVolver }) => {
                             </span>
                           </td>
 
+                          {/* FECHA */}
+
                           <td>
-                            {formatearFecha(item.fecha_creacion)}
+                            {formatearFecha(
+                              item.fecha_creacion
+                            )}
                           </td>
+
+                          {/* ACCIONES */}
 
                           <td className="system-table-actions">
                             <div className="gestion-usuarios-actions">
 
                               {/* EDITAR COMPLETO */}
 
-                              {acciones.puedeEditarCompleto === true && (
+                              {acciones.puedeEditarCompleto ===
+                                true && (
                                 <button
                                   type="button"
                                   className="app-btn app-btn-secondary gestion-usuarios-action-btn"
                                   title="Editar usuario"
                                   disabled={procesando}
                                   onClick={() =>
-                                    abrirEdicionCompleta(item)
+                                    abrirEdicionCompleta(
+                                      item
+                                    )
                                   }
                                 >
                                   <FaPen />
@@ -687,14 +819,17 @@ const GestionarUsuarios = ({ onVolver }) => {
 
                               {/* EDITAR CELULAR */}
 
-                              {acciones.puedeEditarCelular === true && (
+                              {acciones.puedeEditarCelular ===
+                                true && (
                                 <button
                                   type="button"
                                   className="app-btn app-btn-secondary gestion-usuarios-action-btn"
                                   title="Editar celular"
                                   disabled={procesando}
                                   onClick={() =>
-                                    abrirEdicionCelular(item)
+                                    abrirEdicionCelular(
+                                      item
+                                    )
                                   }
                                 >
                                   <FaPhone />
@@ -702,9 +837,10 @@ const GestionarUsuarios = ({ onVolver }) => {
                                 </button>
                               )}
 
-                              {/* CAMBIAR ESTADO */}
+                              {/* ACTIVAR / DESACTIVAR */}
 
-                              {acciones.puedeCambiarEstado === true && (
+                              {acciones.puedeCambiarEstado ===
+                                true && (
                                 <button
                                   type="button"
                                   className="app-btn app-btn-cancel gestion-usuarios-action-btn"
@@ -719,6 +855,7 @@ const GestionarUsuarios = ({ onVolver }) => {
                                   }
                                 >
                                   <FaToggleOn />
+
                                   {esActivo
                                     ? "Desactivar"
                                     : "Activar"}
@@ -727,7 +864,8 @@ const GestionarUsuarios = ({ onVolver }) => {
 
                               {/* ELIMINAR */}
 
-                              {acciones.puedeEliminar === true && (
+                              {acciones.puedeEliminar ===
+                                true && (
                                 <button
                                   type="button"
                                   className="app-btn app-btn-danger gestion-usuarios-action-btn"
@@ -755,9 +893,9 @@ const GestionarUsuarios = ({ onVolver }) => {
         </div>
       </section>
 
-      {/* ================================================
+      {/* ============================================
           MODAL DE EDICIÓN
-          ================================================ */}
+      ============================================ */}
 
       <ModalBase
         isOpen={isEditModalOpen}
@@ -784,7 +922,10 @@ const GestionarUsuarios = ({ onVolver }) => {
               className="app-btn app-btn-primary"
               disabled={
                 guardandoEdicion ||
-                (modoEdicion === "completo" && cargandoRoles)
+                (
+                  modoEdicion === "completo" &&
+                  cargandoRoles
+                )
               }
             >
               {guardandoEdicion
@@ -803,7 +944,9 @@ const GestionarUsuarios = ({ onVolver }) => {
           >
             <div className="system-form-grid">
 
-              {/* NOMBRE - SOLO EDICIÓN COMPLETA */}
+              {/* ====================================
+                  NOMBRE COMPLETO
+              ==================================== */}
 
               {modoEdicion === "completo" && (
                 <div className="system-form-group system-form-full">
@@ -812,6 +955,7 @@ const GestionarUsuarios = ({ onVolver }) => {
                     htmlFor="editar-usuario-nombre"
                   >
                     Nombre completo
+
                     <span className="system-form-required">
                       *
                     </span>
@@ -822,14 +966,18 @@ const GestionarUsuarios = ({ onVolver }) => {
                     name="nombre"
                     type="text"
                     className="system-form-control"
-                    defaultValue={usuarioEdicion.nombre}
+                    defaultValue={
+                      usuarioEdicion.nombre
+                    }
                     disabled={guardandoEdicion}
                     required
                   />
                 </div>
               )}
 
-              {/* CORREO - SOLO EDICIÓN COMPLETA */}
+              {/* ====================================
+                  CORREO ELECTRÓNICO
+              ==================================== */}
 
               {modoEdicion === "completo" && (
                 <div className="system-form-group system-form-full">
@@ -838,6 +986,7 @@ const GestionarUsuarios = ({ onVolver }) => {
                     htmlFor="editar-usuario-correo"
                   >
                     Correo electrónico
+
                     <span className="system-form-required">
                       *
                     </span>
@@ -848,14 +997,18 @@ const GestionarUsuarios = ({ onVolver }) => {
                     name="correo"
                     type="email"
                     className="system-form-control"
-                    defaultValue={usuarioEdicion.correo}
+                    defaultValue={
+                      usuarioEdicion.correo
+                    }
                     disabled={guardandoEdicion}
                     required
                   />
                 </div>
               )}
 
-              {/* CELULAR */}
+              {/* ====================================
+                  NÚMERO DE CELULAR
+              ==================================== */}
 
               <div className="system-form-group system-form-full">
                 <label
@@ -863,6 +1016,7 @@ const GestionarUsuarios = ({ onVolver }) => {
                   htmlFor="editar-usuario-telefono"
                 >
                   Número de celular
+
                   {modoEdicion === "celular" && (
                     <span className="system-form-required">
                       *
@@ -877,33 +1031,52 @@ const GestionarUsuarios = ({ onVolver }) => {
                   inputMode="numeric"
                   autoComplete="tel-national"
                   className="system-form-control"
-                  defaultValue={
-                    usuarioEdicion.telefono || ""
-                  }
-                  placeholder="Ej. 51234567"
+
+                  // IMPORTANTE:
+                  // PostgreSQL devuelve +502XXXXXXXX.
+                  // Aquí únicamente mostramos XXXXXXXX.
+
+                  defaultValue={obtenerCelularLocal(
+                    usuarioEdicion.telefono
+                  )}
+
+                  placeholder="Ej. 37068088"
                   maxLength={8}
+
                   minLength={
-                    modoEdicion === "celular" ? 8 : undefined
+                    modoEdicion === "celular"
+                      ? 8
+                      : undefined
                   }
+
                   pattern="[345][0-9]{7}"
+
                   title="Ingrese 8 dígitos. Debe iniciar con 3, 4 o 5."
+
                   disabled={guardandoEdicion}
-                  required={modoEdicion === "celular"}
+
+                  required={
+                    modoEdicion === "celular"
+                  }
+
                   onInput={(event) => {
                     event.currentTarget.value =
-                      event.currentTarget.value
-                        .replace(/\D/g, "")
-                        .slice(0, 8);
+                      limpiarTelefono(
+                        event.currentTarget.value
+                      );
                   }}
                 />
 
                 <small className="system-form-help">
-                  Ingrese un número guatemalteco de 8 dígitos,
-                  sin espacios ni código de país.
+                  Ingrese únicamente los 8 dígitos.
+                  El código +502 se agrega
+                  automáticamente al guardar.
                 </small>
               </div>
 
-              {/* USUARIO Y ROL - SOLO EDICIÓN COMPLETA */}
+              {/* ====================================
+                  USUARIO Y ROL
+              ==================================== */}
 
               {modoEdicion === "completo" && (
                 <>
@@ -913,6 +1086,7 @@ const GestionarUsuarios = ({ onVolver }) => {
                       htmlFor="editar-usuario-usuario"
                     >
                       Usuario
+
                       <span className="system-form-required">
                         *
                       </span>
@@ -923,7 +1097,9 @@ const GestionarUsuarios = ({ onVolver }) => {
                       name="usuario"
                       type="text"
                       className="system-form-control"
-                      defaultValue={usuarioEdicion.usuario}
+                      defaultValue={
+                        usuarioEdicion.usuario
+                      }
                       disabled={guardandoEdicion}
                       required
                     />
@@ -935,6 +1111,7 @@ const GestionarUsuarios = ({ onVolver }) => {
                       htmlFor="editar-usuario-rol"
                     >
                       Rol
+
                       <span className="system-form-required">
                         *
                       </span>
@@ -948,7 +1125,8 @@ const GestionarUsuarios = ({ onVolver }) => {
                         usuarioEdicion.rol_id
                       )}
                       disabled={
-                        guardandoEdicion || cargandoRoles
+                        guardandoEdicion ||
+                        cargandoRoles
                       }
                       required
                     >
@@ -964,7 +1142,6 @@ const GestionarUsuarios = ({ onVolver }) => {
                   </div>
                 </>
               )}
-
             </div>
           </form>
         )}

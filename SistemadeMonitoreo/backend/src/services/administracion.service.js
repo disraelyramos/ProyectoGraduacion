@@ -61,6 +61,7 @@ function normalizarId(valor) {
 
 function normalizarTexto(valor) {
   if (typeof valor !== "string") return "";
+
   return xss(valor.trim());
 }
 
@@ -83,18 +84,27 @@ function correoValido(correo) {
 // ======================================================
 // NORMALIZAR CELULAR WHATSAPP
 // ======================================================
+//
+// FRONTEND:
+// 37068088
+//
+// POSTGRESQL:
+// +50237068088
+//
+// META WHATSAPP:
+// 50237068088
+//
+// El frontend envía exactamente 8 dígitos.
+// El backend agrega el prefijo +502.
+//
+// ======================================================
 
 function normalizarTelefono(valor) {
   if (typeof valor !== "string") {
     return null;
   }
 
-  const telefono = valor.trim().replace(/[\s-]/g, "");
-
-  // Acepta 8 dígitos o +502 seguido de 8 dígitos.
-  const numero = telefono.startsWith("+502")
-    ? telefono.slice(4)
-    : telefono;
+  const numero = valor.trim();
 
   if (!/^[345]\d{7}$/.test(numero)) {
     return null;
@@ -153,7 +163,12 @@ function generarPasswordTemporal() {
 }
 
 // ======================================================
-// VALIDAR PERMISOS DESDE POSTGRESQL
+// VALIDAR ACCESO A ADMINISTRACIÓN
+// ======================================================
+//
+// Los permisos se consultan en PostgreSQL.
+// No se utiliza un rol_id fijo.
+//
 // ======================================================
 
 async function validarAccesoAdministracion(
@@ -163,6 +178,7 @@ async function validarAccesoAdministracion(
   const resultado = await db.query(
     `
       SELECT 1
+
       FROM usuarios u
 
       INNER JOIN permisos p
@@ -178,7 +194,10 @@ async function validarAccesoAdministracion(
 
       LIMIT 1
     `,
-    [idUsuario, RUTA_ADMINISTRACION]
+    [
+      idUsuario,
+      RUTA_ADMINISTRACION,
+    ]
   );
 
   if (resultado.rows.length === 0) {
@@ -199,7 +218,9 @@ async function validarCatalogo(
   id,
   mensaje
 ) {
-  if (!["roles", "estados_usuario"].includes(tabla)) {
+  if (
+    !["roles", "estados_usuario"].includes(tabla)
+  ) {
     throw crearError(
       500,
       "Catálogo no permitido."
@@ -207,7 +228,12 @@ async function validarCatalogo(
   }
 
   const resultado = await db.query(
-    `SELECT 1 FROM ${tabla} WHERE id = $1 LIMIT 1`,
+    `
+      SELECT 1
+      FROM ${tabla}
+      WHERE id = $1
+      LIMIT 1
+    `,
     [id]
   );
 
@@ -229,15 +255,22 @@ async function validarDuplicados(
   const correoExiste = await db.query(
     `
       SELECT 1
+
       FROM usuarios
+
       WHERE LOWER(correo) = LOWER($1)
+
         AND (
           $2::integer IS NULL
           OR id_usuario <> $2
         )
+
       LIMIT 1
     `,
-    [correo, idExcluir]
+    [
+      correo,
+      idExcluir,
+    ]
   );
 
   if (correoExiste.rows.length > 0) {
@@ -250,15 +283,22 @@ async function validarDuplicados(
   const usuarioExiste = await db.query(
     `
       SELECT 1
+
       FROM usuarios
+
       WHERE LOWER(usuario) = LOWER($1)
+
         AND (
           $2::integer IS NULL
           OR id_usuario <> $2
         )
+
       LIMIT 1
     `,
-    [usuario, idExcluir]
+    [
+      usuario,
+      idExcluir,
+    ]
   );
 
   if (usuarioExiste.rows.length > 0) {
@@ -328,15 +368,27 @@ exports.obtenerCatalogos = async ({
 
   const [roles, estados] = await Promise.all([
     pool.query(
-      `SELECT id, nombre
-       FROM roles
-       ORDER BY nombre ASC`
+      `
+        SELECT
+          id,
+          nombre
+
+        FROM roles
+
+        ORDER BY nombre ASC
+      `
     ),
 
     pool.query(
-      `SELECT id, nombre
-       FROM estados_usuario
-       ORDER BY id ASC`
+      `
+        SELECT
+          id,
+          nombre
+
+        FROM estados_usuario
+
+        ORDER BY id ASC
+      `
     ),
   ]);
 
@@ -363,7 +415,9 @@ exports.obtenerUsuarios = async ({
         u.id_usuario,
         u.nombre,
         u.correo,
+
         u.telefono_whatsapp AS telefono,
+
         u.usuario,
         u.fecha_creacion,
 
@@ -398,9 +452,10 @@ exports.obtenerUsuarios = async ({
       const tieneProcesos =
         registro.tiene_procesos === true;
 
-      const sesionActiva = await tieneSesionActiva({
-        usuarioId: registro.id_usuario,
-      });
+      const sesionActiva =
+        await tieneSesionActiva({
+          usuarioId: registro.id_usuario,
+        });
 
       const estadoActual = String(
         registro.estado || ""
@@ -444,7 +499,9 @@ exports.obtenerUsuarios = async ({
     })
   );
 
-  return { usuarios };
+  return {
+    usuarios,
+  };
 };
 
 // ======================================================
@@ -460,13 +517,11 @@ exports.editarUsuario = async ({
   rolId,
   telefono,
 }) => {
-  const administradorId = validarIdentidad(
-    idUsuarioAutenticado
-  );
+  const administradorId =
+    validarIdentidad(idUsuarioAutenticado);
 
-  const objetivoId = normalizarId(
-    idUsuarioObjetivo
-  );
+  const objetivoId =
+    normalizarId(idUsuarioObjetivo);
 
   if (!objetivoId) {
     throw crearError(
@@ -516,14 +571,16 @@ exports.editarUsuario = async ({
     }
 
     // ==================================================
-    // VERIFICAR PROCESOS
+    // VERIFICAR PROCESOS REGISTRADOS
     // ==================================================
 
     const procesosResult = await client.query(
       `
         SELECT EXISTS (
           SELECT 1
+
           FROM recolecciones
+
           WHERE usuario_id = $1
         ) AS tiene_procesos
       `,
@@ -534,7 +591,7 @@ exports.editarUsuario = async ({
       procesosResult.rows[0].tiene_procesos === true;
 
     // ==================================================
-    // USUARIO CON PROCESOS: SOLO CELULAR
+    // USUARIO CON PROCESOS: SOLO EDITAR CELULAR
     // ==================================================
 
     if (tieneProcesos) {
@@ -549,6 +606,9 @@ exports.editarUsuario = async ({
           "Solo se permite actualizar el celular de usuarios con procesos registrados."
         );
       }
+
+      // El frontend envía únicamente 8 dígitos.
+      // El backend agrega automáticamente +502.
 
       const telefonoSeguro =
         normalizarTelefono(telefono);
@@ -578,7 +638,10 @@ exports.editarUsuario = async ({
             estado_id,
             fecha_creacion
         `,
-        [telefonoSeguro, objetivoId]
+        [
+          telefonoSeguro,
+          objetivoId,
+        ]
       );
 
       await client.query("COMMIT");
@@ -593,10 +656,17 @@ exports.editarUsuario = async ({
     // USUARIO SIN PROCESOS: EDICIÓN COMPLETA
     // ==================================================
 
-    const nombreSeguro = normalizarTexto(nombre);
-    const correoSeguro = normalizarCorreo(correo);
-    const usuarioSeguro = normalizarUsuario(usuario);
-    const rolSeguro = normalizarId(rolId);
+    const nombreSeguro =
+      normalizarTexto(nombre);
+
+    const correoSeguro =
+      normalizarCorreo(correo);
+
+    const usuarioSeguro =
+      normalizarUsuario(usuario);
+
+    const rolSeguro =
+      normalizarId(rolId);
 
     if (!nombreSeguro) {
       throw crearError(
@@ -625,6 +695,9 @@ exports.editarUsuario = async ({
         "Debe seleccionar un rol válido."
       );
     }
+
+    // El teléfono es opcional en la edición completa.
+    // Si se proporciona, debe contener 8 dígitos.
 
     const telefonoSeguro =
       telefono === undefined
@@ -656,7 +729,7 @@ exports.editarUsuario = async ({
     );
 
     // ==================================================
-    // ACTUALIZAR
+    // ACTUALIZAR USUARIO
     // ==================================================
 
     const actualizado = await client.query(
@@ -668,6 +741,7 @@ exports.editarUsuario = async ({
           correo = $2,
           usuario = $3,
           rol_id = $4,
+
           telefono_whatsapp =
             COALESCE($5, telefono_whatsapp)
 
@@ -711,6 +785,7 @@ exports.editarUsuario = async ({
     }
 
     manejarErrorDuplicado(error);
+
   } finally {
     client.release();
   }
@@ -724,13 +799,11 @@ exports.cambiarEstadoUsuario = async ({
   idUsuarioAutenticado,
   idUsuarioObjetivo,
 }) => {
-  const administradorId = validarIdentidad(
-    idUsuarioAutenticado
-  );
+  const administradorId =
+    validarIdentidad(idUsuarioAutenticado);
 
-  const objetivoId = normalizarId(
-    idUsuarioObjetivo
-  );
+  const objetivoId =
+    normalizarId(idUsuarioObjetivo);
 
   if (!objetivoId) {
     throw crearError(
@@ -748,6 +821,10 @@ exports.cambiarEstadoUsuario = async ({
       administradorId,
       client
     );
+
+    // ==================================================
+    // OBTENER USUARIO
+    // ==================================================
 
     const usuarioResult = await client.query(
       `
@@ -776,11 +853,17 @@ exports.cambiarEstadoUsuario = async ({
       );
     }
 
+    // ==================================================
+    // VERIFICAR PROCESOS
+    // ==================================================
+
     const procesos = await client.query(
       `
         SELECT EXISTS (
           SELECT 1
+
           FROM recolecciones
+
           WHERE usuario_id = $1
         ) AS tiene_procesos
       `,
@@ -794,6 +877,10 @@ exports.cambiarEstadoUsuario = async ({
       );
     }
 
+    // ==================================================
+    // IDENTIFICAR ESTADO ACTUAL
+    // ==================================================
+
     const estadoActual = String(
       usuarioResult.rows[0].estado
     ).trim().toLowerCase();
@@ -801,10 +888,11 @@ exports.cambiarEstadoUsuario = async ({
     let nuevoEstadoNombre;
 
     if (estadoActual === "activo") {
-      const sesionActiva = await tieneSesionActiva({
-        client,
-        usuarioId: objetivoId,
-      });
+      const sesionActiva =
+        await tieneSesionActiva({
+          client,
+          usuarioId: objetivoId,
+        });
 
       if (sesionActiva) {
         throw crearError(
@@ -825,11 +913,20 @@ exports.cambiarEstadoUsuario = async ({
       );
     }
 
+    // ==================================================
+    // OBTENER ID DEL ESTADO DESDE POSTGRESQL
+    // ==================================================
+
     const estadoDestino = await client.query(
       `
-        SELECT id, nombre
+        SELECT
+          id,
+          nombre
+
         FROM estados_usuario
+
         WHERE LOWER(nombre) = LOWER($1)
+
         LIMIT 1
       `,
       [nuevoEstadoNombre]
@@ -841,6 +938,10 @@ exports.cambiarEstadoUsuario = async ({
         `No existe el estado ${nuevoEstadoNombre}.`
       );
     }
+
+    // ==================================================
+    // ACTUALIZAR ESTADO
+    // ==================================================
 
     const actualizado = await client.query(
       `
@@ -890,6 +991,7 @@ exports.cambiarEstadoUsuario = async ({
     }
 
     throw error;
+
   } finally {
     client.release();
   }
@@ -903,13 +1005,11 @@ exports.eliminarUsuario = async ({
   idUsuarioAutenticado,
   idUsuarioObjetivo,
 }) => {
-  const administradorId = validarIdentidad(
-    idUsuarioAutenticado
-  );
+  const administradorId =
+    validarIdentidad(idUsuarioAutenticado);
 
-  const objetivoId = normalizarId(
-    idUsuarioObjetivo
-  );
+  const objetivoId =
+    normalizarId(idUsuarioObjetivo);
 
   if (!objetivoId) {
     throw crearError(
@@ -928,11 +1028,18 @@ exports.eliminarUsuario = async ({
       client
     );
 
+    // ==================================================
+    // BUSCAR USUARIO
+    // ==================================================
+
     const usuario = await client.query(
       `
         SELECT id_usuario
+
         FROM usuarios
+
         WHERE id_usuario = $1
+
         FOR UPDATE
       `,
       [objetivoId]
@@ -952,11 +1059,17 @@ exports.eliminarUsuario = async ({
       );
     }
 
+    // ==================================================
+    // VERIFICAR RECOLECCIONES
+    // ==================================================
+
     const procesos = await client.query(
       `
         SELECT EXISTS (
           SELECT 1
+
           FROM recolecciones
+
           WHERE usuario_id = $1
         ) AS tiene_procesos
       `,
@@ -969,6 +1082,10 @@ exports.eliminarUsuario = async ({
         "No es posible eliminar este usuario porque tiene procesos registrados."
       );
     }
+
+    // ==================================================
+    // ELIMINAR
+    // ==================================================
 
     const eliminado = await client.query(
       `
@@ -1010,6 +1127,7 @@ exports.eliminarUsuario = async ({
     }
 
     throw error;
+
   } finally {
     client.release();
   }
@@ -1017,6 +1135,11 @@ exports.eliminarUsuario = async ({
 
 // ======================================================
 // CREAR NUEVO USUARIO
+// ======================================================
+//
+// No solicita número de celular.
+// La columna telefono_whatsapp permanece en NULL.
+//
 // ======================================================
 
 exports.crearUsuario = async ({
@@ -1027,16 +1150,27 @@ exports.crearUsuario = async ({
   rolId,
   estadoId,
 }) => {
-  const administradorId = validarIdentidad(
-    idUsuarioAutenticado
-  );
+  const administradorId =
+    validarIdentidad(idUsuarioAutenticado);
 
-  const nombreSeguro = normalizarTexto(nombre);
-  const correoSeguro = normalizarCorreo(correo);
-  const usuarioSeguro = normalizarUsuario(usuario);
+  const nombreSeguro =
+    normalizarTexto(nombre);
 
-  const rolSeguro = normalizarId(rolId);
-  const estadoSeguro = normalizarId(estadoId);
+  const correoSeguro =
+    normalizarCorreo(correo);
+
+  const usuarioSeguro =
+    normalizarUsuario(usuario);
+
+  const rolSeguro =
+    normalizarId(rolId);
+
+  const estadoSeguro =
+    normalizarId(estadoId);
+
+  // ====================================================
+  // VALIDACIONES
+  // ====================================================
 
   if (!nombreSeguro) {
     throw crearError(
@@ -1078,10 +1212,18 @@ exports.crearUsuario = async ({
   try {
     await client.query("BEGIN");
 
+    // ==================================================
+    // VALIDAR PERMISOS
+    // ==================================================
+
     await validarAccesoAdministracion(
       administradorId,
       client
     );
+
+    // ==================================================
+    // VALIDAR ROL Y ESTADO
+    // ==================================================
 
     await validarCatalogo(
       client,
@@ -1097,6 +1239,10 @@ exports.crearUsuario = async ({
       "El estado seleccionado no es válido."
     );
 
+    // ==================================================
+    // VALIDAR DUPLICADOS
+    // ==================================================
+
     await validarDuplicados(
       client,
       correoSeguro,
@@ -1104,7 +1250,7 @@ exports.crearUsuario = async ({
     );
 
     // ==================================================
-    // GENERAR CONTRASEÑA
+    // GENERAR CONTRASEÑA TEMPORAL
     // ==================================================
 
     const passwordTemporal =
@@ -1116,7 +1262,7 @@ exports.crearUsuario = async ({
       );
 
     // ==================================================
-    // INSERTAR USUARIO
+    // INSERTAR USUARIO SIN TELÉFONO
     // ==================================================
 
     const nuevoUsuarioResult = await client.query(
@@ -1171,7 +1317,7 @@ exports.crearUsuario = async ({
       nuevoUsuarioResult.rows[0];
 
     // ==================================================
-    // PREPARAR CORREO DE ACCESO
+    // PREPARAR CORREO
     // ==================================================
 
     const asunto =
@@ -1184,16 +1330,23 @@ exports.crearUsuario = async ({
         margin: 0 auto;
         color: #24313d;
       ">
-        <h2>Sistema de Monitoreo Bioinfeccioso</h2>
 
-        <p>Hola <strong>${nombreSeguro}</strong>,</p>
+        <h2>
+          Sistema de Monitoreo Bioinfeccioso
+        </h2>
+
+        <p>
+          Hola <strong>${nombreSeguro}</strong>,
+        </p>
 
         <p>
           Se ha creado una cuenta para usted
           en el Sistema de Monitoreo Bioinfeccioso.
         </p>
 
-        <p>Utilice las siguientes credenciales:</p>
+        <p>
+          Utilice las siguientes credenciales:
+        </p>
 
         <div style="
           padding: 16px;
@@ -1202,6 +1355,7 @@ exports.crearUsuario = async ({
           border: 1px solid #d9e0e6;
           border-radius: 8px;
         ">
+
           <p>
             <strong>Usuario:</strong>
             ${usuarioSeguro}
@@ -1211,6 +1365,7 @@ exports.crearUsuario = async ({
             <strong>Contraseña temporal:</strong>
             ${passwordTemporal}
           </p>
+
         </div>
 
         <p>
@@ -1223,11 +1378,12 @@ exports.crearUsuario = async ({
           No comparta sus credenciales
           de acceso con otras personas.
         </p>
+
       </div>
     `;
 
     // ==================================================
-    // ENVIAR CORREO
+    // ENVIAR CREDENCIALES POR CORREO
     // ==================================================
 
     try {
@@ -1236,6 +1392,7 @@ exports.crearUsuario = async ({
         asunto,
         html
       );
+
     } catch (error) {
       throw crearError(
         502,
@@ -1267,6 +1424,7 @@ exports.crearUsuario = async ({
     }
 
     manejarErrorDuplicado(error);
+
   } finally {
     client.release();
   }
