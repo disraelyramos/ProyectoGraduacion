@@ -1,141 +1,73 @@
+
+"use strict";
+
 const administracionService = require(
   "../services/administracion.service"
 );
 
+// ======================================================
+// VALIDAR AUTENTICACIÓN
+// ======================================================
 
-// =========================================================
-// GET CATÁLOGOS DE ADMINISTRACIÓN
-// =========================================================
+function obtenerUsuarioAutenticado(req, res) {
+  if (!req.user?.id_usuario) {
+    res.status(401).json({
+      message: "Usuario no autenticado.",
+    });
+    return null;
+  }
+
+  return req.user.id_usuario;
+}
+
+// ======================================================
+// GET CATÁLOGOS
+// ======================================================
 
 exports.getCatalogos = async (req, res, next) => {
   try {
+    const idUsuario = obtenerUsuarioAutenticado(req, res);
+    if (!idUsuario) return;
 
-    /*
-     * La identidad proviene del token
-     * validado previamente por verifyToken.
-     *
-     * No se confía en:
-     * - usuario_id enviado por frontend
-     * - rol_id enviado por frontend
-     * - permisos enviados por frontend
-     */
-
-    if (
-      !req.user ||
-      !req.user.id_usuario
-    ) {
-      return res.status(401).json({
-        message:
-          "Usuario no autenticado.",
-      });
-    }
-
-
-    const catalogos =
+    const resultado =
       await administracionService.obtenerCatalogos({
-        idUsuario:
-          req.user.id_usuario,
+        idUsuario,
       });
 
-
-    return res.status(200).json(
-      catalogos
-    );
-
+    return res.status(200).json(resultado);
   } catch (error) {
     next(error);
   }
 };
 
-
-// =========================================================
+// ======================================================
 // GET USUARIOS
-// =========================================================
+// ======================================================
 
 exports.getUsuarios = async (req, res, next) => {
   try {
-
-    /*
-     * La identidad del usuario autenticado
-     * proviene exclusivamente del token.
-     *
-     * El frontend no determina:
-     * - permisos
-     * - rol autorizado
-     * - si un usuario tiene procesos
-     * - qué acciones puede realizar
-     *
-     * Todas esas reglas se validan
-     * nuevamente en el service.
-     */
-
-    if (
-      !req.user ||
-      !req.user.id_usuario
-    ) {
-      return res.status(401).json({
-        message:
-          "Usuario no autenticado.",
-      });
-    }
-
+    const idUsuario = obtenerUsuarioAutenticado(req, res);
+    if (!idUsuario) return;
 
     const resultado =
       await administracionService.obtenerUsuarios({
-        idUsuario:
-          req.user.id_usuario,
+        idUsuario,
       });
 
-
-    return res.status(200).json(
-      resultado
-    );
-
+    return res.status(200).json(resultado);
   } catch (error) {
     next(error);
   }
 };
 
-
-// =========================================================
+// ======================================================
 // POST CREAR USUARIO
-// =========================================================
+// ======================================================
 
 exports.crearUsuario = async (req, res, next) => {
   try {
-
-    /*
-     * La identidad de quien crea al usuario
-     * proviene exclusivamente del token.
-     *
-     * Nunca se confía en un id_usuario,
-     * rol o permiso enviado por React.
-     */
-
-    if (
-      !req.user ||
-      !req.user.id_usuario
-    ) {
-      return res.status(401).json({
-        message:
-          "Usuario no autenticado.",
-      });
-    }
-
-
-    /*
-     * Estos datos sí pertenecen
-     * al nuevo usuario.
-     *
-     * El service vuelve a validar:
-     * - datos obligatorios
-     * - formato de correo
-     * - rol existente
-     * - estado existente
-     * - correo duplicado
-     * - usuario duplicado
-     * - permiso real del administrador
-     */
+    const idUsuario = obtenerUsuarioAutenticado(req, res);
+    if (!idUsuario) return;
 
     const {
       nombre,
@@ -145,178 +77,100 @@ exports.crearUsuario = async (req, res, next) => {
       estado_id,
     } = req.body || {};
 
-
     const resultado =
       await administracionService.crearUsuario({
-        idUsuarioAutenticado:
-          req.user.id_usuario,
-
+        idUsuarioAutenticado: idUsuario,
         nombre,
         correo,
         usuario,
-
-        rolId:
-          rol_id,
-
-        estadoId:
-          estado_id,
+        rolId: rol_id,
+        estadoId: estado_id,
       });
 
-
-    return res.status(201).json(
-      resultado
-    );
-
+    return res.status(201).json(resultado);
   } catch (error) {
     next(error);
   }
 };
 
-// =========================================================
+// ======================================================
 // PUT EDITAR USUARIO
-// =========================================================
+// ======================================================
 
 exports.editarUsuario = async (req, res, next) => {
   try {
+    const idUsuario = obtenerUsuarioAutenticado(req, res);
+    if (!idUsuario) return;
 
-    if (
-      !req.user ||
-      !req.user.id_usuario
-    ) {
-      return res.status(401).json({
-        message:
-          "Usuario no autenticado.",
-      });
-    }
-
-
-    const {
-      id,
-    } = req.params || {};
-
+    const { id } = req.params || {};
 
     const {
       nombre,
       correo,
       usuario,
       rol_id,
+      telefono,
     } = req.body || {};
-
 
     const resultado =
       await administracionService.editarUsuario({
-        idUsuarioAutenticado:
-          req.user.id_usuario,
-
-        idUsuarioObjetivo:
-          id,
-
+        idUsuarioAutenticado: idUsuario,
+        idUsuarioObjetivo: id,
         nombre,
         correo,
         usuario,
-
-        rolId:
-          rol_id,
+        rolId: rol_id,
+        telefono,
       });
 
-
-    return res.status(200).json(
-      resultado
-    );
-
+    return res.status(200).json(resultado);
   } catch (error) {
     next(error);
   }
 };
 
-// =========================================================
-// PATCH CAMBIAR ESTADO DE USUARIO
-// =========================================================
+// ======================================================
+// PATCH CAMBIAR ESTADO
+// ======================================================
 
-exports.cambiarEstadoUsuario =
-  async (req, res, next) => {
+exports.cambiarEstadoUsuario = async (req, res, next) => {
+  try {
+    const idUsuario = obtenerUsuarioAutenticado(req, res);
+    if (!idUsuario) return;
 
-    try {
+    const { id } = req.params || {};
 
-      if (
-        !req.user ||
-        !req.user.id_usuario
-      ) {
-        return res.status(401).json({
-          message:
-            "Usuario no autenticado.",
-        });
-      }
+    const resultado =
+      await administracionService.cambiarEstadoUsuario({
+        idUsuarioAutenticado: idUsuario,
+        idUsuarioObjetivo: id,
+      });
 
+    return res.status(200).json(resultado);
+  } catch (error) {
+    next(error);
+  }
+};
 
-      const {
-        id,
-      } = req.params || {};
-
-
-      const resultado =
-        await administracionService
-          .cambiarEstadoUsuario({
-            idUsuarioAutenticado:
-              req.user.id_usuario,
-
-            idUsuarioObjetivo:
-              id,
-          });
-
-
-      return res.status(200).json(
-        resultado
-      );
-
-    } catch (error) {
-
-      next(error);
-    }
-  };
-
-  // =========================================================
+// ======================================================
 // DELETE USUARIO
-// =========================================================
+// ======================================================
 
-exports.eliminarUsuario =
-  async (req, res, next) => {
+exports.eliminarUsuario = async (req, res, next) => {
+  try {
+    const idUsuario = obtenerUsuarioAutenticado(req, res);
+    if (!idUsuario) return;
 
-    try {
+    const { id } = req.params || {};
 
-      if (
-        !req.user ||
-        !req.user.id_usuario
-      ) {
-        return res.status(401).json({
-          message:
-            "Usuario no autenticado.",
-        });
-      }
+    const resultado =
+      await administracionService.eliminarUsuario({
+        idUsuarioAutenticado: idUsuario,
+        idUsuarioObjetivo: id,
+      });
 
-
-      const {
-        id,
-      } = req.params || {};
-
-
-      const resultado =
-        await administracionService
-          .eliminarUsuario({
-            idUsuarioAutenticado:
-              req.user.id_usuario,
-
-            idUsuarioObjetivo:
-              id,
-          });
-
-
-      return res.status(200).json(
-        resultado
-      );
-
-    } catch (error) {
-
-      next(error);
-    }
-  };
+    return res.status(200).json(resultado);
+  } catch (error) {
+    next(error);
+  }
+};
