@@ -1,8 +1,13 @@
+
 import os
 import json
 import math
+import sys
+
+from bisect import bisect_right
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import psycopg2
 
@@ -11,18 +16,12 @@ from sklearn.linear_model import HuberRegressor
 
 
 # =========================================================
-# CARGAR .ENV DE LA RAÍZ DEL BACKEND
+# CONFIGURACIÓN
 # =========================================================
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-ENV_PATH = BASE_DIR / ".env"
 
-load_dotenv(ENV_PATH)
-
-
-# =========================================================
-# CONFIGURACIÓN DE BASE DE DATOS
-# =========================================================
+load_dotenv(BASE_DIR / ".env")
 
 DB_USER = os.getenv("DB_USER")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
@@ -30,58 +29,55 @@ DB_HOST = os.getenv("DB_HOST")
 DB_PORT = os.getenv("DB_PORT", "5432")
 DB_NAME = os.getenv("DB_NAME")
 
-
-# =========================================================
-# CONFIGURACIÓN MACHINE LEARNING
-# =========================================================
-
 ML_MIN_LECTURAS = int(
     os.getenv("ML_MIN_LECTURAS", "8")
 )
 
-# Mínimo de crecimiento que permite una proyección útil.
-# Unidad: puntos porcentuales de llenado por día.
 ML_MIN_CRECIMIENTO_DIA = float(
     os.getenv("ML_MIN_CRECIMIENTO_DIA", "0.1")
 )
 
-# Horizonte máximo de predicción admitido, en días.
 ML_MAX_DIAS_PREDICCION = int(
     os.getenv("ML_MAX_DIAS_PREDICCION", "3650")
 )
+
+ML_MIN_HORAS_CICLO = float(
+    os.getenv("ML_MIN_HORAS_CICLO", "12")
+)
+
+ML_MIN_AUMENTO_CICLO = float(
+    os.getenv("ML_MIN_AUMENTO_CICLO", "1")
+)
+
+ML_CAIDA_ANOMALA_PCT = float(
+    os.getenv("ML_CAIDA_ANOMALA_PCT", "20")
+)
+
+ML_AGRUPACION_HORAS = int(
+    os.getenv("ML_AGRUPACION_HORAS", "1")
+)
+
+ML_MAX_CICLOS_HISTORICOS = int(
+    os.getenv("ML_MAX_CICLOS_HISTORICOS", "10")
+)
+
 
 if (
     ML_MIN_LECTURAS < 2
     or not math.isfinite(ML_MIN_CRECIMIENTO_DIA)
     or not 0 < ML_MIN_CRECIMIENTO_DIA <= 100
     or ML_MAX_DIAS_PREDICCION <= 0
+    or not math.isfinite(ML_MIN_HORAS_CICLO)
+    or ML_MIN_HORAS_CICLO <= 0
+    or not math.isfinite(ML_MIN_AUMENTO_CICLO)
+    or ML_MIN_AUMENTO_CICLO <= 0
+    or not math.isfinite(ML_CAIDA_ANOMALA_PCT)
+    or ML_CAIDA_ANOMALA_PCT <= 0
+    or ML_AGRUPACION_HORAS < 1
+    or ML_MAX_CICLOS_HISTORICOS < 1
 ):
-    raise RuntimeError("Configuración de Machine Learning inválida.")
-
-
-# =========================================================
-# VALIDAR VARIABLES
-# =========================================================
-
-variables_faltantes = []
-
-if not DB_USER:
-    variables_faltantes.append("DB_USER")
-
-if not DB_PASSWORD:
-    variables_faltantes.append("DB_PASSWORD")
-
-if not DB_HOST:
-    variables_faltantes.append("DB_HOST")
-
-if not DB_NAME:
-    variables_faltantes.append("DB_NAME")
-
-
-if variables_faltantes:
     raise RuntimeError(
-        "Faltan variables en el .env: "
-        + ", ".join(variables_faltantes)
+        "Configuración de Machine Learning inválida."
     )
 
 
@@ -95,177 +91,275 @@ def obtener_conexion():
         port=DB_PORT,
         dbname=DB_NAME,
         user=DB_USER,
-        password=DB_PASSWORD
+        password=DB_PASSWORD,
+        connect_timeout=10
     )
 
 
 # =========================================================
-# OBTENER CONFIGURACIÓN DE ALERTAS
+# CONFIGURACIÓN DE ALERTAS
 # =========================================================
 
-def obtener_configuracion_alertas():
-
+def obtener_configuracion_alertas(conn):
     sql = """
         SELECT
             primer_aviso_pct,
             segundo_aviso_pct,
             activa
         FROM configuracion_alertas
-        WHERE id = 1;
+        WHERE id = 1
     """
 
-    with obtener_conexion() as conn:
-        with conn.cursor() as cursor:
-
-            cursor.execute(sql)
-
-            fila = cursor.fetchone()
+    with conn.cursor() as cursor:
+        cursor.execute(sql)
+        fila = cursor.fetchone()
 
     if not fila:
         raise RuntimeError(
             "No existe configuración de alertas."
         )
 
-    umbral_aviso = float(fila[0])
-    umbral_alto = float(fila[1])
-    activa = bool(fila[2])
+    aviso = float(fila[0])
+    alto = float(fila[1])
 
-    if umbral_aviso <= 0 or umbral_aviso > 100:
+    if (
+        not 0 < aviso < alto <= 100
+    ):
         raise RuntimeError(
-            "El primer umbral configurado no es válido."
-        )
-
-    if umbral_alto <= 0 or umbral_alto > 100:
-        raise RuntimeError(
-            "El segundo umbral configurado no es válido."
-        )
-
-    if umbral_aviso >= umbral_alto:
-        raise RuntimeError(
-            "El primer umbral debe ser menor que el segundo."
+            "Umbrales de alertas inválidos."
         )
 
     return {
-        "umbral_aviso": umbral_aviso,
-        "umbral_alto": umbral_alto,
-        "alertas_activas": activa
+        "umbral_aviso": aviso,
+        "umbral_alto": alto,
+        "alertas_activas": bool(fila[2])
     }
 
 
 # =========================================================
-# OBTENER LECTURAS DE NIVEL
+# CONSULTAR LECTURAS HISTÓRICAS
+# =========================================================
+#
+# No se utilizan IDs fijos de los catálogos.
+#
+# Se aceptan únicamente:
+# - Lecturas de nivel.
+# - Unidad porcentaje.
+# - Estado normal.
+# - Valores válidos entre 0 y 100.
+#
+# Las lecturas simuladas y reales deben
+# distinguirse en fuente_lectura.
+#
 # =========================================================
 
-def obtener_lecturas(contenedor_id):
-
+def obtener_lecturas(conn, contenedor_id):
     sql = """
         SELECT
-            id,
-            contenedor_id,
-            valor,
-            fecha_hora
-        FROM lecturas
-        WHERE contenedor_id = %s
-          AND tipo_lectura_id = 1
-          AND unidad_id = 1
-          AND estado_lectura = 'normal'
-        ORDER BY fecha_hora ASC;
+            l.id,
+            l.valor,
+            l.fecha_hora,
+            l.fuente_lectura
+
+        FROM lecturas l
+
+        JOIN tipos_lectura t
+          ON t.id = l.tipo_lectura_id
+
+        JOIN unidad_medida u
+          ON u.id = l.unidad_id
+
+        WHERE l.contenedor_id = %s
+
+          AND LOWER(t.nombre) LIKE '%%nivel%%'
+
+          AND (
+            LOWER(u.nombre) LIKE '%%porcentaje%%'
+            OR TRIM(u.nombre) = '%%'
+          )
+
+          AND LOWER(l.estado_lectura) = 'normal'
+
+          AND l.valor BETWEEN 0 AND 100
+
+        ORDER BY
+            l.fecha_hora ASC,
+            l.id ASC
     """
 
-    with obtener_conexion() as conn:
-        with conn.cursor() as cursor:
-
-            cursor.execute(
-                sql,
-                (contenedor_id,)
-            )
-
-            filas = cursor.fetchall()
-
-            columnas = [
-                descripcion[0]
-                for descripcion in cursor.description
-            ]
+    with conn.cursor() as cursor:
+        cursor.execute(sql, (contenedor_id,))
+        filas = cursor.fetchall()
 
     df = pd.DataFrame(
         filas,
-        columns=columnas
+        columns=[
+            "id",
+            "valor",
+            "fecha_hora",
+            "fuente_lectura"
+        ]
     )
 
-    if not df.empty:
-        df["fecha_hora"] = pd.to_datetime(
-            df["fecha_hora"]
-        )
+    if df.empty:
+        return df
 
-    return df
+    df["fecha_hora"] = pd.to_datetime(
+        df["fecha_hora"],
+        errors="coerce"
+    )
+
+    df["valor"] = pd.to_numeric(
+        df["valor"],
+        errors="coerce"
+    )
+
+    df = df.dropna(
+        subset=["fecha_hora", "valor"]
+    )
+
+    return df.sort_values(
+        ["fecha_hora", "id"]
+    ).reset_index(drop=True)
 
 
 # =========================================================
-# SEPARAR CICLOS DE LLENADO
+# CONSULTAR RECOLECCIONES REALES
+# =========================================================
+#
+# Se utilizan únicamente las fechas registradas
+# por el proceso de recolección del sistema.
+#
+# No se crean recolecciones artificiales.
+#
 # =========================================================
 
-def separar_ciclos(df):
+def obtener_recolecciones(conn, contenedor_id):
+    sql = """
+        SELECT fecha_recoleccion
+        FROM recolecciones
+        WHERE contenedor_id = %s
+          AND fecha_recoleccion IS NOT NULL
+        ORDER BY fecha_recoleccion ASC
     """
-    Una caída de 20 puntos porcentuales o más
-    se interpreta como inicio de un nuevo ciclo.
-    """
 
-    df = df.copy()
+    with conn.cursor() as cursor:
+        cursor.execute(sql, (contenedor_id,))
+        filas = cursor.fetchall()
 
-    df["ciclo"] = 0
+    fechas = pd.to_datetime(
+        [fila[0] for fila in filas],
+        errors="coerce"
+    )
 
-    ciclo_actual = 0
-    nivel_anterior = None
+    return sorted(
+        fecha
+        for fecha in fechas
+        if not pd.isna(fecha)
+    )
 
-    for indice, fila in df.iterrows():
 
-        nivel_actual = float(
-            fila["valor"]
+# =========================================================
+# SEPARAR CICLOS POR RECOLECCIONES
+# =========================================================
+#
+# Ciclo 0: antes de primera recolección.
+# Ciclo 1: después de primera recolección.
+# Ciclo 2: después de segunda recolección.
+#
+# No se supone que toda caída de nivel sea
+# una recolección.
+#
+# =========================================================
+
+def separar_ciclos(df, fechas_recoleccion):
+    if df.empty:
+        return df.copy()
+
+    datos = df.copy()
+
+    datos["ciclo"] = datos[
+        "fecha_hora"
+    ].apply(
+        lambda fecha: bisect_right(
+            fechas_recoleccion,
+            fecha
         )
+    )
 
-        if nivel_anterior is not None:
-
-            diferencia = (
-                nivel_anterior
-                - nivel_actual
-            )
-
-            if diferencia >= 20:
-                ciclo_actual += 1
-
-        df.at[
-            indice,
-            "ciclo"
-        ] = ciclo_actual
-
-        nivel_anterior = nivel_actual
-
-    return df
+    return datos
 
 
 # =========================================================
-# PREPARAR CICLO
+# AGRUPAR LECTURAS POR HORAS
+# =========================================================
+#
+# Evita entrenar cientos de veces con
+# el mismo valor dentro de una misma hora.
+#
+# Se usa la mediana de cada intervalo.
+#
 # =========================================================
 
-def preparar_ciclo(ciclo_df):
+def agrupar_lecturas(df):
+    if df.empty:
+        return df
 
-    ciclo_df = (
-        ciclo_df
-        .copy()
-        .sort_values("fecha_hora")
+    datos = df.copy()
+
+    datos["intervalo"] = datos[
+        "fecha_hora"
+    ].dt.floor(
+        f"{ML_AGRUPACION_HORAS}h"
     )
 
-    fecha_inicio = (
-        ciclo_df["fecha_hora"]
-        .min()
+    resultado = (
+        datos.groupby(
+            "intervalo",
+            as_index=False
+        )
+        .agg(
+            valor=("valor", "median"),
+            total_lecturas=("valor", "size")
+        )
+        .rename(
+            columns={
+                "intervalo": "fecha_hora"
+            }
+        )
     )
 
-    ciclo_df["dias"] = (
-        ciclo_df["fecha_hora"]
-        - fecha_inicio
-    ).dt.total_seconds() / 86400
+    return resultado.sort_values(
+        "fecha_hora"
+    ).reset_index(drop=True)
 
-    return ciclo_df
+
+# =========================================================
+# COMPROBAR CONSISTENCIA DE UN CICLO
+# =========================================================
+#
+# Una caída brusca dentro de un ciclo de
+# recolección se considera inconsistencia.
+#
+# No se fabrica otro ciclo automáticamente.
+#
+# =========================================================
+
+def ciclo_tiene_caida_anomala(df):
+    if len(df) < 2:
+        return False
+
+    valores = df["valor"].to_numpy(
+        dtype=float
+    )
+
+    caidas = valores[:-1] - valores[1:]
+
+    return bool(
+        np.any(
+            caidas >= ML_CAIDA_ANOMALA_PCT
+        )
+    )
 
 
 # =========================================================
@@ -273,64 +367,139 @@ def preparar_ciclo(ciclo_df):
 # =========================================================
 
 def entrenar_ciclo(ciclo_df):
+    if ciclo_df.empty:
+        return None
 
     if len(ciclo_df) < ML_MIN_LECTURAS:
         return None
 
-    ciclo_df = preparar_ciclo(
+    ciclo_df = agrupar_lecturas(
         ciclo_df
     )
 
-    X = ciclo_df[["dias"]]
-    y = ciclo_df["valor"]
+    # Se requieren suficientes intervalos
+    # independientes, no solo lecturas repetidas.
 
-    modelo = HuberRegressor()
+    if len(ciclo_df) < 2:
+        return None
 
-    modelo.fit(
-        X,
-        y
+    if ciclo_tiene_caida_anomala(ciclo_df):
+        return None
+
+    fecha_inicio = ciclo_df[
+        "fecha_hora"
+    ].min()
+
+    fecha_fin = ciclo_df[
+        "fecha_hora"
+    ].max()
+
+    horas = (
+        fecha_fin - fecha_inicio
+    ).total_seconds() / 3600
+
+    if horas < ML_MIN_HORAS_CICLO:
+        return None
+
+    primer_nivel = float(
+        ciclo_df.iloc[0]["valor"]
     )
 
-    pendiente = float(
-        modelo.coef_[0]
+    ultimo_nivel = float(
+        ciclo_df.iloc[-1]["valor"]
     )
 
-    intercepto = float(
-        modelo.intercept_
+    aumento = (
+        ultimo_nivel - primer_nivel
     )
+
+    if aumento < ML_MIN_AUMENTO_CICLO:
+        return None
+
+    dias = (
+        ciclo_df["fecha_hora"]
+        - fecha_inicio
+    ).dt.total_seconds() / 86400
+
+    X = dias.to_numpy(
+        dtype=float
+    ).reshape(-1, 1)
+
+    y = ciclo_df["valor"].to_numpy(
+        dtype=float
+    )
+
+    if not np.all(np.isfinite(X)):
+        return None
+
+    if not np.all(np.isfinite(y)):
+        return None
+
+    if len(np.unique(X)) < 2:
+        return None
+
+    try:
+        modelo = HuberRegressor(
+            max_iter=500
+        )
+
+        modelo.fit(X, y)
+
+        pendiente = float(
+            modelo.coef_[0]
+        )
+
+    except (ValueError, RuntimeError):
+        return None
+
+    if (
+        not math.isfinite(pendiente)
+        or pendiente <= 0
+    ):
+        return None
 
     return {
         "pendiente": pendiente,
-        "intercepto": intercepto,
-        "lecturas": len(ciclo_df)
+        "lecturas": len(ciclo_df),
+        "aumento": aumento,
+        "horas": horas
     }
 
 
 # =========================================================
 # CALCULAR TENDENCIA HISTÓRICA
 # =========================================================
+#
+# Utiliza únicamente ciclos con crecimiento
+# positivo y datos suficientes.
+#
+# Se limita la cantidad de ciclos históricos.
+#
+# La mediana de pendientes reduce el efecto
+# de ciclos con crecimientos extremos.
+#
+# =========================================================
 
-def calcular_tendencia_historica(df):
-
-    df = separar_ciclos(
-        df
+def calcular_tendencia_historica(
+    df,
+    fechas_recoleccion
+):
+    datos = separar_ciclos(
+        df,
+        fechas_recoleccion
     )
 
     resultados = []
 
-    for _, ciclo_df in df.groupby(
-        "ciclo"
+    for _, ciclo_df in datos.groupby(
+        "ciclo",
+        sort=True
     ):
-
         resultado = entrenar_ciclo(
             ciclo_df
         )
 
-        if (
-            resultado
-            and math.isfinite(resultado["pendiente"])
-            and resultado["pendiente"] > 0
-        ):
+        if resultado:
             resultados.append(
                 resultado
             )
@@ -338,72 +507,66 @@ def calcular_tendencia_historica(df):
     if not resultados:
         return None
 
-    pendientes = [
-        resultado["pendiente"]
-        for resultado in resultados
+    resultados = resultados[
+        -ML_MAX_CICLOS_HISTORICOS:
     ]
 
-    crecimiento_promedio = (
-        sum(pendientes)
-        / len(pendientes)
+    pendientes = [
+        r["pendiente"]
+        for r in resultados
+    ]
+
+    crecimiento = float(
+        np.median(pendientes)
     )
 
     return {
-        "crecimiento_promedio_dia":
-            crecimiento_promedio,
-
-        "ciclos_utilizados":
-            len(resultados)
+        "crecimiento_promedio_dia": crecimiento,
+        "ciclos_utilizados": len(resultados)
     }
 
 
 # =========================================================
 # OBTENER NIVEL ACTUAL
 # =========================================================
+#
+# Se conserva la misma fuente utilizada
+# por el predictor anterior: contenedores.
+#
+# =========================================================
 
-def obtener_nivel_actual(
-    contenedor_id
-):
-
+def obtener_nivel_actual(conn, contenedor_id):
     sql = """
         SELECT
             estado_actual_litros,
             capacidad_max_litros
+
         FROM contenedores
-        WHERE id_contenedor = %s;
+
+        WHERE id_contenedor = %s
     """
 
-    with obtener_conexion() as conn:
-        with conn.cursor() as cursor:
-
-            cursor.execute(
-                sql,
-                (contenedor_id,)
-            )
-
-            fila = cursor.fetchone()
+    with conn.cursor() as cursor:
+        cursor.execute(sql, (contenedor_id,))
+        fila = cursor.fetchone()
 
     if not fila:
         return None
 
-    litros_actuales = float(
-        fila[0] or 0
-    )
+    litros = float(fila[0] or 0)
+    capacidad = float(fila[1] or 0)
 
-    capacidad_maxima = float(
-        fila[1] or 0
-    )
-
-    if capacidad_maxima <= 0:
+    if (
+        not math.isfinite(litros)
+        or not math.isfinite(capacidad)
+        or capacidad <= 0
+        or litros < 0
+        or litros > capacidad
+    ):
         return None
 
-    porcentaje = (
-        litros_actuales
-        / capacidad_maxima
-    ) * 100
-
     return round(
-        porcentaje,
+        litros / capacidad * 100,
         2
     )
 
@@ -417,7 +580,6 @@ def calcular_dias_para_umbral(
     crecimiento_dia,
     umbral
 ):
-
     if nivel_actual >= umbral:
         return 0.0
 
@@ -428,9 +590,14 @@ def calcular_dias_para_umbral(
         return None
 
     dias = (
-        umbral
-        - nivel_actual
+        umbral - nivel_actual
     ) / crecimiento_dia
+
+    if (
+        not math.isfinite(dias)
+        or dias > ML_MAX_DIAS_PREDICCION
+    ):
+        return None
 
     return round(
         max(dias, 0),
@@ -442,10 +609,7 @@ def calcular_dias_para_umbral(
 # CLASIFICAR RIESGO
 # =========================================================
 
-def clasificar_riesgo(
-    dias_para_alto
-):
-
+def clasificar_riesgo(dias_para_alto):
     if dias_para_alto is None:
         return "SIN_DATOS"
 
@@ -463,60 +627,52 @@ def clasificar_riesgo(
 # =========================================================
 
 def predecir_contenedor(
+    conn,
     contenedor_id,
-    configuracion_alertas
+    configuracion
 ):
-
     lecturas = obtener_lecturas(
+        conn,
         contenedor_id
     )
 
     if lecturas.empty:
-
         return {
-            "contenedor_id":
-                contenedor_id,
-
-            "estado":
-                "SIN_DATOS"
+            "contenedor_id": contenedor_id,
+            "estado": "SIN_DATOS"
         }
 
-    tendencia = (
-        calcular_tendencia_historica(
-            lecturas
-        )
+    fechas_recoleccion = obtener_recolecciones(
+        conn,
+        contenedor_id
+    )
+
+    tendencia = calcular_tendencia_historica(
+        lecturas,
+        fechas_recoleccion
     )
 
     if not tendencia:
-
         return {
-            "contenedor_id":
-                contenedor_id,
-
-            "estado":
-                "DATOS_INSUFICIENTES"
+            "contenedor_id": contenedor_id,
+            "estado": "DATOS_INSUFICIENTES"
         }
 
     nivel_actual = obtener_nivel_actual(
+        conn,
         contenedor_id
     )
 
     if nivel_actual is None:
-
         return {
-            "contenedor_id":
-                contenedor_id,
-
-            "estado":
-                "SIN_NIVEL_ACTUAL"
+            "contenedor_id": contenedor_id,
+            "estado": "SIN_NIVEL_ACTUAL"
         }
 
     crecimiento = tendencia[
         "crecimiento_promedio_dia"
     ]
 
-    # Una pendiente muy pequeña produce millones de días.
-    # No se publica ni se utiliza para alertas una estimación así.
     if (
         not math.isfinite(crecimiento)
         or crecimiento < ML_MIN_CRECIMIENTO_DIA
@@ -526,84 +682,60 @@ def predecir_contenedor(
             "estado": "CRECIMIENTO_INSUFICIENTE"
         }
 
-    umbral_aviso = configuracion_alertas[
+    umbral_aviso = configuracion[
         "umbral_aviso"
     ]
 
-    umbral_alto = configuracion_alertas[
+    umbral_alto = configuracion[
         "umbral_alto"
     ]
 
-    dias_aviso = (
-        calcular_dias_para_umbral(
-            nivel_actual,
-            crecimiento,
-            umbral_aviso
-        )
+    dias_aviso = calcular_dias_para_umbral(
+        nivel_actual,
+        crecimiento,
+        umbral_aviso
     )
 
-    dias_alto = (
-        calcular_dias_para_umbral(
-            nivel_actual,
-            crecimiento,
-            umbral_alto
-        )
+    dias_alto = calcular_dias_para_umbral(
+        nivel_actual,
+        crecimiento,
+        umbral_alto
     )
 
-    # Si no hay horizonte confiable, no retornar estado OK.
-    if (
-        dias_alto is None
-        or not math.isfinite(dias_alto)
-        or dias_alto > ML_MAX_DIAS_PREDICCION
-    ):
+    if dias_alto is None:
         return {
             "contenedor_id": contenedor_id,
             "estado": "PREDICCION_NO_CONFIABLE"
         }
 
     return {
+        "contenedor_id": contenedor_id,
+        "estado": "OK",
 
-        "contenedor_id":
-            contenedor_id,
+        "nivel_actual": nivel_actual,
 
-        "estado":
-            "OK",
+        "crecimiento_estimado_dia": round(
+            crecimiento,
+            2
+        ),
 
-        "nivel_actual":
-            nivel_actual,
+        "dias_para_aviso": dias_aviso,
+        "dias_para_alto": dias_alto,
 
-        "crecimiento_estimado_dia":
-            round(
-                crecimiento,
-                2
-            ),
+        "umbral_aviso": umbral_aviso,
+        "umbral_alto": umbral_alto,
 
-        "dias_para_aviso":
-            dias_aviso,
+        "alertas_activas": configuracion[
+            "alertas_activas"
+        ],
 
-        "dias_para_alto":
-            dias_alto,
+        "riesgo": clasificar_riesgo(
+            dias_alto
+        ),
 
-        "umbral_aviso":
-            umbral_aviso,
-
-        "umbral_alto":
-            umbral_alto,
-
-        "alertas_activas":
-            configuracion_alertas[
-                "alertas_activas"
-            ],
-
-        "riesgo":
-            clasificar_riesgo(
-                dias_alto
-            ),
-
-        "ciclos_utilizados":
-            tendencia[
-                "ciclos_utilizados"
-            ]
+        "ciclos_utilizados": tendencia[
+            "ciclos_utilizados"
+        ]
     }
 
 
@@ -611,22 +743,17 @@ def predecir_contenedor(
 # OBTENER CONTENEDORES ACTIVOS
 # =========================================================
 
-def obtener_contenedores():
-
+def obtener_contenedores(conn):
     sql = """
-        SELECT
-            id_contenedor
+        SELECT id_contenedor
         FROM contenedores
         WHERE estado_id = 1
-        ORDER BY id_contenedor;
+        ORDER BY id_contenedor
     """
 
-    with obtener_conexion() as conn:
-        with conn.cursor() as cursor:
-
-            cursor.execute(sql)
-
-            filas = cursor.fetchall()
+    with conn.cursor() as cursor:
+        cursor.execute(sql)
+        filas = cursor.fetchall()
 
     return [
         fila[0]
@@ -639,29 +766,30 @@ def obtener_contenedores():
 # =========================================================
 
 def main():
-
     resultados = []
 
-    configuracion_alertas = (
-        obtener_configuracion_alertas()
-    )
+    with obtener_conexion() as conn:
+        configuracion = obtener_configuracion_alertas(
+            conn
+        )
 
-    contenedores = (
-        obtener_contenedores()
-    )
+        contenedores = obtener_contenedores(
+            conn
+        )
 
-    for contenedor_id in contenedores:
-
-        resultado = (
-            predecir_contenedor(
+        for contenedor_id in contenedores:
+            resultado = predecir_contenedor(
+                conn,
                 contenedor_id,
-                configuracion_alertas
+                configuracion
             )
-        )
 
-        resultados.append(
-            resultado
-        )
+            resultados.append(
+                resultado
+            )
+
+    # stdout exclusivamente JSON.
+    # El servicio Node.js depende de este formato.
 
     print(
         json.dumps(
@@ -673,4 +801,13 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+
+    except Exception as error:
+        print(
+            f"Error Machine Learning: {error}",
+            file=sys.stderr
+        )
+
+        sys.exit(1)
