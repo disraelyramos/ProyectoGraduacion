@@ -14,20 +14,33 @@ async function ejecutar() {
   }
 
   if (Date.now() < INICIO) {
-    console.log(
-      "La simulación inicia el 26/10/2026 a las 09:00, hora de Guatemala."
-    );
+    console.log("Aún no corresponde iniciar la simulación.");
     return;
   }
 
-  if (!process.env.DATABASE_URL) {
-    throw new Error(
-      "Falta configurar DATABASE_URL."
-    );
+  const requeridas = [
+    "DB_HOST",
+    "DB_PORT",
+    "DB_NAME",
+    "DB_USER",
+    "DB_PASSWORD"
+  ];
+
+  for (const variable of requeridas) {
+    if (!process.env[variable]) {
+      throw new Error(`Falta la variable ${variable}`);
+    }
   }
 
   const client = new Client({
-    connectionString: process.env.DATABASE_URL,
+    host: process.env.DB_HOST,
+    port: Number(process.env.DB_PORT),
+    database: process.env.DB_NAME,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    ssl: process.env.DB_SSL?.toLowerCase() === "true"
+      ? { rejectUnauthorized: true }
+      : false,
     connectionTimeoutMillis: 15000,
     query_timeout: 30000
   });
@@ -35,27 +48,19 @@ async function ejecutar() {
   try {
     await client.connect();
 
-    console.log("Conectado a PostgreSQL.");
-    console.log("Ejecutando simulación de lecturas...");
+    console.log("Conexión PostgreSQL establecida.");
 
     await client.query(
-      "CALL public.generar_lecturas_ml();"
+      "CALL public.generar_lecturas_ml()"
     );
 
-    console.log(
-      "Simulación ejecutada correctamente."
-    );
-
+    console.log("Procedimiento ejecutado correctamente.");
   } finally {
     await client.end();
   }
 }
 
 ejecutar().catch((error) => {
-  console.error(
-    "Error ejecutando simulación ML:",
-    error.message
-  );
-
+  console.error("Error:", error.message);
   process.exitCode = 1;
 });
