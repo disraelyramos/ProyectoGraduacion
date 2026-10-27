@@ -3,7 +3,7 @@
 
 require("dotenv").config();
 
-const { Client } = require("pg");
+const pool = require("../src/config/db");
 
 const INICIO = Date.parse("2026-10-26T09:00:00-06:00");
 
@@ -32,31 +32,22 @@ async function ejecutar() {
     }
   }
 
-  const client = new Client({
-    host: process.env.DB_HOST,
-    port: Number(process.env.DB_PORT),
-    database: process.env.DB_NAME,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    ssl: process.env.DB_SSL?.toLowerCase() === "true"
-      ? { rejectUnauthorized: true }
-      : false,
-    connectionTimeoutMillis: 15000,
-    query_timeout: 30000
-  });
-
   try {
-    await client.connect();
+    console.log("Conectando a PostgreSQL...");
+
+    await pool.query("SELECT 1");
 
     console.log("Conexión PostgreSQL establecida.");
 
-    await client.query(
+    await pool.query(
       "CALL public.generar_lecturas_ml()"
     );
 
-    console.log("Procedimiento ejecutado correctamente.");
+    console.log(
+      "Procedimiento ejecutado correctamente."
+    );
   } finally {
-    await client.end();
+    await pool.end();
   }
 }
 
