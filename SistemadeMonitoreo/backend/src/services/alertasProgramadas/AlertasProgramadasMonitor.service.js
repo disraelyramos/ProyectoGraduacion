@@ -1,4 +1,3 @@
-
 "use strict";
 
 const pool = require("../../config/db");
@@ -97,22 +96,15 @@ function formatearFechaWhatsApp(fecha) {
 // CERRAR ALERTAS PROGRAMADAS VENCIDAS
 // ======================================================
 //
-// Se considera vencida cuando la fecha original
-// de programación es ANTERIOR al día actual
-// en America/Guatemala.
+// Cierra alertas cuya fecha original corresponde
+// a un día anterior al actual en Guatemala.
 //
-// Incluye estados:
-// - PENDIENTE
-// - ACTIVA
+// Se conserva proxima_ejecucion porque la restricción
+// ck_alerta_programada exige que tenga una fecha,
+// incluso cuando la alerta queda RESUELTA.
 //
-// Se conserva el historial.
-// No se eliminan alertas ni envíos.
-// No se afectan NIVEL_AVISO, NIVEL_ALTO,
-// PREDICTIVA ni otros tipos.
-//
-// Se utiliza RESUELTA, estado que ya existe
-// en el sistema.
-//
+// El estado RESUELTA evita que este monitor
+// vuelva a activarla.
 // ======================================================
 
 async function cerrarAlertasVencidas() {
@@ -152,8 +144,7 @@ async function cerrarAlertasVencidas() {
       SET
         estado = 'RESUELTA',
         fecha_resuelta = clock_timestamp(),
-        fecha_cierre = clock_timestamp(),
-        proxima_ejecucion = NULL
+        fecha_cierre = clock_timestamp()
 
       FROM vencidas v
 
@@ -180,18 +171,13 @@ async function cerrarAlertasVencidas() {
 // PROCESAR SIGUIENTE RECORDATORIO PROGRAMADO
 // ======================================================
 //
-// Reglas:
+// Debe:
+// - Estar PENDIENTE.
+// - Haber alcanzado su hora de ejecución.
+// - Corresponder al día actual de Guatemala.
 //
-// 1. Debe estar PENDIENTE.
-// 2. Ya debe haber llegado la hora.
-// 3. La fecha ORIGINAL debe ser HOY
-//    en Guatemala.
-// 4. Se crea solamente la secuencia 1.
-// 5. La creación y activación se realizan
-//    en una sola transacción.
-//
-// Si la fecha fue ayer, no se activa.
-//
+// La creación del envío y la activación de la alerta
+// se realizan dentro de la misma transacción.
 // ======================================================
 
 async function procesarSiguienteRecordatorio() {
@@ -278,21 +264,16 @@ async function procesarSiguienteRecordatorio() {
     // 3. FORMATEAR FECHA ORIGINAL
     // ==================================================
 
-    const fechaTexto =
-      formatearFechaWhatsApp(
-        alerta.fecha_programada_original
-      );
+    const fechaTexto = formatearFechaWhatsApp(
+      alerta.fecha_programada_original
+    );
 
     // ==================================================
     // 4. CREAR ENVÍO INICIAL
     // ==================================================
     //
-    // No llama directamente a Meta.
-    //
-    // Secuencia 1.
-    // Intento técnico 1.
-    // Estado PENDIENTE.
-    //
+    // El envío queda pendiente para que lo procese
+    // el servicio correspondiente.
     // ==================================================
 
     const resultadoEnvio =
@@ -326,13 +307,8 @@ async function procesarSiguienteRecordatorio() {
     // 5. SIN DESTINATARIO
     // ==================================================
     //
-    // Se conserva PENDIENTE.
-    //
-    // Puede reintentarse mientras continúe
-    // siendo el mismo día de Guatemala.
-    //
-    // Al día siguiente será cerrada.
-    //
+    // Conserva la alerta PENDIENTE para reintentar
+    // durante el mismo día.
     // ==================================================
 
     if (
@@ -355,13 +331,6 @@ async function procesarSiguienteRecordatorio() {
 
     // ==================================================
     // 6. ACTIVAR SOLAMENTE SI SIGUE SIENDO HOY
-    // ==================================================
-    //
-    // Revalidación dentro del UPDATE.
-    //
-    // Si cambia el día durante el procesamiento,
-    // no se confirma la activación.
-    //
     // ==================================================
 
     const actualizacion = await client.query(
@@ -442,7 +411,6 @@ async function procesarSiguienteRecordatorio() {
         fechaTexto,
       ],
     };
-
   } catch (error) {
     if (transaccionActiva) {
       try {
@@ -456,7 +424,6 @@ async function procesarSiguienteRecordatorio() {
     }
 
     throw error;
-
   } finally {
     client.release();
   }
@@ -464,14 +431,6 @@ async function procesarSiguienteRecordatorio() {
 
 // ======================================================
 // EJECUTAR CICLO
-// ======================================================
-//
-// Primero:
-// cerrar alertas de días anteriores.
-//
-// Después:
-// activar alertas programadas para hoy.
-//
 // ======================================================
 
 async function ejecutarCiclo() {
@@ -488,10 +447,14 @@ async function ejecutarCiclo() {
 
   try {
     // ==================================================
-    // 1. CERRAR ALERTAS VENCIDAS
+    // 1. CERRAR ALERTAS DE DÍAS ANTERIORES
     // ==================================================
 
-    for (let i = 0; i < MAX_ALERTAS_POR_CICLO; i++) {
+    for (
+      let i = 0;
+      i < MAX_ALERTAS_POR_CICLO;
+      i++
+    ) {
       const cerrados =
         await cerrarAlertasVencidas();
 
@@ -508,7 +471,11 @@ async function ejecutarCiclo() {
     // 2. ACTIVAR ALERTAS DE HOY
     // ==================================================
 
-    for (let i = 0; i < MAX_ALERTAS_POR_CICLO; i++) {
+    for (
+      let i = 0;
+      i < MAX_ALERTAS_POR_CICLO;
+      i++
+    ) {
       const resultado =
         await procesarSiguienteRecordatorio();
 
@@ -548,7 +515,6 @@ async function ejecutarCiclo() {
       procesados,
       vencidos,
     };
-
   } catch (error) {
     console.error(
       "Error ejecutando monitor de alertas programadas:",
@@ -556,15 +522,11 @@ async function ejecutarCiclo() {
     );
 
     return {
-      accion:
-        "ERROR_MONITOR_ALERTAS_PROGRAMADAS",
-
+      accion: "ERROR_MONITOR_ALERTAS_PROGRAMADAS",
       procesados,
       vencidos,
-
       error: error.message,
     };
-
   } finally {
     ejecucionEnCurso = false;
   }
@@ -582,7 +544,6 @@ async function iniciarMonitor() {
     };
   }
 
-  // Primera evaluación al arrancar Railway.
   await ejecutarCiclo();
 
   timerMonitor = setInterval(() => {
