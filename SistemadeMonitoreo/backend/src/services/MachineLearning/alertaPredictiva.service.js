@@ -1,587 +1,772 @@
-const pool = require(
-  "../../config/db"
-);
+"use strict";
 
-const PrediccionService = require(
-  "./prediccion.service"
-);
+const pool = require("../../config/db");
+
+const PrediccionService = require("./prediccion.service");
 
 const AlertaEnviosService = require(
   "../controlDSH/alertas/AlertaEnvios.service"
 );
 
-
 // ======================================================
-// CONSTANTES
+// CONFIGURACIÓN
 // ======================================================
 
-const TIPO_ALERTA = {
-  PREDICTIVA:
-    "PREDICTIVA",
-};
+function numeroEnv(nombre, defecto) {
+  const valor = Number(process.env[nombre] ?? defecto);
 
+  if (!Number.isFinite(valor) || valor <= 0) {
+    throw new Error(
+      `${nombre} debe ser un número mayor que cero.`
+    );
+  }
 
-const ESTADO_ALERTA = {
-  ACTIVA:
-    "ACTIVA",
-};
+  return valor;
+}
 
+const CONFIG = Object.freeze({
+  aviso: numeroEnv(
+    "ML_AVISO_INICIAL_DIAS",
+    5
+  ),
 
-const RIESGOS_ALERTA =
-  new Set([
-    "MEDIO",
-    "ALTO",
-  ]);
+  recordatorio1: numeroEnv(
+    "ML_RECORDATORIO_1_DIAS",
+    2
+  ),
 
+  recordatorio2: numeroEnv(
+    "ML_RECORDATORIO_2_DIAS",
+    1
+  ),
 
-const ESTADOS_WHATSAPP_OK =
-  new Set([
-    "ACEPTADO",
-    "ENVIADO",
-    "ENTREGADO",
-    "LEIDO",
-  ]);
+  recordatorio3: numeroEnv(
+    "ML_RECORDATORIO_3_DIAS",
+    0.25
+  ),
 
+  separacionMs: numeroEnv(
+    "ML_SEPARACION_MIN_NOTIFICACIONES_MS",
+    21600000
+  ),
+});
 
-const MAX_SECUENCIA_NOTIFICACION =
-  4;
+if (
+  !(
+    CONFIG.aviso > CONFIG.recordatorio1 &&
+    CONFIG.recordatorio1 > CONFIG.recordatorio2 &&
+    CONFIG.recordatorio2 > CONFIG.recordatorio3
+  )
+) {
+  throw new Error(
+    "ML requiere: aviso inicial > recordatorio 1 > " +
+    "recordatorio 2 > recordatorio 3 > 0."
+  );
+}
 
+const ESTADOS_OK = new Set([
+  "ACEPTADO",
+  "ENVIADO",
+  "ENTREGADO",
+  "LEIDO",
+]);
 
 // ======================================================
 // HELPERS
 // ======================================================
 
-function toInt(value) {
+const redondear2 = (valor) =>
+  Number(valor.toFixed(2));
 
-  const numero =
-    Number.parseInt(
-      String(value),
-      10
-    );
-
-
-  return Number.isSafeInteger(
-    numero
-  )
-    ? numero
-    : null;
-}
-
-
-function toNumber(value) {
-
-  const numero =
-    Number(value);
-
-
-  return Number.isFinite(
-    numero
-  )
-    ? numero
-    : null;
-}
-
-
-function redondear2(value) {
-
-  return Number(
-    Number(value)
-      .toFixed(2)
-  );
-}
-
-
-// ======================================================
-// CONFIGURACIÓN DE RECORDATORIOS ML
-// ======================================================
-//
-// Independiente de configuracion_alertas.
-//
-// Por defecto:
-//
-// secuencia 1 = aviso inicial
-//
-// <= 3 días
-// secuencia 2 = recordatorio 1
-//
-// <= 2 días
-// secuencia 3 = recordatorio 2
-//
-// <= 1 día
-// secuencia 4 = recordatorio 3
-//
-// Si la predicción cambia rápidamente y se salta
-// un rango, NO se envían recordatorios atrasados.
-// Se crea únicamente el recordatorio correspondiente
-// al rango actual.
-// ======================================================
-
-function obtenerUmbralesRecordatorios() {
-
-  const recordatorio1 =
-    Number(
-      process.env
-        .ML_RECORDATORIO_1_DIAS ??
-      3
-    );
-
-  const recordatorio2 =
-    Number(
-      process.env
-        .ML_RECORDATORIO_2_DIAS ??
-      2
-    );
-
-  const recordatorio3 =
-    Number(
-      process.env
-        .ML_RECORDATORIO_3_DIAS ??
-      1
-    );
-
-
+function numero(valor) {
   if (
-    !Number.isFinite(
-      recordatorio1
-    ) ||
-    !Number.isFinite(
-      recordatorio2
-    ) ||
-    !Number.isFinite(
-      recordatorio3
-    ) ||
-    recordatorio1 <=
-      recordatorio2 ||
-    recordatorio2 <=
-      recordatorio3 ||
-    recordatorio3 < 0
+    valor === null ||
+    valor === undefined ||
+    typeof valor === "boolean" ||
+    (
+      typeof valor === "string" &&
+      !valor.trim()
+    )
   ) {
-
-    throw new Error(
-      "Los umbrales de recordatorios ML no están configurados correctamente."
-    );
-  }
-
-
-  return {
-    recordatorio1,
-    recordatorio2,
-    recordatorio3,
-  };
-}
-
-
-// ======================================================
-// OBTENER SECUENCIA SEGÚN TIEMPO RESTANTE
-// ======================================================
-
-function obtenerSecuenciaPorTiempo(
-  diasParaAlto
-) {
-
-  const dias =
-    toNumber(
-      diasParaAlto
-    );
-
-
-  if (
-    dias === null ||
-    dias < 0
-  ) {
-
     return null;
   }
 
+  const resultado = Number(valor);
 
-  const {
-    recordatorio1,
-    recordatorio2,
-    recordatorio3,
-  } =
-    obtenerUmbralesRecordatorios();
+  return Number.isFinite(resultado)
+    ? resultado
+    : null;
+}
 
+function formatearTiempoEstimado(dias) {
+  const valor = numero(dias);
 
-  // ====================================================
-  // MÁS CERCA
-  // ====================================================
+  if (valor === null || valor < 0) {
+    throw new Error(
+      "Tiempo estimado inválido."
+    );
+  }
+
+  if (valor === 0) {
+    return "nivel alto alcanzado";
+  }
+
+  const minutos = Math.max(
+    1,
+    Math.round(valor * 1440)
+  );
+
+  if (minutos < 60) {
+    return `${minutos} ${
+      minutos === 1 ? "minuto" : "minutos"
+    }`;
+  }
+
+  const horas = Math.round(minutos / 60);
+
+  const diasEnteros = Math.floor(horas / 24);
+
+  const horasRestantes = horas % 24;
+
+  const partes = [];
+
+  if (diasEnteros) {
+    partes.push(
+      `${diasEnteros} ${
+        diasEnteros === 1 ? "día" : "días"
+      }`
+    );
+  }
+
+  if (horasRestantes) {
+    partes.push(
+      `${horasRestantes} ${
+        horasRestantes === 1 ? "hora" : "horas"
+      }`
+    );
+  }
+
+  return partes.join(" y ");
+}
+
+// ======================================================
+// RANGO ACTUAL DE NOTIFICACIÓN
+// ======================================================
+//
+// 1 = aviso inicial
+// 2 = recordatorio 1
+// 3 = recordatorio 2
+// 4 = recordatorio 3
+//
+// Si el nivel alto ya fue alcanzado, no se genera
+// una nueva notificación predictiva.
+// ======================================================
+
+function obtenerSecuenciaPorTiempo(dias) {
+  const valor = numero(dias);
 
   if (
-    dias <=
-    recordatorio3
+    valor === null ||
+    valor <= 0 ||
+    valor > CONFIG.aviso
   ) {
+    return null;
+  }
 
+  if (valor <= CONFIG.recordatorio3) {
     return 4;
   }
 
-
-  if (
-    dias <=
-    recordatorio2
-  ) {
-
+  if (valor <= CONFIG.recordatorio2) {
     return 3;
   }
 
-
-  if (
-    dias <=
-    recordatorio1
-  ) {
-
+  if (valor <= CONFIG.recordatorio1) {
     return 2;
   }
 
-
-  return null;
+  return 1;
 }
 
+// ======================================================
+// VALIDAR PREDICCIÓN
+// ======================================================
+
+function validarPrediccion(prediccion) {
+  if (
+    !prediccion ||
+    typeof prediccion !== "object" ||
+    Array.isArray(prediccion)
+  ) {
+    throw new Error(
+      "Predicción inválida."
+    );
+  }
+
+  const contenedorId = numero(
+    prediccion.contenedor_id
+  );
+
+  if (
+    !Number.isSafeInteger(contenedorId) ||
+    contenedorId <= 0
+  ) {
+    throw new Error(
+      "Contenedor de predicción inválido."
+    );
+  }
+
+  if (
+    typeof prediccion.estado !== "string" ||
+    !prediccion.estado.trim()
+  ) {
+    throw new Error(
+      "Estado de predicción inválido."
+    );
+  }
+
+  if (prediccion.estado !== "OK") {
+    return {
+      contenedorId,
+      estado: prediccion.estado,
+    };
+  }
+
+  const nivelActual = numero(
+    prediccion.nivel_actual
+  );
+
+  const crecimiento = numero(
+    prediccion.crecimiento_estimado_dia
+  );
+
+  const diasParaAlto = numero(
+    prediccion.dias_para_alto
+  );
+
+  const umbralAlto = numero(
+    prediccion.umbral_alto
+  );
+
+  const riesgo = String(
+    prediccion.riesgo ?? ""
+  )
+    .trim()
+    .toUpperCase();
+
+  if (
+    nivelActual === null ||
+    nivelActual < 0 ||
+    nivelActual > 100 ||
+    crecimiento === null ||
+    crecimiento < 0 ||
+    diasParaAlto === null ||
+    diasParaAlto < 0 ||
+    umbralAlto === null ||
+    umbralAlto <= 0 ||
+    umbralAlto > 100 ||
+    !["BAJO", "MEDIO", "ALTO"].includes(riesgo)
+  ) {
+    throw new Error(
+      "La predicción contiene valores inválidos."
+    );
+  }
+
+  return {
+    contenedorId,
+    estado: "OK",
+    nivelActual,
+    crecimiento,
+    diasParaAlto,
+    umbralAlto,
+    riesgo,
+  };
+}
 
 // ======================================================
-// OBTENER PLANTILLA META PREDICTIVA
+// MENSAJE
 // ======================================================
 
-function obtenerPlantillaMetaPrediccion() {
+function crearMensajeTrazabilidad(
+  contenedor,
+  datos
+) {
+  return (
+    `El contenedor ${contenedor.codigo} ` +
+    `(${contenedor.tipo_residuo}) ` +
+    `presenta riesgo predictivo ${datos.riesgo}. ` +
+    `El modelo estima que alcanzará ` +
+    `su nivel alto (${datos.umbralAlto}%) ` +
+    `en aproximadamente ${
+      formatearTiempoEstimado(
+        datos.diasParaAlto
+      )
+    }. ` +
+    `Nivel actual: ${
+      redondear2(datos.nivelActual)
+    }%.`
+  );
+}
 
-  const plantilla =
-    String(
-      process.env
-        .WHATSAPP_TEMPLATE_PREDICCION ??
-      ""
-    ).trim();
+// ======================================================
+// CONSULTAR ENVÍOS
+// ======================================================
 
+async function obtenerEnvios(
+  client,
+  alertaId
+) {
+  const { rows } = await client.query(
+    `
+      SELECT
+        id,
+        canal,
+        secuencia_notificacion,
+        intento,
+        estado,
+        plantilla_meta,
+        contenido_enviado,
+        fecha_programada_intento,
+        fecha_intento,
+        fecha_actualizacion,
+        CURRENT_TIMESTAMP AS fecha_evaluacion
+
+      FROM alertas_envios
+
+      WHERE alerta_id = $1
+
+      ORDER BY
+        secuencia_notificacion,
+        intento,
+        id
+    `,
+    [alertaId]
+  );
+
+  return rows;
+}
+
+function secuenciaFinalizada(
+  envios,
+  secuencia
+) {
+  return envios.some(
+    (envio) =>
+      envio.canal === "WHATSAPP" &&
+
+      Number(
+        envio.secuencia_notificacion
+      ) === secuencia &&
+
+      (
+        ESTADOS_OK.has(envio.estado) ||
+
+        (
+          Number(envio.intento) === 3 &&
+          envio.estado === "FALLIDO"
+        )
+      )
+  );
+}
+
+// ======================================================
+// RANGOS YA CUBIERTOS
+// ======================================================
+//
+// El aviso inicial siempre utiliza secuencia 1.
+//
+// Si se crea cuando faltan 12 horas, también cubre
+// los rangos de 2 días y 1 día. No se generan después
+// esos recordatorios atrasados.
+//
+// La marca queda en alertas.mensaje.
+// No requiere nuevas columnas y no se incorpora
+// a los parámetros de la plantilla de WhatsApp.
+// ======================================================
+
+function obtenerRangoCubierto(
+  alerta,
+  envios
+) {
+  let rango = Math.max(
+    1,
+    ...envios.map(
+      (envio) =>
+        Number(
+          envio.secuencia_notificacion
+        )
+    )
+  );
+
+  const texto = String(
+    alerta.mensaje ?? ""
+  );
+
+  const marca = texto.match(
+    /\[ML_RANGO_INICIAL=([1-4])\]/
+  );
+
+  if (marca) {
+    return Math.max(
+      rango,
+      Number(marca[1])
+    );
+  }
+
+  // Compatibilidad con avisos de la versión anterior.
+  const tiempo = texto.match(
+    /en aproximadamente\s+(\d+(?:\.\d+)?)\s*(días?|horas?|minutos?)(?:\s+y\s+(\d+)\s+horas?)?/i
+  );
+
+  if (!tiempo) {
+    return rango;
+  }
+
+  let dias = Number(tiempo[1]);
+
+  const unidad = tiempo[2].toLowerCase();
+
+  if (unidad.startsWith("hora")) {
+    dias /= 24;
+  } else if (unidad.startsWith("minuto")) {
+    dias /= 1440;
+  }
+
+  if (tiempo[3]) {
+    dias += Number(tiempo[3]) / 24;
+  }
+
+  return Math.max(
+    rango,
+    obtenerSecuenciaPorTiempo(dias) ?? 1
+  );
+}
+
+// ======================================================
+// CREAR ENVÍO PENDIENTE
+// ======================================================
+//
+// Los reintentos y el correo de respaldo continúan
+// siendo responsabilidad de los servicios existentes.
+// ======================================================
+
+async function crearEnvio(
+  client,
+  alerta,
+  contenedor,
+  datos,
+  secuencia
+) {
+  const plantilla = String(
+    process.env.WHATSAPP_TEMPLATE_PREDICCION ?? ""
+  ).trim();
 
   if (!plantilla) {
-
     throw new Error(
       "WHATSAPP_TEMPLATE_PREDICCION no está configurado."
     );
   }
 
+  return AlertaEnviosService
+    .crearEnvioWhatsAppPendiente(
+      client,
+      {
+        alertaId: alerta.id,
 
-  return plantilla;
+        mensaje: crearMensajeTrazabilidad(
+          contenedor,
+          datos
+        ),
+
+        plantillaMeta: plantilla,
+
+        parametrosPlantilla: [
+          `${contenedor.codigo} (${contenedor.tipo_residuo})`,
+
+          formatearTiempoEstimado(
+            datos.diasParaAlto
+          ),
+        ],
+
+        secuenciaNotificacion: secuencia,
+
+        intento: 1,
+
+        fechaProgramadaIntento: null,
+      }
+    );
 }
 
-
 // ======================================================
-// FORMATEAR TIEMPO ESTIMADO
-// ======================================================
-//
-// 0 días    -> Ahora
-// 0.25 días -> 6 horas
-// 1 día     -> 1 día
-// 2.4 días  -> 2.4 días
-//
-// Corresponde a {{2}} de:
-// prediccion_llenado_cc
+// PROCESAR AVISO O RECORDATORIO
 // ======================================================
 
-function formatearTiempoEstimado(
-  dias
+async function procesarNotificacion(
+  client,
+  alerta,
+  contenedor,
+  datos
 ) {
-
-  const numero =
-    toNumber(
-      dias
-    );
-
-
-  if (
-    numero === null ||
-    numero < 0
-  ) {
-
-    throw new Error(
-      "El tiempo estimado de la predicción no es válido."
-    );
-  }
-
-
-  if (
-    numero === 0
-  ) {
-
-    return "Ahora";
-  }
-
-
-  if (
-    numero < 1
-  ) {
-
-    const horas =
-      Math.max(
-        1,
-        Math.round(
-          numero * 24
-        )
-      );
-
-
-    return horas === 1
-      ? "1 hora"
-      : `${horas} horas`;
-  }
-
-
-  const diasRedondeados =
-    redondear2(
-      numero
-    );
-
-
-  return diasRedondeados === 1
-    ? "1 día"
-    : `${diasRedondeados} días`;
-}
-
-
-// ======================================================
-// VALIDAR PREDICCIÓN
-// ======================================================
-//
-// IMPORTANTE:
-//
-// Solo usa resultado de Machine Learning.
-//
-// NO usa configuracion_alertas.
-// ======================================================
-
-function validarPrediccion(
-  prediccion
-) {
-
-  if (
-    !prediccion ||
-    typeof prediccion !==
-      "object" ||
-    Array.isArray(
-      prediccion
-    )
-  ) {
-
-    throw new Error(
-      "La predicción recibida no es válida."
-    );
-  }
-
-
-  const contenedorId =
-    toInt(
-      prediccion
-        .contenedor_id
-    );
-
-
-  if (
-    !contenedorId ||
-    contenedorId <= 0
-  ) {
-
-    throw new Error(
-      "La predicción contiene un contenedor inválido."
-    );
-  }
-
-
-  if (
-    typeof prediccion.estado !==
-      "string" ||
-    !prediccion.estado.trim()
-  ) {
-
-    throw new Error(
-      "La predicción contiene un estado inválido."
-    );
-  }
-
-
-  // ====================================================
-  // PREDICCIÓN NO UTILIZABLE
-  // ====================================================
-
-  if (
-    prediccion.estado !==
-    "OK"
-  ) {
-
+  if (alerta.estado !== "ACTIVA") {
     return {
-      contenedorId,
-
-      estado:
-        prediccion.estado,
-
-      prediccion,
+      accion: "ALERTA_PREDICTIVA_NO_ACTIVA",
     };
   }
 
-
-  const nivelActual =
-    toNumber(
-      prediccion
-        .nivel_actual
-    );
-
-
-  const crecimiento =
-    toNumber(
-      prediccion
-        .crecimiento_estimado_dia
-    );
-
-
-  const diasParaAlto =
-    toNumber(
-      prediccion
-        .dias_para_alto
-    );
-
-
-  const umbralAlto =
-    toNumber(
-      prediccion
-        .umbral_alto
-    );
-
-
-  const riesgo =
-    String(
-      prediccion
-        .riesgo ??
-      ""
+  const envios = (
+    await obtenerEnvios(
+      client,
+      alerta.id
     )
-      .trim()
-      .toUpperCase();
+  ).filter(
+    (envio) =>
+      envio.canal === "WHATSAPP"
+  );
 
+  const iniciales = envios.filter(
+    (envio) =>
+      Number(
+        envio.secuencia_notificacion
+      ) === 1
+  );
+
+  // Primero se asegura el aviso inicial.
+  if (!iniciales.length) {
+    const rango = obtenerSecuenciaPorTiempo(
+      datos.diasParaAlto
+    );
+
+    const mensaje =
+      `${crearMensajeTrazabilidad(
+        contenedor,
+        datos
+      )} [ML_RANGO_INICIAL=${rango}]`;
+
+    await client.query(
+      `
+        UPDATE alertas
+        SET mensaje = $1
+        WHERE id = $2
+      `,
+      [
+        mensaje,
+        alerta.id,
+      ]
+    );
+
+    alerta.mensaje = mensaje;
+
+    const envio = await crearEnvio(
+      client,
+      alerta,
+      contenedor,
+      datos,
+      1
+    );
+
+    return {
+      accion: "ENVIO_INICIAL_PREDICTIVO_CREADO",
+      envio,
+    };
+  }
 
   if (
-    nivelActual === null ||
-    nivelActual < 0 ||
-    nivelActual > 100
+    !iniciales.some(
+      (envio) =>
+        String(
+          envio.plantilla_meta ?? ""
+        ).trim()
+    )
   ) {
-
-    throw new Error(
-      "La predicción contiene un nivel actual inválido."
-    );
+    return {
+      accion: "ENVIO_INICIAL_NO_COMPATIBLE",
+    };
   }
 
+  const objetivo = obtenerSecuenciaPorTiempo(
+    datos.diasParaAlto
+  );
+
+  const rangoCubierto = obtenerRangoCubierto(
+    alerta,
+    envios
+  );
 
   if (
-    crecimiento === null ||
-    crecimiento < 0
+    !objetivo ||
+    objetivo <= rangoCubierto
   ) {
-
-    throw new Error(
-      "La predicción contiene un crecimiento inválido."
-    );
+    return {
+      accion: "SIN_NUEVO_RECORDATORIO",
+    };
   }
 
+  const ultima = Math.max(
+    ...envios.map(
+      (envio) =>
+        Number(
+          envio.secuencia_notificacion
+        )
+    )
+  );
 
   if (
-    diasParaAlto === null ||
-    diasParaAlto < 0
+    !secuenciaFinalizada(
+      envios,
+      ultima
+    )
   ) {
-
-    throw new Error(
-      "La predicción contiene días para nivel alto inválidos."
-    );
+    return {
+      accion: "ESPERANDO_ENVIO_PREDICTIVO_ANTERIOR",
+    };
   }
 
+  const ultimaFecha = Math.max(
+    ...envios.map(
+      (envio) => {
+        const fechas = [
+          envio.fecha_intento,
+          envio.fecha_actualizacion,
+          envio.fecha_programada_intento,
+        ]
+          .filter(Boolean)
+          .map(
+            (fecha) =>
+              new Date(fecha).getTime()
+          )
+          .filter(Number.isFinite);
+
+        return fechas.length
+          ? Math.max(...fechas)
+          : NaN;
+      }
+    )
+  );
+
+  const ahora = new Date(
+    envios[0].fecha_evaluacion
+  ).getTime();
 
   if (
-    umbralAlto === null ||
-    umbralAlto <= 0 ||
-    umbralAlto > 100
+    !Number.isFinite(ultimaFecha) ||
+    !Number.isFinite(ahora)
   ) {
-
-    throw new Error(
-      "La predicción contiene un umbral alto inválido."
-    );
+    return {
+      accion: "FECHA_ENVIO_PREVIO_NO_DISPONIBLE",
+    };
   }
 
-
-  if (!riesgo) {
-
-    throw new Error(
-      "La predicción contiene un riesgo inválido."
-    );
+  if (
+    ahora - ultimaFecha <
+    CONFIG.separacionMs
+  ) {
+    return {
+      accion: "ESPERANDO_SEPARACION_MINIMA",
+    };
   }
 
+  const envio = await crearEnvio(
+    client,
+    alerta,
+    contenedor,
+    datos,
+    objetivo
+  );
 
   return {
-    contenedorId,
+    accion: "RECORDATORIO_PREDICTIVO_CREADO",
 
-    estado:
-      "OK",
+    secuencia: objetivo,
 
-    nivelActual,
+    numero_recordatorio: objetivo - 1,
 
-    crecimiento,
-
-    diasParaAlto,
-
-    umbralAlto,
-
-    riesgo,
-
-    prediccion,
+    envio,
   };
 }
 
-
 // ======================================================
-// ASEGURAR ESTADO DEL CONTENEDOR
+// EVALUAR UNA PREDICCIÓN
 // ======================================================
 
-async function asegurarEstadoContenedor(
-  client,
-  contenedorId
+async function evaluarPrediccion(
+  prediccion
 ) {
-
-  await client.query(
-    `
-      INSERT INTO estado_alertas_contenedor
-      (
-        contenedor_id
-      )
-      VALUES
-      (
-        $1
-      )
-
-      ON CONFLICT (
-        contenedor_id
-      )
-      DO NOTHING
-    `,
-    [
-      contenedorId,
-    ]
+  const datos = validarPrediccion(
+    prediccion
   );
-}
 
+  const base = {
+    contenedor_id: datos.contenedorId,
 
-// ======================================================
-// BLOQUEAR ESTADO DEL CONTENEDOR
-// ======================================================
-//
-// FOR UPDATE evita dos evaluaciones simultáneas
-// del mismo ciclo.
-// ======================================================
+    alerta: null,
 
-async function obtenerEstadoContenedor(
-  client,
-  contenedorId
-) {
+    envio_whatsapp: null,
+  };
 
-  const { rows } =
+  if (datos.estado !== "OK") {
+    return {
+      ...base,
+
+      accion: "PREDICCION_NO_DISPONIBLE",
+
+      estado_prediccion: datos.estado,
+    };
+  }
+
+  // El evento ya ocurrió: corresponde a las alertas
+  // de nivel existentes, no a un nuevo aviso predictivo.
+  if (
+    datos.nivelActual >= datos.umbralAlto ||
+    datos.diasParaAlto <= 0
+  ) {
+    return {
+      ...base,
+
+      accion: "NIVEL_ALTO_YA_ALCANZADO",
+    };
+  }
+
+  // La decisión se toma por tiempo estimado.
+  // No depende de una clasificación fija de 3 días.
+  if (
+    datos.diasParaAlto >
+    CONFIG.aviso
+  ) {
+    return {
+      ...base,
+
+      accion: "SIN_ALERTA_PREDICTIVA",
+
+      dias_para_alto: datos.diasParaAlto,
+    };
+  }
+
+  const client = await pool.connect();
+
+  let transaccion = false;
+
+  try {
+    await client.query("BEGIN");
+
+    transaccion = true;
+
     await client.query(
       `
-        SELECT
-          contenedor_id,
-          ultima_recoleccion_id,
-          fecha_reinicio,
-          fecha_actualizacion
+        INSERT INTO estado_alertas_contenedor
+          (contenedor_id)
+
+        VALUES ($1)
+
+        ON CONFLICT (contenedor_id)
+        DO NOTHING
+      `,
+      [datos.contenedorId]
+    );
+
+    // Serializa evaluaciones del mismo contenedor.
+    const estadoResultado = await client.query(
+      `
+        SELECT fecha_reinicio
 
         FROM estado_alertas_contenedor
 
@@ -589,82 +774,44 @@ async function obtenerEstadoContenedor(
 
         FOR UPDATE
       `,
-      [
-        contenedorId,
-      ]
+      [datos.contenedorId]
     );
 
+    if (!estadoResultado.rows.length) {
+      throw new Error(
+        "No se encontró el estado del ciclo."
+      );
+    }
 
-  return rows[0] ||
-    null;
-}
-
-
-// ======================================================
-// OBTENER CONTENEDOR
-// ======================================================
-
-async function obtenerContenedor(
-  client,
-  contenedorId
-) {
-
-  const { rows } =
-    await client.query(
+    const contenedorResultado = await client.query(
       `
         SELECT
           c.id_contenedor,
           c.codigo,
-          c.id_tipo_residuo,
-
-          tr.nombre
-            AS tipo_residuo
+          tr.nombre AS tipo_residuo
 
         FROM contenedores c
 
         JOIN tipos_residuo tr
-          ON tr.id =
-             c.id_tipo_residuo
+          ON tr.id = c.id_tipo_residuo
 
         WHERE c.id_contenedor = $1
-
-        LIMIT 1
       `,
-      [
-        contenedorId,
-      ]
+      [datos.contenedorId]
     );
 
+    const contenedor =
+      contenedorResultado.rows[0];
 
-  return rows[0] ||
-    null;
-}
+    if (!contenedor) {
+      throw new Error(
+        "No existe el contenedor evaluado."
+      );
+    }
 
-
-// ======================================================
-// BUSCAR ALERTA PREDICTIVA DEL CICLO ACTUAL
-// ======================================================
-
-async function obtenerAlertaPredictivaExistente(
-  client,
-  contenedorId,
-  fechaReinicio
-) {
-
-  const { rows } =
-    await client.query(
+    const existente = await client.query(
       `
-        SELECT
-          id,
-          tipo,
-          contenedor_id,
-          motivo,
-          nivel_porcentaje,
-          umbral_configurado,
-          mensaje,
-          estado,
-          fecha_creacion,
-          fecha_activacion
+        SELECT *
 
         FROM alertas
 
@@ -673,11 +820,10 @@ async function obtenerAlertaPredictivaExistente(
           AND contenedor_id = $2
 
           AND (
-            $3::timestamptz
-              IS NULL
+            $3::timestamptz IS NULL
 
             OR fecha_creacion >=
-               $3::timestamptz
+              $3::timestamptz
           )
 
         ORDER BY
@@ -687,1292 +833,160 @@ async function obtenerAlertaPredictivaExistente(
         LIMIT 1
       `,
       [
-        TIPO_ALERTA
-          .PREDICTIVA,
+        "PREDICTIVA",
 
-        contenedorId,
+        datos.contenedorId,
 
-        fechaReinicio ||
-        null,
+        estadoResultado.rows[0]
+          .fecha_reinicio ?? null,
       ]
     );
 
-
-  return rows[0] ||
-    null;
-}
-
-
-// ======================================================
-// CREAR ALERTA PREDICTIVA
-// ======================================================
-
-async function crearAlertaPredictiva(
-  client,
-  {
-    contenedorId,
-    nivelActual,
-    umbralAlto,
-    riesgo,
-    diasParaAlto,
-    crecimiento,
-    mensaje,
-  }
-) {
-
-  const motivo =
-    `RIESGO_${riesgo}`;
-
-
-  const { rows } =
-    await client.query(
-      `
-        INSERT INTO alertas
-        (
-          tipo,
-          contenedor_id,
-          lectura_id,
-
-          motivo,
-
-          nivel_porcentaje,
-          umbral_configurado,
-
-          fecha_programada_original,
-          proxima_ejecucion,
-          cantidad_posposiciones,
-
-          mensaje,
-          estado,
-          creado_por,
-
-          fecha_creacion,
-          fecha_activacion
-        )
-        VALUES
-        (
-          $1,
-          $2,
-          NULL,
-
-          $3,
-
-          $4,
-          $5,
-
-          NULL,
-          NULL,
-          0,
-
-          $6,
-          $7,
-          NULL,
-
-          CURRENT_TIMESTAMP,
-          CURRENT_TIMESTAMP
-        )
-
-        RETURNING
-          id,
-          tipo,
-          contenedor_id,
-          motivo,
-          nivel_porcentaje,
-          umbral_configurado,
-          mensaje,
-          estado,
-          fecha_creacion,
-          fecha_activacion
-      `,
-      [
-        TIPO_ALERTA
-          .PREDICTIVA,
-
-        contenedorId,
-
-        motivo,
-
-        redondear2(
-          nivelActual
-        ),
-
-        redondear2(
-          umbralAlto
-        ),
-
-        mensaje,
-
-        ESTADO_ALERTA
-          .ACTIVA,
-      ]
-    );
-
-
-  return {
-    ...rows[0],
-
-    riesgo,
-
-    dias_para_alto:
-      redondear2(
-        diasParaAlto
-      ),
-
-    crecimiento_estimado_dia:
-      redondear2(
-        crecimiento
-      ),
-  };
-}
-
-
-// ======================================================
-// CREAR MENSAJE DE TRAZABILIDAD
-// ======================================================
-
-function crearMensajeTrazabilidad(
-  contenedor,
-  datos
-) {
-
-  const tiempoEstimado =
-    formatearTiempoEstimado(
-      datos.diasParaAlto
-    );
-
-
-  return (
-    `El contenedor ${contenedor.codigo} ` +
-    `(${contenedor.tipo_residuo}) ` +
-    `presenta riesgo predictivo ${datos.riesgo}. ` +
-    `El modelo estima que alcanzará su nivel alto ` +
-    `en aproximadamente ${tiempoEstimado}. ` +
-    `Nivel actual: ${redondear2(
-      datos.nivelActual
-    )}%.`
-  );
-}
-
-
-// ======================================================
-// CREAR ENVÍO WHATSAPP PREDICTIVO
-// ======================================================
-//
-// Sirve tanto para:
-//
-// secuencia 1 = inicial
-// secuencia 2 = recordatorio 1
-// secuencia 3 = recordatorio 2
-// secuencia 4 = recordatorio 3
-//
-// Cada secuencia comienza:
-//
-// intento = 1
-//
-// Los intentos 2 y 3 los maneja
-// ResultadoEnvios.service.js.
-// ======================================================
-
-async function crearEnvioWhatsAppPredictivo(
-  client,
-  {
-    alerta,
-    contenedor,
-    diasParaAlto,
-    secuenciaNotificacion,
-    mensaje,
-  }
-) {
-
-  if (
-    !alerta ||
-    !alerta.id
-  ) {
-
-    throw new Error(
-      "No existe una alerta predictiva válida para crear el envío de WhatsApp."
-    );
-  }
-
-
-  if (
-    !contenedor ||
-    !contenedor.codigo ||
-    !contenedor.tipo_residuo
-  ) {
-
-    throw new Error(
-      "No existen datos válidos del contenedor para crear el envío predictivo."
-    );
-  }
-
-
-  const secuencia =
-    Number(
-      secuenciaNotificacion
-    );
-
-
-  if (
-    !Number.isSafeInteger(
-      secuencia
-    ) ||
-    secuencia < 1 ||
-    secuencia >
-      MAX_SECUENCIA_NOTIFICACION
-  ) {
-
-    throw new Error(
-      "La secuencia predictiva de WhatsApp no es válida."
-    );
-  }
-
-
-  const identificacionContenedor =
-    `${contenedor.codigo} (${contenedor.tipo_residuo})`;
-
-
-  const tiempoEstimado =
-    formatearTiempoEstimado(
-      diasParaAlto
-    );
-
-
-  return AlertaEnviosService
-    .crearEnvioWhatsAppPendiente(
-      client,
-      {
-        alertaId:
-          alerta.id,
-
-        mensaje,
-
-        plantillaMeta:
-          obtenerPlantillaMetaPrediccion(),
-
-        parametrosPlantilla: [
-          identificacionContenedor,
-          tiempoEstimado,
-        ],
-
-        secuenciaNotificacion:
-          secuencia,
-
-        intento:
-          1,
-
-        fechaProgramadaIntento:
-          null,
-      }
-    );
-}
-
-
-// ======================================================
-// OBTENER ENVÍOS DE UNA ALERTA
-// ======================================================
-
-async function obtenerEnviosAlerta(
-  client,
-  alertaId
-) {
-
-  const { rows } =
-    await client.query(
-      `
-        SELECT
-          id,
-          alerta_id,
-          secuencia_notificacion,
-          canal,
-          intento,
-          estado,
-          plantilla_meta,
-          contenido_enviado,
-          fecha_programada_intento,
-          fecha_intento,
-          fecha_actualizacion
-
-        FROM alertas_envios
-
-        WHERE alerta_id = $1
-
-        ORDER BY
-          secuencia_notificacion ASC,
-          canal ASC,
-          intento ASC,
-          id ASC
-      `,
-      [
-        alertaId,
-      ]
-    );
-
-
-  return rows;
-}
-
-
-// ======================================================
-// COMPROBAR SI EXISTE UNA SECUENCIA WHATSAPP
-// ======================================================
-
-function existeSecuenciaWhatsApp(
-  envios,
-  secuencia
-) {
-
-  return envios.some(
-    (
-      envio
-    ) =>
-      envio.canal ===
-        "WHATSAPP" &&
-      Number(
-        envio.secuencia_notificacion
-      ) ===
-        Number(
-          secuencia
-        )
-  );
-}
-
-
-// ======================================================
-// COMPROBAR ENVÍO INICIAL VÁLIDO
-// ======================================================
-
-function existeEnvioInicialValido(
-  envios
-) {
-
-  return envios.some(
-    (
-      envio
-    ) =>
-      envio.canal ===
-        "WHATSAPP" &&
-
-      Number(
-        envio.secuencia_notificacion
-      ) === 1 &&
-
-      String(
-        envio.plantilla_meta ??
-        ""
-      ).trim()
-  );
-}
-
-
-// ======================================================
-// OBTENER ÚLTIMA SECUENCIA WHATSAPP EXISTENTE
-// ======================================================
-
-function obtenerUltimaSecuenciaWhatsApp(
-  envios
-) {
-
-  let ultima =
-    null;
-
-
-  for (
-    const envio
-    of envios
-  ) {
-
-    if (
-      envio.canal !==
-      "WHATSAPP"
-    ) {
-
-      continue;
-    }
-
-
-    const secuencia =
-      Number(
-        envio
-          .secuencia_notificacion
-      );
-
-
-    if (
-      !Number.isSafeInteger(
-        secuencia
-      )
-    ) {
-
-      continue;
-    }
-
-
-    if (
-      ultima === null ||
-      secuencia > ultima
-    ) {
-
-      ultima =
-        secuencia;
-    }
-  }
-
-
-  return ultima;
-}
-
-
-// ======================================================
-// SABER SI UNA SECUENCIA LÓGICA YA TERMINÓ
-// ======================================================
-//
-// Terminó si:
-//
-// 1. Algún intento WhatsApp fue:
-//    ACEPTADO / ENVIADO / ENTREGADO / LEIDO
-//
-// O
-//
-// 2. El intento 3 terminó FALLIDO.
-//
-// Después del tercer fallo, el procesador evalúa
-// el correo de respaldo.
-//
-// El correo NO cambia el número de recordatorio.
-// ======================================================
-
-function secuenciaFinalizada(
-  envios,
-  secuencia
-) {
-
-  const whatsapp =
-    envios.filter(
-      (
-        envio
-      ) =>
-        envio.canal ===
-          "WHATSAPP" &&
-        Number(
-          envio
-            .secuencia_notificacion
-        ) ===
-          Number(
-            secuencia
+    let alerta = existente.rows[0];
+
+    const nueva = !alerta;
+
+    if (nueva) {
+      const resultado = await client.query(
+        `
+          INSERT INTO alertas
+          (
+            tipo,
+            contenedor_id,
+            lectura_id,
+            motivo,
+            nivel_porcentaje,
+            umbral_configurado,
+            fecha_programada_original,
+            proxima_ejecucion,
+            cantidad_posposiciones,
+            mensaje,
+            estado,
+            creado_por,
+            fecha_creacion,
+            fecha_activacion
           )
-    );
 
-
-  if (!whatsapp.length) {
-
-    return false;
-  }
-
-
-  const aceptado =
-    whatsapp.some(
-      (
-        envio
-      ) =>
-        ESTADOS_WHATSAPP_OK
-          .has(
-            String(
-              envio.estado
-            )
+          VALUES
+          (
+            $1,
+            $2,
+            NULL,
+            $3,
+            $4,
+            $5,
+            NULL,
+            NULL,
+            0,
+            $6,
+            'ACTIVA',
+            NULL,
+            CURRENT_TIMESTAMP,
+            CURRENT_TIMESTAMP
           )
-    );
 
+          RETURNING *
+        `,
+        [
+          "PREDICTIVA",
 
-  if (aceptado) {
-
-    return true;
-  }
-
-
-  const tercerIntentoFallido =
-    whatsapp.some(
-      (
-        envio
-      ) =>
-        Number(
-          envio.intento
-        ) === 3 &&
-
-        envio.estado ===
-          "FALLIDO"
-    );
-
-
-  return tercerIntentoFallido;
-}
-
-
-// ======================================================
-// ASEGURAR AVISO INICIAL
-// ======================================================
-//
-// Si la alerta predictiva ya existe pero por alguna
-// razón todavía no posee secuencia 1, se intenta crear.
-//
-// Esto evita que quede una alerta sin WhatsApp porque
-// en ese momento no había Inspector configurado.
-// ======================================================
-
-async function asegurarEnvioInicial(
-  client,
-  {
-    alerta,
-    contenedor,
-    datos,
-    envios,
-  }
-) {
-
-  if (
-    existeEnvioInicialValido(
-      envios
-    )
-  ) {
-
-    return {
-      accion:
-        "ENVIO_INICIAL_YA_EXISTE",
-    };
-  }
-
-
-  // ====================================================
-  // EXISTE SECUENCIA 1 ANTIGUA PERO SIN PLANTILLA
-  // ====================================================
-  //
-  // No insertamos otra porque la BD tiene UNIQUE:
-  //
-  // alerta_id
-  // secuencia_notificacion
-  // canal
-  // intento
-  // ====================================================
-
-  if (
-    existeSecuenciaWhatsApp(
-      envios,
-      1
-    )
-  ) {
-
-    return {
-      accion:
-        "ENVIO_INICIAL_NO_COMPATIBLE",
-
-      motivo:
-        "EXISTE_SECUENCIA_1_SIN_PLANTILLA",
-    };
-  }
-
-
-  const mensaje =
-    crearMensajeTrazabilidad(
-      contenedor,
-      datos
-    );
-
-
-  const resultado =
-    await crearEnvioWhatsAppPredictivo(
-      client,
-      {
-        alerta,
-        contenedor,
-
-        diasParaAlto:
-          datos.diasParaAlto,
-
-        secuenciaNotificacion:
-          1,
-
-        mensaje,
-      }
-    );
-
-
-  return {
-    accion:
-      "ENVIO_INICIAL_CREADO",
-
-    resultado,
-  };
-}
-
-
-// ======================================================
-// CREAR RECORDATORIO PREDICTIVO SI CORRESPONDE
-// ======================================================
-
-async function crearRecordatorioPredictivoSiCorresponde(
-  client,
-  {
-    alerta,
-    contenedor,
-    datos,
-  }
-) {
-
-  if (
-    alerta.estado !==
-    ESTADO_ALERTA.ACTIVA
-  ) {
-
-    return {
-      accion:
-        "ALERTA_PREDICTIVA_NO_ACTIVA",
-    };
-  }
-
-
-  // ====================================================
-  // DETERMINAR RANGO ACTUAL
-  // ====================================================
-
-  const secuenciaObjetivo =
-    obtenerSecuenciaPorTiempo(
-      datos.diasParaAlto
-    );
-
-
-  if (!secuenciaObjetivo) {
-
-    return {
-      accion:
-        "SIN_RECORDATORIO_PREDICTIVO",
-
-      motivo:
-        "TIEMPO_AUN_LEJANO",
-    };
-  }
-
-
-  const envios =
-    await obtenerEnviosAlerta(
-      client,
-      alerta.id
-    );
-
-
-  // ====================================================
-  // ASEGURAR INICIAL
-  // ====================================================
-
-  const inicial =
-    await asegurarEnvioInicial(
-      client,
-      {
-        alerta,
-        contenedor,
-        datos,
-        envios,
-      }
-    );
-
-
-  if (
-    inicial.accion ===
-    "ENVIO_INICIAL_CREADO"
-  ) {
-
-    return {
-      accion:
-        "ENVIO_INICIAL_PREDICTIVO_CREADO",
-
-      envio:
-        inicial.resultado,
-    };
-  }
-
-
-  if (
-    inicial.accion ===
-    "ENVIO_INICIAL_NO_COMPATIBLE"
-  ) {
-
-    return inicial;
-  }
-
-
-  // ====================================================
-  // REFRESCAR ENVÍOS
-  // ====================================================
-
-  const enviosActualizados =
-    await obtenerEnviosAlerta(
-      client,
-      alerta.id
-    );
-
-
-  // ====================================================
-  // EL RECORDATORIO YA EXISTE
-  // ====================================================
-
-  if (
-    existeSecuenciaWhatsApp(
-      enviosActualizados,
-      secuenciaObjetivo
-    )
-  ) {
-
-    return {
-      accion:
-        "RECORDATORIO_PREDICTIVO_YA_EXISTE",
-
-      secuencia:
-        secuenciaObjetivo,
-
-      numero_recordatorio:
-        secuenciaObjetivo - 1,
-    };
-  }
-
-
-  // ====================================================
-  // OBTENER ÚLTIMA SECUENCIA EXISTENTE
-  // ====================================================
-
-  const ultimaSecuencia =
-    obtenerUltimaSecuenciaWhatsApp(
-      enviosActualizados
-    );
-
-
-  if (
-    ultimaSecuencia === null
-  ) {
-
-    return {
-      accion:
-        "SIN_ENVIO_PREDICTIVO_PREVIO",
-    };
-  }
-
-
-  // ====================================================
-  // NO REGRESAR A UN RECORDATORIO ANTERIOR
-  // ====================================================
-  //
-  // Ejemplo:
-  //
-  // ya se generó secuencia 3.
-  //
-  // Si ML posteriormente vuelve a 2.5 días,
-  // NO se genera secuencia 2.
-  // ====================================================
-
-  if (
-    secuenciaObjetivo <=
-    ultimaSecuencia
-  ) {
-
-    return {
-      accion:
-        "SIN_NUEVO_RECORDATORIO",
-
-      secuencia_actual:
-        ultimaSecuencia,
-
-      secuencia_objetivo:
-        secuenciaObjetivo,
-    };
-  }
-
-
-  // ====================================================
-  // ESPERAR A QUE TERMINE LA NOTIFICACIÓN ANTERIOR
-  // ====================================================
-
-  if (
-    !secuenciaFinalizada(
-      enviosActualizados,
-      ultimaSecuencia
-    )
-  ) {
-
-    return {
-      accion:
-        "ESPERANDO_ENVIO_PREDICTIVO_ANTERIOR",
-
-      secuencia:
-        ultimaSecuencia,
-    };
-  }
-
-
-  // ====================================================
-  // CREAR RECORDATORIO
-  // ====================================================
-
-  const mensaje =
-    crearMensajeTrazabilidad(
-      contenedor,
-      datos
-    );
-
-
-  const resultado =
-    await crearEnvioWhatsAppPredictivo(
-      client,
-      {
-        alerta,
-        contenedor,
-
-        diasParaAlto:
-          datos.diasParaAlto,
-
-        secuenciaNotificacion:
-          secuenciaObjetivo,
-
-        mensaje,
-      }
-    );
-
-
-  return {
-    accion:
-      "RECORDATORIO_PREDICTIVO_CREADO",
-
-    secuencia:
-      secuenciaObjetivo,
-
-    numero_recordatorio:
-      secuenciaObjetivo - 1,
-
-    dias_para_alto:
-      redondear2(
-        datos.diasParaAlto
-      ),
-
-    envio:
-      resultado,
-  };
-}
-
-
-// ======================================================
-// EVALUAR UNA PREDICCIÓN
-// ======================================================
-
-async function evaluarPrediccion(
-  prediccion
-) {
-
-  const datos =
-    validarPrediccion(
-      prediccion
-    );
-
-
-  // ====================================================
-  // PREDICCIÓN NO DISPONIBLE
-  // ====================================================
-
-  if (
-    datos.estado !==
-    "OK"
-  ) {
-
-    return {
-      contenedor_id:
-        datos.contenedorId,
-
-      accion:
-        "PREDICCION_NO_DISPONIBLE",
-
-      estado_prediccion:
-        datos.estado,
-
-      alerta:
-        null,
-
-      envio_whatsapp:
-        null,
-    };
-  }
-
-
-  // ====================================================
-  // RIESGO QUE NO REQUIERE ALERTA
-  // ====================================================
-
-  if (
-    !RIESGOS_ALERTA.has(
-      datos.riesgo
-    )
-  ) {
-
-    return {
-      contenedor_id:
-        datos.contenedorId,
-
-      accion:
-        "SIN_ALERTA_PREDICTIVA",
-
-      riesgo:
-        datos.riesgo,
-
-      dias_para_alto:
-        datos.diasParaAlto,
-
-      alerta:
-        null,
-
-      envio_whatsapp:
-        null,
-    };
-  }
-
-
-  const client =
-    await pool.connect();
-
-
-  let transaccionActiva =
-    false;
-
-
-  try {
-
-    await client.query(
-      "BEGIN"
-    );
-
-
-    transaccionActiva =
-      true;
-
-
-    // ==================================================
-    // ESTADO DEL CICLO
-    // ==================================================
-    //
-    // Machine Learning continúa independiente de
-    // configuracion_alertas.
-    // ==================================================
-
-    await asegurarEstadoContenedor(
-      client,
-      datos.contenedorId
-    );
-
-
-    const estado =
-      await obtenerEstadoContenedor(
-        client,
-        datos.contenedorId
-      );
-
-
-    if (!estado) {
-
-      throw new Error(
-        "No fue posible obtener el estado del ciclo del contenedor."
-      );
-    }
-
-
-    // ==================================================
-    // CONTENEDOR
-    // ==================================================
-
-    const contenedor =
-      await obtenerContenedor(
-        client,
-        datos.contenedorId
-      );
-
-
-    if (!contenedor) {
-
-      throw new Error(
-        "No existe el contenedor evaluado."
-      );
-    }
-
-
-    // ==================================================
-    // BUSCAR ALERTA DEL CICLO
-    // ==================================================
-
-    const alertaExistente =
-      await obtenerAlertaPredictivaExistente(
-        client,
-        datos.contenedorId,
-        estado.fecha_reinicio
-      );
-
-
-    // ==================================================
-    // ALERTA YA EXISTE
-    // ==================================================
-    //
-    // Antes simplemente se devolvía:
-    //
-    // ALERTA_PREDICTIVA_YA_EXISTE
-    //
-    // Ahora aquí es donde evaluamos si corresponde
-    // recordatorio 1, 2 o 3.
-    // ==================================================
-
-    if (alertaExistente) {
-
-      const recordatorio =
-        await crearRecordatorioPredictivoSiCorresponde(
-          client,
-          {
-            alerta:
-              alertaExistente,
-
-            contenedor,
-
-            datos,
-          }
-        );
-
-
-      await client.query(
-        "COMMIT"
-      );
-
-
-      transaccionActiva =
-        false;
-
-
-      if (
-        recordatorio.accion ===
-        "RECORDATORIO_PREDICTIVO_CREADO"
-      ) {
-
-        console.log(
-          `ML: recordatorio ${recordatorio.numero_recordatorio}/3 creado para ${contenedor.codigo} | ${recordatorio.dias_para_alto} días para nivel alto.`
-        );
-      }
-
-
-      return {
-        contenedor_id:
           datos.contenedorId,
 
-        accion:
-          recordatorio.accion,
+          `RIESGO_${datos.riesgo}`,
 
-        riesgo:
-          datos.riesgo,
+          redondear2(
+            datos.nivelActual
+          ),
 
-        dias_para_alto:
-          datos.diasParaAlto,
+          redondear2(
+            datos.umbralAlto
+          ),
 
-        alerta:
-          alertaExistente,
+          crearMensajeTrazabilidad(
+            contenedor,
+            datos
+          ),
+        ]
+      );
 
-        recordatorio,
-
-        envio_whatsapp:
-          recordatorio.envio ||
-          null,
-      };
+      alerta = resultado.rows[0];
     }
 
-
-    // ==================================================
-    // CREAR MENSAJE
-    // ==================================================
-
-    const mensaje =
-      crearMensajeTrazabilidad(
+    const notificacion =
+      await procesarNotificacion(
+        client,
+        alerta,
         contenedor,
         datos
       );
 
+    await client.query("COMMIT");
 
-    // ==================================================
-    // 1. CREAR ALERTA PREDICTIVA
-    // ==================================================
-
-    const alerta =
-      await crearAlertaPredictiva(
-        client,
-        {
-          contenedorId:
-            datos.contenedorId,
-
-          nivelActual:
-            datos.nivelActual,
-
-          umbralAlto:
-            datos.umbralAlto,
-
-          riesgo:
-            datos.riesgo,
-
-          diasParaAlto:
-            datos.diasParaAlto,
-
-          crecimiento:
-            datos.crecimiento,
-
-          mensaje,
-        }
-      );
-
-
-    // ==================================================
-    // 2. CREAR AVISO INICIAL
-    // ==================================================
-    //
-    // Siempre secuencia 1.
-    //
-    // Aunque ML ya indique 2 días o 1 día,
-    // en esta primera evaluación NO enviamos además
-    // los recordatorios.
-    //
-    // Primero sale el aviso inicial.
-    // ==================================================
-
-    const envioWhatsApp =
-      await crearEnvioWhatsAppPredictivo(
-        client,
-        {
-          alerta,
-          contenedor,
-
-          diasParaAlto:
-            datos.diasParaAlto,
-
-          secuenciaNotificacion:
-            1,
-
-          mensaje,
-        }
-      );
-
-
-    // ==================================================
-    // 3. COMMIT
-    // ==================================================
-
-    await client.query(
-      "COMMIT"
-    );
-
-
-    transaccionActiva =
-      false;
-
+    transaccion = false;
 
     return {
-      contenedor_id:
-        datos.contenedorId,
+      ...base,
 
-      accion:
-        "ALERTA_PREDICTIVA_CREADA",
+      accion: nueva
+        ? "ALERTA_PREDICTIVA_CREADA"
+        : notificacion.accion,
 
-      riesgo:
-        datos.riesgo,
+      riesgo: datos.riesgo,
 
-      dias_para_alto:
-        datos.diasParaAlto,
+      dias_para_alto: datos.diasParaAlto,
 
       alerta,
 
+      recordatorio: notificacion,
+
       envio_whatsapp:
-        envioWhatsApp,
+        notificacion.envio ?? null,
     };
-
-
   } catch (error) {
-
-    if (
-      transaccionActiva
-    ) {
-
+    if (transaccion) {
       try {
-
-        await client.query(
-          "ROLLBACK"
-        );
-
-      } catch (
-        rollbackError
-      ) {
-
+        await client.query("ROLLBACK");
+      } catch (rollbackError) {
         console.error(
-          "Error haciendo rollback de alerta predictiva:",
+          "ML: error de rollback:",
           rollbackError.message
         );
       }
     }
 
-
     throw error;
-
-
   } finally {
-
     client.release();
   }
 }
 
-
 // ======================================================
-// EJECUTAR ML Y EVALUAR TODAS LAS PREDICCIONES
+// EVALUAR TODOS LOS CONTENEDORES
 // ======================================================
 
 async function evaluarPredicciones() {
-
   const predicciones =
     await PrediccionService
       .ejecutarPrediccion();
 
+  const resultados = [];
 
-  const resultados =
-    [];
-
-
-  // ====================================================
-  // PROCESAMIENTO SECUENCIAL
-  // ====================================================
-
-  for (
-    const prediccion
-    of predicciones
-  ) {
-
-    const resultado =
+  for (const prediccion of predicciones) {
+    resultados.push(
       await evaluarPrediccion(
         prediccion
-      );
-
-
-    resultados.push(
-      resultado
+      )
     );
   }
 
-
   return {
-    total:
-      resultados.length,
+    total: resultados.length,
 
     resultados,
   };
 }
 
-
-// ======================================================
-// EXPORTACIONES
-// ======================================================
-
 module.exports = {
-
   evaluarPrediccion,
 
   evaluarPredicciones,
