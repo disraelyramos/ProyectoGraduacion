@@ -1,10 +1,5 @@
-
 export const dashboardMockData = {
-  // ======================================================
-  // PREDICCIÓN DE LLENADO
-  // Pendiente de integrar Machine Learning.
-  // ======================================================
-
+  // Los valores reales se reciben del backend.
   metrics: [
     {
       id: "prediction",
@@ -13,19 +8,17 @@ export const dashboardMockData = {
       iconColor: "purple",
       value: "No disponible",
       valueColor: "purple",
-      subtitle: "Pendiente de predicción",
+      subtitle: "Consultando predicción",
     },
-
     {
       id: "month",
-      title: "Resumen recolección",
+      title: "Recolectado esta semana",
       icon: "weight",
       iconColor: "green",
       value: "Cargando...",
       valueColor: "green",
       subtitle: "Consultando recolecciones",
     },
-
     {
       id: "year",
       title: "Recolectado este año",
@@ -36,11 +29,6 @@ export const dashboardMockData = {
       subtitle: "Consultando recolecciones",
     },
   ],
-
-  // ======================================================
-  // DISTRIBUCIÓN DEL RESIDUO
-  // Pendiente de conexión al backend.
-  // ======================================================
 
   distribution: {
     period: "Este mes",
@@ -64,14 +52,8 @@ export const dashboardMockData = {
     insight: "Datos pendientes de consulta.",
   },
 
-  // ======================================================
-  // TENDENCIA MENSUAL
-  // Pendiente de conexión al backend.
-  // ======================================================
-
   monthlyTrend: {
     period: "Este año",
-
     categories: [
       "Ene",
       "Feb",
@@ -86,7 +68,6 @@ export const dashboardMockData = {
       "Nov",
       "Dic",
     ],
-
     series: [
       {
         id: "bioinfeccioso",
@@ -99,7 +80,6 @@ export const dashboardMockData = {
         data: Array(12).fill(0),
       },
     ],
-
     insight: "Datos pendientes de consulta.",
   },
 };

@@ -554,10 +554,13 @@ const Dashboard = ({
       ) {
         return metric;
       }
-      const summary =
-        resumenRecoleccion?.[
-          metric.id
-        ]?.summary;
+    const periodo =
+  metric.id === "month"
+    ? "week"
+    : "year";
+
+const summary =
+  resumenRecoleccion?.[periodo]?.summary;
       if (
         cargandoResumen
       ) {
