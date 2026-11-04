@@ -33,14 +33,16 @@ const CATEGORIAS_SEMANALES = Object.freeze([
   "Semana 5",
 ]);
 
-const MAX_SEMANAS_MES = CATEGORIAS_SEMANALES.length;
+const MAX_SEMANAS_MES =
+  CATEGORIAS_SEMANALES.length;
 
 // ======================================================
 // UTILIDADES
 // ======================================================
 
 function obtenerMesesPorCuatrimestre(cuatrimestre) {
-  const meses = MESES_POR_CUATRIMESTRE[cuatrimestre];
+  const meses =
+    MESES_POR_CUATRIMESTRE[cuatrimestre];
 
   return meses ? [...meses] : [];
 }
@@ -90,6 +92,91 @@ function calcularPromedio(totalLibras, cantidadSemanas) {
 }
 
 // ======================================================
+// AÑOS DISPONIBLES
+// ======================================================
+
+async function consultarAniosDisponibles() {
+  const query = `
+    SELECT
+      EXTRACT(
+        YEAR FROM MIN(fecha_recoleccion)
+      )::int AS anio_inicial,
+
+      EXTRACT(
+        YEAR FROM (
+          CURRENT_TIMESTAMP
+          AT TIME ZONE 'America/Guatemala'
+        )
+      )::int AS anio_actual
+
+    FROM recolecciones;
+  `;
+
+  const { rows } = await pool.query(query);
+
+  const registro = rows[0] || {};
+
+  const anioActual = Number(
+    registro.anio_actual
+  );
+
+  const anioInicial =
+    registro.anio_inicial == null
+      ? null
+      : Number(registro.anio_inicial);
+
+  if (
+    !Number.isSafeInteger(anioActual) ||
+    anioActual < 2000
+  ) {
+    throw new Error(
+      "No fue posible determinar el año actual."
+    );
+  }
+
+  if (anioInicial === null) {
+    return {
+      anioInicial: null,
+      anioActual,
+      anios: [],
+    };
+  }
+
+  if (
+    !Number.isSafeInteger(anioInicial) ||
+    anioInicial < 2000
+  ) {
+    throw new Error(
+      "El año de la primera recolección no es válido."
+    );
+  }
+
+  if (anioInicial > anioActual) {
+    return {
+      anioInicial,
+      anioActual,
+      anios: [],
+    };
+  }
+
+  const anios = [];
+
+  for (
+    let anio = anioActual;
+    anio >= anioInicial;
+    anio--
+  ) {
+    anios.push(anio);
+  }
+
+  return {
+    anioInicial,
+    anioActual,
+    anios,
+  };
+}
+
+// ======================================================
 // ESTRUCTURA BASE POR MES
 // ======================================================
 
@@ -97,13 +184,19 @@ function crearMesBase(numeroMes) {
   return {
     mes: numeroMes,
 
-    nombreMes: NOMBRES_MESES[numeroMes],
+    nombreMes:
+      NOMBRES_MESES[numeroMes],
 
-    categorias: [...CATEGORIAS_SEMANALES],
+    categorias: [
+      ...CATEGORIAS_SEMANALES,
+    ],
 
     series: {
-      Bioinfeccioso: Array(MAX_SEMANAS_MES).fill(0),
-      Punzocortante: Array(MAX_SEMANAS_MES).fill(0),
+      Bioinfeccioso:
+        Array(MAX_SEMANAS_MES).fill(0),
+
+      Punzocortante:
+        Array(MAX_SEMANAS_MES).fill(0),
     },
 
     totales: {
@@ -161,7 +254,7 @@ function validarParametrosInternos({
 }
 
 // ======================================================
-// CONSULTA A BASE DE DATOS
+// CONSULTA DE RECOLECCIONES CUATRIMESTRALES
 // ======================================================
 
 async function consultarDatosCuatrimestrales({
@@ -172,12 +265,15 @@ async function consultarDatosCuatrimestrales({
     WITH recolecciones_con_peso AS (
       SELECT
         r.id AS recoleccion_id,
+
         r.fecha_recoleccion,
 
         c.id_contenedor,
+
         c.codigo AS codigo_contenedor,
 
         tr.id AS tipo_residuo_id,
+
         tr.nombre AS tipo_residuo,
 
         hcc.total_en_libras
@@ -185,10 +281,12 @@ async function consultarDatosCuatrimestrales({
       FROM recolecciones r
 
       INNER JOIN contenedores c
-        ON c.id_contenedor = r.contenedor_id
+        ON c.id_contenedor =
+           r.contenedor_id
 
       INNER JOIN tipos_residuo tr
-        ON tr.id = c.id_tipo_residuo
+        ON tr.id =
+           c.id_tipo_residuo
 
       LEFT JOIN LATERAL (
         SELECT
@@ -224,13 +322,18 @@ async function consultarDatosCuatrimestrales({
       )::int AS semana_indice,
 
       tipo_residuo_id,
+
       tipo_residuo,
 
       SUM(
-        COALESCE(total_en_libras, 0)
+        COALESCE(
+          total_en_libras,
+          0
+        )
       ) AS total_libras,
 
-      COUNT(*)::int AS total_recolecciones
+      COUNT(*)::int
+        AS total_recolecciones
 
     FROM recolecciones_con_peso
 
@@ -246,6 +349,7 @@ async function consultarDatosCuatrimestrales({
       ),
 
       tipo_residuo_id,
+
       tipo_residuo
 
     ORDER BY
@@ -256,14 +360,17 @@ async function consultarDatosCuatrimestrales({
 
   const { rows } = await pool.query(
     query,
-    [anio, meses]
+    [
+      anio,
+      meses,
+    ]
   );
 
   return rows || [];
 }
 
 // ======================================================
-// VERIFICAR EXISTENCIA DE DATOS
+// VERIFICAR SI EXISTEN DATOS
 // ======================================================
 
 function existenDatosReales(rows) {
@@ -314,9 +421,8 @@ function construirRespuesta({
   meses,
   rows,
 }) {
-  const respuesta = meses.map(
-    crearMesBase
-  );
+  const respuesta =
+    meses.map(crearMesBase);
 
   const mapaMeses = new Map(
     respuesta.map((mes) => [
@@ -325,9 +431,7 @@ function construirRespuesta({
     ])
   );
 
-  // ====================================================
-  // CONTROL DE SEMANAS CON RECOLECCIONES
-  // ====================================================
+  // Semanas con recolecciones por mes y tipo.
 
   const semanasPorMes = new Map(
     meses.map((numeroMes) => [
@@ -341,11 +445,13 @@ function construirRespuesta({
   );
 
   // ====================================================
-  // DISTRIBUIR LECTURAS POR SEMANA
+  // DISTRIBUIR RECOLECCIONES POR SEMANA
   // ====================================================
 
   for (const row of rows) {
-    const mes = Number(row.mes);
+    const mes = Number(
+      row.mes
+    );
 
     const semanaIndice = Number(
       row.semana_indice
@@ -363,7 +469,9 @@ function construirRespuesta({
       row.tipo_residuo
     );
 
-    const mesActual = mapaMeses.get(mes);
+    const mesActual = mapaMeses.get(
+      mes
+    );
 
     if (
       !mesActual ||
@@ -378,18 +486,17 @@ function construirRespuesta({
       continue;
     }
 
-    // Acumular las libras correspondientes
-    // al tipo de desecho y a la semana.
+    // Sumar las libras de la semana.
 
     mesActual.series[tipo][
       semanaIndice - 1
     ] += totalLibras;
 
-    // Una semana solamente se considera activa
-    // cuando tiene al menos una recolección.
+    // Registrar la semana si tuvo recolecciones.
 
     if (totalRecolecciones > 0) {
-      const semanas = semanasPorMes.get(mes);
+      const semanas =
+        semanasPorMes.get(mes);
 
       if (tipo === "Bioinfeccioso") {
         semanas.bioinfeccioso.add(
@@ -403,8 +510,8 @@ function construirRespuesta({
         );
       }
 
-      // No duplicar la semana cuando ambos
-      // contenedores tienen recolección.
+      // Una semana se cuenta una sola vez
+      // aunque ambos contenedores tengan recolección.
 
       semanas.general.add(
         semanaIndice
@@ -413,7 +520,7 @@ function construirRespuesta({
   }
 
   // ====================================================
-  // CALCULAR TOTALES Y PROMEDIOS DINÁMICOS
+  // CALCULAR TOTALES Y PROMEDIOS
   // ====================================================
 
   for (const mes of respuesta) {
@@ -423,24 +530,27 @@ function construirRespuesta({
     const seriePunzo =
       mes.series.Punzocortante;
 
-    const totalBio = serieBio.reduce(
-      (total, valor) => total + valor,
-      0
-    );
+    const totalBio =
+      serieBio.reduce(
+        (total, valor) =>
+          total + valor,
+        0
+      );
 
-    const totalPunzo = seriePunzo.reduce(
-      (total, valor) => total + valor,
-      0
-    );
+    const totalPunzo =
+      seriePunzo.reduce(
+        (total, valor) =>
+          total + valor,
+        0
+      );
 
     const totalGeneral =
       totalBio + totalPunzo;
 
-    // Semanas reales con recolecciones.
-
-    const semanas = semanasPorMes.get(
-      mes.mes
-    );
+    const semanas =
+      semanasPorMes.get(
+        mes.mes
+      );
 
     const semanasBio =
       semanas.bioinfeccioso.size;
@@ -451,59 +561,64 @@ function construirRespuesta({
     const semanasGeneral =
       semanas.general.size;
 
-    // Totales mensuales.
-
     mes.totales = {
-      bioinfeccioso: redondearDos(
-        totalBio
-      ),
+      bioinfeccioso:
+        redondearDos(
+          totalBio
+        ),
 
-      punzocortante: redondearDos(
-        totalPunzo
-      ),
+      punzocortante:
+        redondearDos(
+          totalPunzo
+        ),
 
-      general: redondearDos(
-        totalGeneral
-      ),
+      general:
+        redondearDos(
+          totalGeneral
+        ),
     };
 
-    // Promedios semanales dinámicos.
+    // Promedios basados en semanas con recolección.
 
     mes.promedioSemanal = {
-      bioinfeccioso: calcularPromedio(
-        totalBio,
-        semanasBio
-      ),
+      bioinfeccioso:
+        calcularPromedio(
+          totalBio,
+          semanasBio
+        ),
 
-      punzocortante: calcularPromedio(
-        totalPunzo,
-        semanasPunzo
-      ),
+      punzocortante:
+        calcularPromedio(
+          totalPunzo,
+          semanasPunzo
+        ),
 
-      general: calcularPromedio(
-        totalGeneral,
-        semanasGeneral
-      ),
+      general:
+        calcularPromedio(
+          totalGeneral,
+          semanasGeneral
+        ),
     };
 
-    // Mantener el formato esperado
-    // por el frontend.
+    // Conservar estructura utilizada por frontend.
 
     mes.series = [
       {
         name: "Bioinfeccioso",
 
-        data: serieBio.map(
-          redondearDos
-        ),
+        data:
+          serieBio.map(
+            redondearDos
+          ),
       },
 
       {
         name: "Punzocortante",
 
-        data: seriePunzo.map(
-          redondearDos
-        ),
+        data:
+          seriePunzo.map(
+            redondearDos
+          ),
       },
     ];
   }
@@ -524,6 +639,31 @@ async function obtenerGraficasRecoleccionCuatrimestral({
     cuatrimestre,
   });
 
+  // ====================================================
+  // VALIDAR AÑO CONTRA LA BASE DE DATOS
+  // ====================================================
+
+  const disponibilidad =
+    await consultarAniosDisponibles();
+
+  if (
+    !disponibilidad.anios.includes(anio)
+  ) {
+    const error = new Error(
+      "El año seleccionado no está disponible para consulta."
+    );
+
+    error.statusCode = 400;
+    error.type = "validation";
+    error.code = "ANIO_NO_DISPONIBLE";
+
+    throw error;
+  }
+
+  // ====================================================
+  // OBTENER MESES DEL CUATRIMESTRE
+  // ====================================================
+
   const meses =
     obtenerMesesPorCuatrimestre(
       cuatrimestre
@@ -540,6 +680,10 @@ async function obtenerGraficasRecoleccionCuatrimestral({
 
     throw error;
   }
+
+  // ====================================================
+  // CONSULTAR DATOS
+  // ====================================================
 
   const rows =
     await consultarDatosCuatrimestrales({
@@ -564,10 +708,11 @@ async function obtenerGraficasRecoleccionCuatrimestral({
     };
   }
 
-  const data = construirRespuesta({
-    meses,
-    rows,
-  });
+  const data =
+    construirRespuesta({
+      meses,
+      rows,
+    });
 
   return {
     filtros: {
@@ -588,4 +733,5 @@ async function obtenerGraficasRecoleccionCuatrimestral({
 
 module.exports = {
   obtenerGraficasRecoleccionCuatrimestral,
+  consultarAniosDisponibles,
 };

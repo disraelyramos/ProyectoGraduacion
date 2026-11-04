@@ -25,6 +25,7 @@ import {
 
 import {
   obtenerGraficasCuatrimestrales,
+  obtenerAniosDisponibles,
   obtenerPdfCuatrimestral,
   obtenerExcelCuatrimestral,
   normalizarErrorApi,
@@ -32,10 +33,9 @@ import {
 
 import "../../styles/graficas-recoleccion.css";
 
-
-/* =========================================================
-   ESTADO INICIAL DE EXPORTACIÓN
-   ========================================================= */
+// ======================================================
+// ESTADO INICIAL DE EXPORTACIÓN
+// ======================================================
 
 const INITIAL_EXPORT_STATE = {
   exportId: null,
@@ -45,1008 +45,720 @@ const INITIAL_EXPORT_STATE = {
   exportExpired: false,
 };
 
+// ======================================================
+// DESCARGAR ARCHIVO
+// ======================================================
 
-/* =========================================================
-   DESCARGAR ARCHIVO
-   ========================================================= */
+function downloadBlob(blob, filename) {
+  const url = window.URL.createObjectURL(blob);
 
-function downloadBlob(
-  blob,
-  filename
-) {
-
-  const url =
-    window.URL.createObjectURL(
-      blob
-    );
-
-
-  const anchor =
-    document.createElement(
-      "a"
-    );
-
+  const anchor = document.createElement("a");
 
   anchor.href = url;
+  anchor.download = filename;
 
-  anchor.download =
-    filename;
-
-
-  document.body.appendChild(
-    anchor
-  );
-
+  document.body.appendChild(anchor);
 
   anchor.click();
-
   anchor.remove();
 
-
-  window.setTimeout(
-    () => {
-
-      window.URL.revokeObjectURL(
-        url
-      );
-
-    },
-    5_000
-  );
+  window.setTimeout(() => {
+    window.URL.revokeObjectURL(url);
+  }, 5000);
 }
 
+// ======================================================
+// ABRIR PDF
+// ======================================================
 
-/* =========================================================
-   ABRIR PDF
-   ========================================================= */
+function openPdfBlob(blob) {
+  const url = window.URL.createObjectURL(blob);
 
-function openPdfBlob(
-  blob
-) {
+  const nuevaVentana = window.open(
+    url,
+    "_blank",
+    "noopener,noreferrer"
+  );
 
-  const url =
-    window.URL.createObjectURL(
-      blob
-    );
-
-
-  const nuevaVentana =
-    window.open(
-      url,
-      "_blank",
-      "noopener,noreferrer"
-    );
-
-
-  if (
-    !nuevaVentana
-  ) {
-
-    const anchor =
-      document.createElement(
-        "a"
-      );
-
+  if (!nuevaVentana) {
+    const anchor = document.createElement("a");
 
     anchor.href = url;
+    anchor.target = "_blank";
+    anchor.rel = "noopener noreferrer";
 
-    anchor.target =
-      "_blank";
-
-    anchor.rel =
-      "noopener noreferrer";
-
-
-    document.body.appendChild(
-      anchor
-    );
-
+    document.body.appendChild(anchor);
 
     anchor.click();
-
     anchor.remove();
   }
 
-
-  /*
-   * No se revoca inmediatamente.
-   * Chrome necesita mantener disponible
-   * el blob mientras el visor PDF esté abierto.
-   */
+  // No revocar inmediatamente el Blob,
+  // porque el visor PDF puede necesitarlo.
 }
 
+// ======================================================
+// IDENTIFICAR ERRORES DE SNAPSHOT
+// ======================================================
 
-/* =========================================================
-   ERROR DE SNAPSHOT
-   ========================================================= */
-
-function esErrorSnapshot(
-  data
-) {
-
+function esErrorSnapshot(data) {
   const codigo =
     data?.code ||
     data?.codigo ||
     null;
-
 
   return [
     "EXPORT_SNAPSHOT_EXPIRADO",
     "EXPORT_SNAPSHOT_INVALIDO",
     "EXPORT_ID_REQUIRED",
     "EXPORT_DATA_NOT_FOUND",
-  ].includes(
-    codigo
-  );
+  ].includes(codigo);
 }
 
-
-/* =========================================================
-   COMPONENTE
-   ========================================================= */
+// ======================================================
+// COMPONENTE PRINCIPAL
+// ======================================================
 
 const HistorialGrafica = () => {
 
-  const [
-    anio,
-    setAnio,
-  ] =
+  // ====================================================
+  // FILTROS
+  // ====================================================
+
+  const [anio, setAnio] = useState("");
+
+  const [cuatrimestre, setCuatrimestre] =
     useState("");
 
+  // ====================================================
+  // AÑOS DISPONIBLES DESDE EL BACKEND
+  // ====================================================
 
-  const [
-    cuatrimestre,
-    setCuatrimestre,
-  ] =
-    useState("");
-
-
-  const [
-    graficas,
-    setGraficas,
-  ] =
+  const [aniosDisponibles, setAniosDisponibles] =
     useState([]);
 
+  const [loadingAnios, setLoadingAnios] =
+    useState(true);
 
-  const [
-    filtrosAplicados,
-    setFiltrosAplicados,
-  ] =
+  const [errorAnios, setErrorAnios] =
+    useState("");
+
+  // ====================================================
+  // DATOS DE GRÁFICAS
+  // ====================================================
+
+  const [graficas, setGraficas] =
+    useState([]);
+
+  const [filtrosAplicados, setFiltrosAplicados] =
     useState(null);
 
-
-  const [
-    loading,
-    setLoading,
-  ] =
+  const [loading, setLoading] =
     useState(false);
 
-
-  const [
-    loaded,
-    setLoaded,
-  ] =
+  const [loaded, setLoaded] =
     useState(false);
 
-
-  const [
-    sinDatos,
-    setSinDatos,
-  ] =
+  const [sinDatos, setSinDatos] =
     useState(false);
 
+  // ====================================================
+  // EXPORTACIONES
+  // ====================================================
 
-  const [
-    pdfLoading,
-    setPdfLoading,
-  ] =
+  const [pdfLoading, setPdfLoading] =
     useState(false);
 
-
-  const [
-    excelLoading,
-    setExcelLoading,
-  ] =
+  const [excelLoading, setExcelLoading] =
     useState(false);
 
+  const [exportState, setExportState] =
+    useState(INITIAL_EXPORT_STATE);
 
-  const [
-    exportState,
-    setExportState,
-  ] =
-    useState(
-      INITIAL_EXPORT_STATE
-    );
+  const pdfEnCursoRef = useRef(false);
 
+  const excelEnCursoRef = useRef(false);
 
-  const pdfEnCursoRef =
-    useRef(false);
-
-
-  const excelEnCursoRef =
-    useRef(false);
-
+  // ====================================================
+  // ESTADOS DERIVADOS
+  // ====================================================
 
   const bloqueado =
     loading ||
     pdfLoading ||
     excelLoading;
 
-
-  const filtrosCompletos =
-    useMemo(
-      () =>
-        anio !== "" &&
-        cuatrimestre !== "",
-      [
-        anio,
-        cuatrimestre,
-      ]
+  const filtrosCompletos = useMemo(() => {
+    return (
+      anio !== "" &&
+      cuatrimestre !== "" &&
+      !loadingAnios &&
+      !errorAnios &&
+      aniosDisponibles.includes(Number(anio))
     );
+  }, [
+    anio,
+    cuatrimestre,
+    loadingAnios,
+    errorAnios,
+    aniosDisponibles,
+  ]);
 
+  // ====================================================
+  // CARGAR AÑOS DISPONIBLES
+  // ====================================================
 
-  /* =======================================================
-     LIMPIAR EXPORTACIÓN
-     ======================================================= */
+  useEffect(() => {
+    let activo = true;
 
-  const limpiarExportacion =
-    useCallback(
-      (
-        {
-          expired = false,
-        } = {}
-      ) => {
+    async function cargarAnios() {
+      setLoadingAnios(true);
+      setErrorAnios("");
 
-        setExportState({
-          ...INITIAL_EXPORT_STATE,
+      try {
+        const resultado =
+          await obtenerAniosDisponibles();
 
-          exportExpired:
-            expired,
+        if (!activo) {
+          return;
+        }
+
+        const anios = resultado.anios;
+
+        setAniosDisponibles(anios);
+
+        setAnio((anioAnterior) => {
+          if (
+            anioAnterior !== "" &&
+            anios.includes(Number(anioAnterior))
+          ) {
+            return anioAnterior;
+          }
+
+          return "";
         });
 
-      },
-      []
-    );
+      } catch (error) {
+        if (!activo) {
+          return;
+        }
 
-
-  /* =======================================================
-     LIMPIAR RESULTADOS
-     ======================================================= */
-
-  const limpiarResultados =
-    useCallback(
-      () => {
-
-        setGraficas([]);
-
-        setFiltrosAplicados(
-          null
+        console.error(
+          "Error consultando años disponibles:",
+          error
         );
 
-        setLoaded(false);
+        setAniosDisponibles([]);
+        setAnio("");
 
-        setSinDatos(false);
+        setErrorAnios(
+          "No fue posible consultar los años disponibles."
+        );
 
+      } finally {
+        if (activo) {
+          setLoadingAnios(false);
+        }
+      }
+    }
 
-        setExportState({
-          ...INITIAL_EXPORT_STATE,
-        });
+    cargarAnios();
 
-      },
-      []
-    );
+    return () => {
+      activo = false;
+    };
+  }, []);
 
+  // ====================================================
+  // LIMPIAR EXPORTACIÓN
+  // ====================================================
 
-  /* =======================================================
-     DETECTAR CAMBIO DE FILTROS
-     ======================================================= */
+  const limpiarExportacion = useCallback(
+    ({ expired = false } = {}) => {
+      setExportState({
+        ...INITIAL_EXPORT_STATE,
+        exportExpired: expired,
+      });
+    },
+    []
+  );
 
-  const filtrosKey =
-    useMemo(
-      () =>
-        JSON.stringify({
-          anio,
-          cuatrimestre,
-        }),
-      [
-        anio,
-        cuatrimestre,
-      ]
-    );
+  // ====================================================
+  // LIMPIAR RESULTADOS
+  // ====================================================
 
+  const limpiarResultados = useCallback(() => {
+    setGraficas([]);
+    setFiltrosAplicados(null);
 
-  const prevFiltrosKeyRef =
-    useRef(
-      filtrosKey
-    );
+    setLoaded(false);
+    setSinDatos(false);
 
+    setExportState({
+      ...INITIAL_EXPORT_STATE,
+    });
+  }, []);
 
-  useEffect(
-    () => {
+  // ====================================================
+  // DETECTAR CAMBIO DE FILTROS
+  // ====================================================
+
+  const filtrosKey = useMemo(
+    () => JSON.stringify({
+      anio,
+      cuatrimestre,
+    }),
+    [
+      anio,
+      cuatrimestre,
+    ]
+  );
+
+  const prevFiltrosKeyRef = useRef(filtrosKey);
+
+  useEffect(() => {
+    if (
+      prevFiltrosKeyRef.current === filtrosKey
+    ) {
+      return;
+    }
+
+    prevFiltrosKeyRef.current = filtrosKey;
+
+    limpiarResultados();
+  }, [
+    filtrosKey,
+    limpiarResultados,
+  ]);
+
+  // ====================================================
+  // NOTIFICAR EXPORTACIÓN EXPIRADA
+  // ====================================================
+
+  const notificarExportacionExpirada =
+    useCallback(async () => {
+      limpiarExportacion({
+        expired: true,
+      });
+
+      await showWarningAlert(
+        "El tiempo disponible para exportar venció. Presione 'Filtrar' nuevamente para habilitar PDF y Excel.",
+        "Tiempo de exportación vencido"
+      );
+    }, [
+      limpiarExportacion,
+    ]);
+
+  // ====================================================
+  // TEMPORIZADOR DE EXPORTACIÓN
+  // ====================================================
+
+  useEffect(() => {
+    if (
+      !exportState.exportId ||
+      !exportState.exportDeadlineMs
+    ) {
+      return undefined;
+    }
+
+    const tiempoRestante =
+      exportState.exportDeadlineMs -
+      Date.now();
+
+    if (tiempoRestante <= 0) {
+      notificarExportacionExpirada();
+
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => {
+      notificarExportacionExpirada();
+    }, tiempoRestante);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [
+    exportState.exportId,
+    exportState.exportDeadlineMs,
+    notificarExportacionExpirada,
+  ]);
+
+  // ====================================================
+  // CONFIGURAR REPORTE
+  // ====================================================
+
+  const configurarReporte = useCallback(
+    (response) => {
+      const exportId =
+        response?.export_id || null;
+
+      const expiresAt =
+        response?.export_expires_at || null;
+
+      const expiresInSeconds = Number(
+        response?.export_expires_in_seconds
+      );
+
+      let deadlineMs = null;
 
       if (
-        prevFiltrosKeyRef.current ===
-        filtrosKey
+        Number.isFinite(expiresInSeconds) &&
+        expiresInSeconds > 0
       ) {
+        deadlineMs =
+          Date.now() +
+          expiresInSeconds * 1000;
+
+      } else if (expiresAt) {
+        const parsed = Date.parse(expiresAt);
+
+        if (Number.isFinite(parsed)) {
+          deadlineMs = parsed;
+        }
+      }
+
+      setExportState({
+        exportId,
+
+        exportExpiresAt: expiresAt,
+
+        exportExpiresInSeconds:
+          Number.isFinite(expiresInSeconds)
+            ? expiresInSeconds
+            : null,
+
+        exportDeadlineMs: deadlineMs,
+
+        exportExpired: false,
+      });
+
+      setGraficas(
+        Array.isArray(response?.data)
+          ? response.data
+          : []
+      );
+
+      setFiltrosAplicados(
+        response?.filtros || null
+      );
+
+      setSinDatos(false);
+      setLoaded(true);
+    },
+    []
+  );
+
+  // ====================================================
+  // CONSULTAR GRÁFICAS
+  // ====================================================
+
+  const obtenerGraficas = useCallback(
+    async () => {
+      if (!filtrosCompletos) {
+        await showWarningAlert(
+          "Seleccione un año y un cuatrimestre válidos antes de realizar la consulta.",
+          "Campos obligatorios"
+        );
+
         return;
       }
 
-
-      prevFiltrosKeyRef.current =
-        filtrosKey;
-
-
-      limpiarResultados();
-
-    },
-    [
-      filtrosKey,
-      limpiarResultados,
-    ]
-  );
-
-
-  /* =======================================================
-     EXPORTACIÓN EXPIRADA
-     ======================================================= */
-
-  const notificarExportacionExpirada =
-    useCallback(
-      async () => {
-
-        limpiarExportacion({
-          expired: true,
-        });
-
-
-        await showWarningAlert(
-          "El tiempo disponible para exportar venció. Presione 'Filtrar' nuevamente para habilitar PDF y Excel.",
-          "Tiempo de exportación vencido"
-        );
-
-      },
-      [
-        limpiarExportacion,
-      ]
-    );
-
-
-  /* =======================================================
-     TEMPORIZADOR DE EXPORTACIÓN
-     ======================================================= */
-
-  useEffect(
-    () => {
-
-      if (
-        !exportState.exportId ||
-        !exportState.exportDeadlineMs
-      ) {
-
-        return undefined;
+      if (loading) {
+        return;
       }
 
+      setLoading(true);
 
-      const tiempoRestante =
-        exportState.exportDeadlineMs -
-        Date.now();
+      setGraficas([]);
+      setFiltrosAplicados(null);
 
+      setLoaded(false);
+      setSinDatos(false);
 
-      if (
-        tiempoRestante <= 0
-      ) {
+      limpiarExportacion();
 
-        notificarExportacionExpirada();
+      try {
+        const response =
+          await obtenerGraficasCuatrimestrales({
+            anio,
+            cuatrimestre,
+          });
 
-        return undefined;
-      }
+        if (response?.success !== true) {
+          await showBackendAlert({
+            status: 400,
 
+            data: response || {
+              message:
+                "No fue posible consultar las gráficas.",
+            },
+          });
 
-      const timer =
-        window.setTimeout(
-          () => {
-
-            notificarExportacionExpirada();
-
-          },
-          tiempoRestante
-        );
-
-
-      return () => {
-
-        window.clearTimeout(
-          timer
-        );
-      };
-
-    },
-    [
-      exportState.exportId,
-      exportState.exportDeadlineMs,
-      notificarExportacionExpirada,
-    ]
-  );
-
-
-  /* =======================================================
-     CONFIGURAR REPORTE
-     ======================================================= */
-
-  const configurarReporte =
-    useCallback(
-      (
-        response
-      ) => {
-
-        const exportId =
-          response?.export_id ||
-          null;
-
-
-        const expiresAt =
-          response?.export_expires_at ||
-          null;
-
-
-        const expiresInSeconds =
-          Number(
-            response
-              ?.export_expires_in_seconds
-          );
-
-
-        let deadlineMs =
-          null;
-
-
-        if (
-          Number.isFinite(
-            expiresInSeconds
-          ) &&
-          expiresInSeconds > 0
-        ) {
-
-          deadlineMs =
-            Date.now() +
-            (
-              expiresInSeconds *
-              1000
-            );
-
-        } else if (
-          expiresAt
-        ) {
-
-          const parsed =
-            Date.parse(
-              expiresAt
-            );
-
-
-          if (
-            Number.isFinite(
-              parsed
-            )
-          ) {
-
-            deadlineMs =
-              parsed;
-          }
+          return;
         }
 
+        // ----------------------------------------------
+        // SIN DATOS
+        // ----------------------------------------------
 
-        setExportState({
+        if (response?.hay_datos === false) {
+          setGraficas([]);
 
-          exportId,
+          setFiltrosAplicados(
+            response?.filtros || null
+          );
 
-          exportExpiresAt:
-            expiresAt,
+          setSinDatos(true);
+          setLoaded(true);
 
-          exportExpiresInSeconds:
-            Number.isFinite(
-              expiresInSeconds
-            )
-              ? expiresInSeconds
-              : null,
-
-          exportDeadlineMs:
-            deadlineMs,
-
-          exportExpired:
-            false,
-        });
-
-
-        setGraficas(
-          Array.isArray(
-            response?.data
-          )
-            ? response.data
-            : []
-        );
-
-
-        setFiltrosAplicados(
-          response?.filtros ||
-          null
-        );
-
-
-        setSinDatos(false);
-
-        setLoaded(true);
-
-      },
-      []
-    );
-
-
-  /* =======================================================
-     CONSULTAR GRÁFICAS
-     ======================================================= */
-
-  const obtenerGraficas =
-    useCallback(
-      async () => {
-
-        if (
-          !filtrosCompletos
-        ) {
+          limpiarExportacion();
 
           await showWarningAlert(
-            "Seleccione un año y un cuatrimestre antes de realizar la consulta.",
-            "Campos obligatorios"
+            response?.message ||
+              "No se encontraron registros de recolección para los filtros seleccionados.",
+            "Sin registros"
           );
 
           return;
         }
 
+        // ----------------------------------------------
+        // CON DATOS
+        // ----------------------------------------------
 
-        if (
-          loading
-        ) {
-          return;
-        }
+        configurarReporte(response);
 
-
-        setLoading(true);
-
-        setGraficas([]);
-
-        setFiltrosAplicados(
-          null
+      } catch (error) {
+        console.error(
+          "Error obteniendo gráficas de recolección:",
+          error
         );
 
-        setLoaded(false);
+        const errorHttp =
+          await normalizarErrorApi(error);
 
-        setSinDatos(false);
+        await showBackendAlert({
+          status: errorHttp.status,
+          data: errorHttp.data,
+        });
 
-        limpiarExportacion();
+      } finally {
+        setLoading(false);
+      }
+    },
+    [
+      anio,
+      cuatrimestre,
+      filtrosCompletos,
+      loading,
+      limpiarExportacion,
+      configurarReporte,
+    ]
+  );
 
+  // ====================================================
+  // FILTRAR
+  // ====================================================
 
-        try {
+  const handleFiltrar = useCallback(() => {
+    obtenerGraficas();
+  }, [
+    obtenerGraficas,
+  ]);
 
-          const response =
-            await obtenerGraficasCuatrimestrales({
-              anio,
-              cuatrimestre,
-            });
+  // ====================================================
+  // EXPORTAR PDF
+  // ====================================================
 
+  const onExportPdf = useCallback(
+    async () => {
+      if (pdfEnCursoRef.current) {
+        return;
+      }
 
-          if (
-            response?.success !==
-            true
-          ) {
-
-            await showBackendAlert({
-
-              status: 400,
-
-              data:
-                response || {
-                  message:
-                    "No fue posible consultar las gráficas.",
-                },
-            });
-
-
-            return;
-          }
-
-
-          if (
-            response?.hay_datos ===
-            false
-          ) {
-
-            setGraficas([]);
-
-
-            setFiltrosAplicados(
-              response?.filtros ||
-              null
-            );
-
-
-            setSinDatos(true);
-
-            setLoaded(true);
-
-            limpiarExportacion();
-
-
-            await showWarningAlert(
-              response?.message ||
-                "No se encontraron registros de recolección para los filtros seleccionados.",
-              "Sin registros"
-            );
-
-
-            return;
-          }
-
-
-          configurarReporte(
-            response
+      if (
+        !loaded ||
+        !exportState.exportId
+      ) {
+        if (exportState.exportExpired) {
+          await showWarningAlert(
+            "El tiempo disponible para exportar venció. Presione 'Filtrar' nuevamente.",
+            "Tiempo de exportación vencido"
           );
 
+        } else {
+          await showWarningAlert(
+            "Realice una consulta con resultados antes de exportar.",
+            "Exportación no disponible"
+          );
+        }
 
-        } catch (
+        return;
+      }
+
+      pdfEnCursoRef.current = true;
+      setPdfLoading(true);
+
+      try {
+        const blob =
+          await obtenerPdfCuatrimestral(
+            exportState.exportId
+          );
+
+        openPdfBlob(blob);
+
+      } catch (error) {
+        console.error(
+          "Error exportando PDF cuatrimestral:",
           error
-        ) {
+        );
 
-          console.error(
-            "Error obteniendo gráficas de recolección:",
-            error
-          );
+        const errorHttp =
+          await normalizarErrorApi(error);
 
-
-          const errorHttp =
-            await normalizarErrorApi(
-              error
-            );
-
-
-          await showBackendAlert({
-
-            status:
-              errorHttp.status,
-
-            data:
-              errorHttp.data,
+        if (esErrorSnapshot(errorHttp.data)) {
+          limpiarExportacion({
+            expired:
+              errorHttp?.data?.code ===
+              "EXPORT_SNAPSHOT_EXPIRADO",
           });
-
-
-        } finally {
-
-          setLoading(false);
         }
 
-      },
-      [
-        anio,
-        cuatrimestre,
-        filtrosCompletos,
-        loading,
-        limpiarExportacion,
-        configurarReporte,
-      ]
-    );
+        await showBackendAlert({
+          status: errorHttp.status,
+          data: errorHttp.data,
+        });
 
+      } finally {
+        pdfEnCursoRef.current = false;
+        setPdfLoading(false);
+      }
+    },
+    [
+      loaded,
+      exportState.exportId,
+      exportState.exportExpired,
+      limpiarExportacion,
+    ]
+  );
 
-  /* =======================================================
-     FILTRAR
-     ======================================================= */
+  // ====================================================
+  // EXPORTAR EXCEL
+  // ====================================================
 
-  const handleFiltrar =
-    useCallback(
-      () => {
+  const onExportExcel = useCallback(
+    async () => {
+      if (excelEnCursoRef.current) {
+        return;
+      }
 
-        obtenerGraficas();
-
-      },
-      [
-        obtenerGraficas,
-      ]
-    );
-
-
-  /* =======================================================
-     PDF
-     ======================================================= */
-
-  const onExportPdf =
-    useCallback(
-      async () => {
-
-        if (
-          pdfEnCursoRef.current
-        ) {
-          return;
-        }
-
-
-        if (
-          !loaded ||
-          !exportState.exportId
-        ) {
-
-          if (
-            exportState.exportExpired
-          ) {
-
-            await showWarningAlert(
-              "El tiempo disponible para exportar venció. Presione 'Filtrar' nuevamente.",
-              "Tiempo de exportación vencido"
-            );
-
-          } else {
-
-            await showWarningAlert(
-              "Realice una consulta con resultados antes de exportar.",
-              "Exportación no disponible"
-            );
-          }
-
-
-          return;
-        }
-
-
-        pdfEnCursoRef.current =
-          true;
-
-
-        setPdfLoading(true);
-
-
-        try {
-
-          const blob =
-            await obtenerPdfCuatrimestral(
-              exportState.exportId
-            );
-
-
-          openPdfBlob(
-            blob
+      if (
+        !loaded ||
+        !exportState.exportId
+      ) {
+        if (exportState.exportExpired) {
+          await showWarningAlert(
+            "El tiempo disponible para exportar venció. Presione 'Filtrar' nuevamente.",
+            "Tiempo de exportación vencido"
           );
 
+        } else {
+          await showWarningAlert(
+            "Realice una consulta con resultados antes de exportar.",
+            "Exportación no disponible"
+          );
+        }
 
-        } catch (
+        return;
+      }
+
+      excelEnCursoRef.current = true;
+      setExcelLoading(true);
+
+      try {
+        const blob =
+          await obtenerExcelCuatrimestral(
+            exportState.exportId
+          );
+
+        const anioArchivo =
+          filtrosAplicados?.anio ||
+          "reporte";
+
+        const cuatrimestreArchivo =
+          filtrosAplicados?.cuatrimestre ||
+          "";
+
+        downloadBlob(
+          blob,
+          `recoleccion_${anioArchivo}_cuatrimestre_${cuatrimestreArchivo}.xlsx`
+        );
+
+      } catch (error) {
+        console.error(
+          "Error exportando Excel cuatrimestral:",
           error
-        ) {
+        );
 
-          console.error(
-            "Error exportando PDF cuatrimestral:",
-            error
-          );
+        const errorHttp =
+          await normalizarErrorApi(error);
 
-
-          const errorHttp =
-            await normalizarErrorApi(
-              error
-            );
-
-
-          if (
-            esErrorSnapshot(
-              errorHttp.data
-            )
-          ) {
-
-            limpiarExportacion({
-
-              expired:
-                errorHttp
-                  ?.data
-                  ?.code ===
-                "EXPORT_SNAPSHOT_EXPIRADO",
-            });
-          }
-
-
-          await showBackendAlert({
-
-            status:
-              errorHttp.status,
-
-            data:
-              errorHttp.data,
+        if (esErrorSnapshot(errorHttp.data)) {
+          limpiarExportacion({
+            expired:
+              errorHttp?.data?.code ===
+              "EXPORT_SNAPSHOT_EXPIRADO",
           });
-
-
-        } finally {
-
-          pdfEnCursoRef.current =
-            false;
-
-
-          setPdfLoading(false);
         }
 
-      },
-      [
-        loaded,
-        exportState.exportId,
-        exportState.exportExpired,
-        limpiarExportacion,
-      ]
-    );
+        await showBackendAlert({
+          status: errorHttp.status,
+          data: errorHttp.data,
+        });
 
+      } finally {
+        excelEnCursoRef.current = false;
+        setExcelLoading(false);
+      }
+    },
+    [
+      loaded,
+      exportState.exportId,
+      exportState.exportExpired,
+      filtrosAplicados,
+      limpiarExportacion,
+    ]
+  );
 
-  /* =======================================================
-     EXCEL
-     ======================================================= */
-
-  const onExportExcel =
-    useCallback(
-      async () => {
-
-        if (
-          excelEnCursoRef.current
-        ) {
-          return;
-        }
-
-
-        if (
-          !loaded ||
-          !exportState.exportId
-        ) {
-
-          if (
-            exportState.exportExpired
-          ) {
-
-            await showWarningAlert(
-              "El tiempo disponible para exportar venció. Presione 'Filtrar' nuevamente.",
-              "Tiempo de exportación vencido"
-            );
-
-          } else {
-
-            await showWarningAlert(
-              "Realice una consulta con resultados antes de exportar.",
-              "Exportación no disponible"
-            );
-          }
-
-
-          return;
-        }
-
-
-        excelEnCursoRef.current =
-          true;
-
-
-        setExcelLoading(true);
-
-
-        try {
-
-          const blob =
-            await obtenerExcelCuatrimestral(
-              exportState.exportId
-            );
-
-
-          const anioArchivo =
-            filtrosAplicados?.anio ||
-            "reporte";
-
-
-          const cuatrimestreArchivo =
-            filtrosAplicados?.cuatrimestre ||
-            "";
-
-
-          downloadBlob(
-            blob,
-            `recoleccion_${anioArchivo}_cuatrimestre_${cuatrimestreArchivo}.xlsx`
-          );
-
-
-        } catch (
-          error
-        ) {
-
-          console.error(
-            "Error exportando Excel cuatrimestral:",
-            error
-          );
-
-
-          const errorHttp =
-            await normalizarErrorApi(
-              error
-            );
-
-
-          if (
-            esErrorSnapshot(
-              errorHttp.data
-            )
-          ) {
-
-            limpiarExportacion({
-
-              expired:
-                errorHttp
-                  ?.data
-                  ?.code ===
-                "EXPORT_SNAPSHOT_EXPIRADO",
-            });
-          }
-
-
-          await showBackendAlert({
-
-            status:
-              errorHttp.status,
-
-            data:
-              errorHttp.data,
-          });
-
-
-        } finally {
-
-          excelEnCursoRef.current =
-            false;
-
-
-          setExcelLoading(false);
-        }
-
-      },
-      [
-        loaded,
-        exportState.exportId,
-        exportState.exportExpired,
-        filtrosAplicados,
-        limpiarExportacion,
-      ]
-    );
-
-
-  /* =======================================================
-     EXPORTACIÓN DISPONIBLE
-     ======================================================= */
+  // ====================================================
+  // DISPONIBILIDAD DE EXPORTACIONES
+  // ====================================================
 
   const exportDisponible =
     loaded &&
     !sinDatos &&
-    Boolean(
-      exportState.exportId
-    ) &&
+    Boolean(exportState.exportId) &&
     !exportState.exportExpired;
 
-
-  /* =======================================================
-     RENDER
-     ======================================================= */
+  // ====================================================
+  // RENDER
+  // ====================================================
 
   return (
-
     <main className="system-page graficas-recoleccion-page">
-
       <div className="system-container">
 
-        {/* =================================================
-            CABECERA
-        ================================================= */}
+        {/* =============================================
+            ENCABEZADO
+        ============================================= */}
 
         <header className="graficas-page-header">
-
           <div className="graficas-page-title">
 
             <FaChartLine />
 
             <div>
-
               <h1 className="system-title">
                 Historial Gráfico de Recolección
               </h1>
@@ -1055,35 +767,24 @@ const HistorialGrafica = () => {
                 Consulte el comportamiento de la
                 recolección por año y cuatrimestre.
               </p>
-
             </div>
-
           </div>
 
-
-          {/* ===============================================
+          {/* ===========================================
               EXPORTACIONES
-          =============================================== */}
+          =========================================== */}
 
           {exportDisponible && (
-
             <div className="graficas-export-actions">
 
               <button
                 type="button"
                 className="app-btn app-btn-danger"
-                onClick={
-                  onExportPdf
-                }
-                disabled={
-                  bloqueado
-                }
+                onClick={onExportPdf}
+                disabled={bloqueado}
               >
-
                 {pdfLoading ? (
-
                   <>
-
                     <span
                       className="system-spinner system-spinner-small"
                       aria-hidden="true"
@@ -1092,41 +793,26 @@ const HistorialGrafica = () => {
                     <span>
                       PDF...
                     </span>
-
                   </>
-
                 ) : (
-
                   <>
-
                     <FaFilePdf />
 
                     <span>
                       PDF
                     </span>
-
                   </>
-
                 )}
-
               </button>
-
 
               <button
                 type="button"
                 className="app-btn app-btn-success"
-                onClick={
-                  onExportExcel
-                }
-                disabled={
-                  bloqueado
-                }
+                onClick={onExportExcel}
+                disabled={bloqueado}
               >
-
                 {excelLoading ? (
-
                   <>
-
                     <span
                       className="system-spinner system-spinner-small"
                       aria-hidden="true"
@@ -1135,72 +821,48 @@ const HistorialGrafica = () => {
                     <span>
                       Excel...
                     </span>
-
                   </>
-
                 ) : (
-
                   <>
-
                     <FaFileExcel />
 
                     <span>
                       Excel
                     </span>
-
                   </>
-
                 )}
-
               </button>
 
             </div>
-
           )}
-
         </header>
 
-
-        {/* =================================================
+        {/* =============================================
             FILTROS
-        ================================================= */}
+        ============================================= */}
 
         <FiltrosGraficasRecoleccion
+          anio={anio}
+          cuatrimestre={cuatrimestre}
 
-          anio={
-            anio
-          }
+          setAnio={setAnio}
+          setCuatrimestre={setCuatrimestre}
 
-          cuatrimestre={
-            cuatrimestre
-          }
+          aniosDisponibles={aniosDisponibles}
+          loadingAnios={loadingAnios}
+          errorAnios={errorAnios}
 
-          setAnio={
-            setAnio
-          }
+          onFiltrar={handleFiltrar}
 
-          setCuatrimestre={
-            setCuatrimestre
-          }
-
-          onFiltrar={
-            handleFiltrar
-          }
-
-          loading={
-            bloqueado
-          }
+          loading={bloqueado}
         />
 
-
-        {/* =================================================
+        {/* =============================================
             CARGANDO
-        ================================================= */}
+        ============================================= */}
 
         {loading && (
-
           <div className="graficas-loading">
-
             <span
               className="system-spinner"
               aria-hidden="true"
@@ -1209,47 +871,31 @@ const HistorialGrafica = () => {
             <p>
               Consultando información...
             </p>
-
           </div>
-
         )}
 
-
-        {/* =================================================
+        {/* =============================================
             RESULTADOS
-        ================================================= */}
+        ============================================= */}
 
         {!loading &&
-        loaded &&
-        !sinDatos &&
-        graficas.length > 0 && (
+          loaded &&
+          !sinDatos &&
+          graficas.length > 0 && (
 
-          <section className="graficas-results-grid">
-
-            {graficas.map(
-              (item) => (
-
+            <section className="graficas-results-grid">
+              {graficas.map((item) => (
                 <TarjetaGraficaRecoleccion
-                  key={
-                    item.mes
-                  }
-                  data={
-                    item
-                  }
+                  key={item.mes}
+                  data={item}
                 />
-
-              )
-            )}
-
-          </section>
-
-        )}
+              ))}
+            </section>
+          )}
 
       </div>
-
     </main>
   );
 };
-
 
 export default HistorialGrafica;

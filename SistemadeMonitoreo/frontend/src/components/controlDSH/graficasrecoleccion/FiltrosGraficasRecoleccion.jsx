@@ -1,119 +1,132 @@
-import React, {
-  useMemo,
-} from "react";
+import React from "react";
 
 import {
   FaSearch,
   FaFilter,
 } from "react-icons/fa";
 
+// ======================================================
+// COMPONENTE
+// ======================================================
 
 const FiltrosGraficasRecoleccion = ({
   anio,
   cuatrimestre,
+
   setAnio,
   setCuatrimestre,
+
   onFiltrar,
   loading,
+
+  aniosDisponibles = [],
+  loadingAnios = false,
+  errorAnios = "",
 }) => {
 
-  /* =========================================================
-     AÑOS DISPONIBLES
-     ========================================================= */
+  // ====================================================
+  // VALIDAR AÑOS DISPONIBLES
+  // ====================================================
 
-  const currentYear =
-    new Date()
-      .getFullYear();
+  const years = Array.isArray(aniosDisponibles)
+    ? aniosDisponibles.filter(
+        (year) =>
+          Number.isSafeInteger(year) &&
+          year >= 2000
+      )
+    : [];
 
-
-  const years =
-    useMemo(
-      () => [
-        currentYear,
-        currentYear - 1,
-        currentYear - 2,
-        currentYear - 3,
-      ],
-      [
-        currentYear,
-      ]
-    );
-
-
-  /* =========================================================
-     FILTROS COMPLETOS
-     ========================================================= */
+  // ====================================================
+  // VALIDAR FILTROS
+  // ====================================================
 
   const filtrosCompletos =
     anio !== "" &&
-    cuatrimestre !== "";
+    cuatrimestre !== "" &&
+    !loadingAnios &&
+    !errorAnios &&
+    years.includes(Number(anio));
 
+  // ====================================================
+  // CAMBIAR AÑO
+  // ====================================================
 
-  /* =========================================================
-     CAMBIAR AÑO
-     ========================================================= */
+  const handleAnioChange = (event) => {
+    const valor = event.target.value;
 
-  const handleAnioChange =
-    (event) => {
+    if (valor === "") {
+      setAnio("");
+      return;
+    }
 
-      const valor =
-        event.target.value;
+    const anioSeleccionado = Number(valor);
 
+    if (
+      !Number.isSafeInteger(anioSeleccionado) ||
+      !years.includes(anioSeleccionado)
+    ) {
+      setAnio("");
+      return;
+    }
 
-      if (
-        valor === ""
-      ) {
+    setAnio(anioSeleccionado);
+  };
 
-        setAnio("");
+  // ====================================================
+  // CAMBIAR CUATRIMESTRE
+  // ====================================================
 
-        return;
-      }
+  const handleCuatrimestreChange = (event) => {
+    const valor = event.target.value;
 
+    if (valor === "") {
+      setCuatrimestre("");
+      return;
+    }
 
-      setAnio(
-        Number(valor)
-      );
-    };
+    const cuatrimestreSeleccionado =
+      Number(valor);
 
+    if (
+      !Number.isSafeInteger(cuatrimestreSeleccionado) ||
+      ![1, 2, 3].includes(cuatrimestreSeleccionado)
+    ) {
+      setCuatrimestre("");
+      return;
+    }
 
-  /* =========================================================
-     CAMBIAR CUATRIMESTRE
-     ========================================================= */
+    setCuatrimestre(cuatrimestreSeleccionado);
+  };
 
-  const handleCuatrimestreChange =
-    (event) => {
+  // ====================================================
+  // ESTADOS DEL SELECTOR DE AÑOS
+  // ====================================================
 
-      const valor =
-        event.target.value;
+  const selectorAnioBloqueado =
+    loading ||
+    loadingAnios ||
+    Boolean(errorAnios) ||
+    years.length === 0;
 
+  const mensajeSelectorAnio =
+    loadingAnios
+      ? "Cargando años..."
+      : errorAnios
+        ? "Error al cargar los años"
+        : years.length === 0
+          ? "No hay años disponibles"
+          : "Seleccione un año";
 
-      if (
-        valor === ""
-      ) {
-
-        setCuatrimestre("");
-
-        return;
-      }
-
-
-      setCuatrimestre(
-        Number(valor)
-      );
-    };
-
-
-  /* =========================================================
-     RENDER
-     ========================================================= */
+  // ====================================================
+  // RENDER
+  // ====================================================
 
   return (
-
     <section className="system-card graficas-filter-card">
 
-      {/* =====================================================
-          TÍTULO DE FILTROS
-      ===================================================== */}
+      {/* ===============================================
+          ENCABEZADO
+      =============================================== */}
 
       <header className="graficas-filter-header">
 
@@ -121,23 +134,21 @@ const FiltrosGraficasRecoleccion = ({
           aria-hidden="true"
         />
 
-
         <h2 className="graficas-filter-title">
           Filtros de búsqueda
         </h2>
 
       </header>
 
-
-      {/* =====================================================
+      {/* ===============================================
           FILTROS
-      ===================================================== */}
+      =============================================== */}
 
       <div className="graficas-filter-grid">
 
-        {/* =================================================
+        {/* =============================================
             AÑO
-        ================================================= */}
+        ============================================= */}
 
         <div className="system-form-group graficas-filter-group">
 
@@ -145,52 +156,54 @@ const FiltrosGraficasRecoleccion = ({
             htmlFor="grafica-anio"
             className="system-form-label"
           >
-
             Año
 
             <span className="system-form-required">
               *
             </span>
-
           </label>
-
 
           <select
             id="grafica-anio"
             className="system-form-select"
             value={anio}
-            onChange={
-              handleAnioChange
-            }
-            disabled={loading}
+            onChange={handleAnioChange}
+            disabled={selectorAnioBloqueado}
           >
 
             <option value="">
-              Seleccione un año
+              {mensajeSelectorAnio}
             </option>
 
-
-            {years.map(
-              (year) => (
-
-                <option
-                  key={year}
-                  value={year}
-                >
-                  {year}
-                </option>
-
-              )
-            )}
+            {years.map((year) => (
+              <option
+                key={year}
+                value={year}
+              >
+                {year}
+              </option>
+            ))}
 
           </select>
 
+          {/* ===========================================
+              ERROR DE CONSULTA DE AÑOS
+          =========================================== */}
+
+          {errorAnios && (
+            <p
+              className="text-danger small mt-2"
+              role="alert"
+            >
+              {errorAnios}
+            </p>
+          )}
+
         </div>
 
-
-        {/* =================================================
+        {/* =============================================
             CUATRIMESTRE
-        ================================================= */}
+        ============================================= */}
 
         <div className="system-form-group graficas-filter-group">
 
@@ -198,23 +211,18 @@ const FiltrosGraficasRecoleccion = ({
             htmlFor="grafica-cuatrimestre"
             className="system-form-label"
           >
-
             Cuatrimestre
 
             <span className="system-form-required">
               *
             </span>
-
           </label>
-
 
           <select
             id="grafica-cuatrimestre"
             className="system-form-select"
             value={cuatrimestre}
-            onChange={
-              handleCuatrimestreChange
-            }
+            onChange={handleCuatrimestreChange}
             disabled={loading}
           >
 
@@ -222,16 +230,13 @@ const FiltrosGraficasRecoleccion = ({
               Seleccione un cuatrimestre
             </option>
 
-
             <option value="1">
               Primer cuatrimestre — Enero a Abril
             </option>
 
-
             <option value="2">
               Segundo cuatrimestre — Mayo a Agosto
             </option>
-
 
             <option value="3">
               Tercer cuatrimestre — Septiembre a Diciembre
@@ -241,19 +246,16 @@ const FiltrosGraficasRecoleccion = ({
 
         </div>
 
-
-        {/* =================================================
-            FILTRAR
-        ================================================= */}
+        {/* =============================================
+            BOTÓN FILTRAR
+        ============================================= */}
 
         <div className="graficas-filter-action">
 
           <button
             type="button"
             className="app-btn app-btn-primary app-btn-block"
-            onClick={
-              onFiltrar
-            }
+            onClick={onFiltrar}
             disabled={
               loading ||
               !filtrosCompletos
@@ -261,9 +263,7 @@ const FiltrosGraficasRecoleccion = ({
           >
 
             {loading ? (
-
               <>
-
                 <span
                   className="system-spinner system-spinner-small"
                   aria-hidden="true"
@@ -272,13 +272,9 @@ const FiltrosGraficasRecoleccion = ({
                 <span>
                   Consultando...
                 </span>
-
               </>
-
             ) : (
-
               <>
-
                 <FaSearch
                   aria-hidden="true"
                 />
@@ -286,9 +282,7 @@ const FiltrosGraficasRecoleccion = ({
                 <span>
                   Filtrar
                 </span>
-
               </>
-
             )}
 
           </button>
@@ -297,10 +291,9 @@ const FiltrosGraficasRecoleccion = ({
 
       </div>
 
-
-      {/* =====================================================
+      {/* ===============================================
           CAMPOS OBLIGATORIOS
-      ===================================================== */}
+      =============================================== */}
 
       <p className="graficas-required-help">
 
@@ -316,6 +309,5 @@ const FiltrosGraficasRecoleccion = ({
     </section>
   );
 };
-
 
 export default FiltrosGraficasRecoleccion;

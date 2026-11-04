@@ -21,6 +21,7 @@ const {
 
 const {
   obtenerGraficasRecoleccionCuatrimestral,
+  consultarAniosDisponibles,
 } = require(
   "../../services/graficasderecoleccion/GraficasRecoleccion.service"
 );
@@ -37,261 +38,147 @@ const {
   "../../exports/excel/graficasRecoleccionCuatrimestral.excel"
 );
 
+// ======================================================
+// CONSTANTES
+// ======================================================
 
-/* =========================================================
-   CONSTANTES
-   ========================================================= */
+const MODULO = "GRAFICAS_RECOLECCION";
 
-const MODULO =
-  "GRAFICAS_RECOLECCION";
+const REPORTE = "reporte_recoleccion_cuatrimestral";
 
-const REPORTE =
-  "reporte_recoleccion_cuatrimestral";
+// ======================================================
+// AUTENTICACIÓN
+// ======================================================
 
-
-/* =========================================================
-   AUTENTICACIÓN DEFENSIVA
-   ========================================================= */
-
-function requireAuth(
-  req,
-  res
-) {
-  if (
-    req.user?.id_usuario
-  ) {
+function requireAuth(req, res) {
+  if (req.user?.id_usuario) {
     return true;
   }
 
-
-  res
-    .status(401)
-    .json({
-      success:
-        false,
-
-      message:
-        "Usuario no autenticado.",
-    });
-
+  res.status(401).json({
+    success: false,
+    message: "Usuario no autenticado.",
+  });
 
   return false;
 }
 
+// ======================================================
+// OBTENER IP
+// ======================================================
 
-/* =========================================================
-   IP DE ORIGEN
-   ========================================================= */
-
-function getIp(
-  req
-) {
-  return (
-    req.headers[
-      "x-forwarded-for"
-    ]
+function getIp(req) {
+  return String(
+    req.headers["x-forwarded-for"]
       ?.split(",")[0] ||
     req.ip ||
     ""
   ).trim();
 }
 
-
-/* =========================================================
-   RESPONDER ERRORES CONTROLADOS
-   ========================================================= */
+// ======================================================
+// MANEJAR ERRORES
+// ======================================================
 
 function responderError(
   res,
   error,
-  mensajeInterno =
-    "Error interno del servidor."
+  mensajeInterno = "Error interno del servidor."
 ) {
   const statusCode =
-    (
-      Number.isSafeInteger(
-        error?.statusCode
-      ) &&
-      error.statusCode >= 400 &&
-      error.statusCode <= 599
-    )
+    Number.isSafeInteger(error?.statusCode) &&
+    error.statusCode >= 400 &&
+    error.statusCode <= 599
       ? error.statusCode
       : 500;
 
-
-  if (
-    statusCode !== 500
-  ) {
-    return res
-      .status(
-        statusCode
-      )
-      .json({
-        success:
-          false,
-
-        message:
-          error?.message ||
-          "No fue posible procesar la solicitud.",
-
-        type:
-          error?.type ||
-          "validation",
-
-        ...(
-          error?.code
-            ? {
-                code:
-                  error.code,
-              }
-            : {}
-        ),
-
-        ...(
-          error?.field
-            ? {
-                field:
-                  error.field,
-              }
-            : {}
-        ),
-      });
-  }
-
-
-  /*
-    No exponemos errores internos al frontend.
-  */
-
-  return res
-    .status(500)
-    .json({
-      success:
-        false,
+  if (statusCode !== 500) {
+    return res.status(statusCode).json({
+      success: false,
 
       message:
-        mensajeInterno,
+        error?.message ||
+        "No fue posible procesar la solicitud.",
+
+      type:
+        error?.type ||
+        "validation",
+
+      ...(error?.code
+        ? { code: error.code }
+        : {}),
+
+      ...(error?.field
+        ? { field: error.field }
+        : {}),
     });
+  }
+
+  return res.status(500).json({
+    success: false,
+    message: mensajeInterno,
+  });
 }
 
+// ======================================================
+// CONVERTIR VALIDACIÓN EN ERROR
+// ======================================================
 
-/* =========================================================
-   CONVERTIR VALIDACIÓN EN ERROR
-   ========================================================= */
+function crearErrorDesdeValidacion(validation) {
+  const error = new Error(
+    validation?.error?.message ||
+    "Los filtros de la exportación no son válidos."
+  );
 
-function crearErrorDesdeValidacion(
-  validation
-) {
-  const error =
-    new Error(
-      validation
-        ?.error
-        ?.message ||
-      "Los filtros de la exportación no son válidos."
-    );
-
-
-  error.statusCode =
-    validation?.status ||
-    400;
-
+  error.statusCode = validation?.status || 400;
 
   error.type =
-    validation
-      ?.error
-      ?.type ||
+    validation?.error?.type ||
     "validation";
 
-
-  if (
-    validation
-      ?.error
-      ?.code
-  ) {
-    error.code =
-      validation.error.code;
+  if (validation?.error?.code) {
+    error.code = validation.error.code;
   }
 
-
-  if (
-    validation
-      ?.error
-      ?.field
-  ) {
-    error.field =
-      validation.error.field;
+  if (validation?.error?.field) {
+    error.field = validation.error.field;
   }
-
 
   return error;
 }
 
+// ======================================================
+// RESUMEN PARA AUDITORÍA
+// ======================================================
 
-/* =========================================================
-   RESUMEN PARA AUDITORÍA
-   ========================================================= */
+function construirResumenAuditoria(resultado) {
+  const meses = Array.isArray(resultado?.data)
+    ? resultado.data
+    : [];
 
-function construirResumenAuditoria(
-  resultado
-) {
-  const meses =
-    Array.isArray(
-      resultado?.data
-    )
-      ? resultado.data
-      : [];
+  const totalGeneralLibras = meses.reduce(
+    (acumulado, mes) => {
+      const total = Number(
+        mes?.totales?.general || 0
+      );
 
-
-  const totalGeneralLibras =
-    meses.reduce(
-      (
-        acumulado,
-        mes
-      ) => {
-
-        const total =
-          Number(
-            mes
-              ?.totales
-              ?.general ||
-            0
-          );
-
-
-        return (
-          acumulado +
-          (
-            Number.isFinite(
-              total
-            )
-              ? total
-              : 0
-          )
-        );
-      },
-      0
-    );
-
+      return acumulado +
+        (Number.isFinite(total) ? total : 0);
+    },
+    0
+  );
 
   return {
     anio:
-      resultado
-        ?.filtros
-        ?.anio ||
+      resultado?.filtros?.anio ||
       null,
 
     cuatrimestre:
-      resultado
-        ?.filtros
-        ?.cuatrimestre ||
+      resultado?.filtros?.cuatrimestre ||
       null,
 
     meses:
-      Array.isArray(
-        resultado
-          ?.filtros
-          ?.meses
-      )
+      Array.isArray(resultado?.filtros?.meses)
         ? resultado.filtros.meses
         : [],
 
@@ -299,18 +186,13 @@ function construirResumenAuditoria(
       meses.length,
 
     total_general_libras:
-      Number(
-        totalGeneralLibras.toFixed(
-          2
-        )
-      ),
+      Number(totalGeneralLibras.toFixed(2)),
   };
 }
 
-
-/* =========================================================
-   AUDITORÍA FALLIDA
-   ========================================================= */
+// ======================================================
+// AUDITORÍA FALLIDA
+// ======================================================
 
 async function registrarAuditoriaFallida({
   req,
@@ -319,76 +201,49 @@ async function registrarAuditoriaFallida({
   filtros,
   error,
 }) {
-  /*
-    Auditoría requiere un UUID válido.
+  // La auditoría requiere un exportId válido.
+  // No registramos identificadores inventados.
 
-    No generamos valores falsos como "N/A".
-  */
-
-  if (
-    !exportId
-  ) {
+  if (!exportId) {
     return;
   }
-
 
   try {
     await registrarAuditoriaExportacion({
       usuario_id:
-        req.user?.id_usuario ||
-        0,
+        req.user?.id_usuario || 0,
 
       usuario:
-        req.user?.usuario ||
-        "N/A",
+        req.user?.usuario || "N/A",
 
       rol:
-        req.user?.rol ||
-        "N/A",
+        req.user?.rol || "N/A",
 
-      modulo:
-        MODULO,
-
-      reporte:
-        REPORTE,
-
+      modulo: MODULO,
+      reporte: REPORTE,
       formato,
 
-      export_id:
-        exportId,
+      export_id: exportId,
 
       filtros_json:
-        filtros || {
-          exportId,
-        },
+        filtros || { exportId },
 
-      total_registros:
-        0,
+      total_registros: 0,
+      resumen_json: null,
 
-      resumen_json:
-        null,
-
-      estado:
-        "FALLIDO",
+      estado: "FALLIDO",
 
       error_mensaje:
         error?.message ||
         `Error al generar ${formato}`,
 
-      ip_origen:
-        getIp(
-          req
-        ),
+      ip_origen: getIp(req),
 
       user_agent:
-        req.headers[
-          "user-agent"
-        ] || null,
+        req.headers["user-agent"] || null,
     });
 
-  } catch (
-    auditError
-  ) {
+  } catch (auditError) {
     console.error(
       `Error registrando auditoría fallida (${formato}):`,
       auditError
@@ -396,88 +251,82 @@ async function registrarAuditoriaFallida({
   }
 }
 
+// ======================================================
+// CONSULTAR AÑOS DISPONIBLES
+//
+// GET /api/graficas-recoleccion/anios-disponibles
+// ======================================================
 
-/* =========================================================
-   CONSULTAR GRÁFICAS CUATRIMESTRALES
+exports.getAniosDisponibles =
+  async function getAniosDisponibles(req, res) {
 
-   GET /api/graficas-recoleccion/cuatrimestral
-   ========================================================= */
+    if (!requireAuth(req, res)) {
+      return;
+    }
+
+    try {
+      const resultado =
+        await consultarAniosDisponibles();
+
+      return res.status(200).json({
+        success: true,
+
+        data: {
+          anioInicial: resultado.anioInicial,
+          anioActual: resultado.anioActual,
+          anios: resultado.anios,
+        },
+      });
+
+    } catch (error) {
+      console.error(
+        "Error getAniosDisponibles:",
+        error
+      );
+
+      return responderError(res, error);
+    }
+  };
+
+// ======================================================
+// CONSULTAR GRÁFICAS CUATRIMESTRALES
+//
+// GET /api/graficas-recoleccion/cuatrimestral
+// ======================================================
 
 exports.getGraficasRecoleccionCuatrimestral =
   async function getGraficasRecoleccionCuatrimestral(
     req,
     res
   ) {
+    // 1. Validar autenticación.
 
-    /* =====================================================
-       1. AUTENTICACIÓN
-       ===================================================== */
-
-    if (
-      !requireAuth(
-        req,
-        res
-      )
-    ) {
+    if (!requireAuth(req, res)) {
       return;
     }
 
+    // 2. Validar y normalizar filtros.
 
-    /* =====================================================
-       2. VALIDAR FILTROS
+    const validation = buildValidatedFilters({
+      source: req.query,
+    });
 
-       req.query NO es fuente de verdad.
-       ===================================================== */
-
-    const validation =
-      buildValidatedFilters({
-        source:
-          req.query,
-      });
-
-
-    if (
-      !validation.ok
-    ) {
+    if (!validation.ok) {
       return res
-        .status(
-          validation.status
-        )
+        .status(validation.status)
         .json({
-          success:
-            false,
-
+          success: false,
           ...validation.error,
         });
     }
 
-
-    /*
-      Desde este punto utilizamos exclusivamente los valores
-      normalizados por backend.
-    */
-
     const {
       anio,
       cuatrimestre,
-    } =
-      validation.filters;
-
+    } = validation.filters;
 
     try {
-
-      /* ===================================================
-         3. CONSULTAR SERVICE
-
-         PostgreSQL es la fuente de los datos.
-
-         El Service construye:
-         - meses
-         - categorías
-         - series
-         - totales
-         - promedios
-         =================================================== */
+      // 3. Consultar el backend.
 
       const resultado =
         await obtenerGraficasRecoleccionCuatrimestral({
@@ -485,340 +334,173 @@ exports.getGraficasRecoleccionCuatrimestral =
           cuatrimestre,
         });
 
+      // 4. Responder cuando no existen datos.
 
-      /* ===================================================
-         4. NO EXISTEN DATOS
-
-         IMPORTANTE:
-
-         - no creamos snapshot
-         - no habilitamos PDF
-         - no habilitamos Excel
-         - no enviamos gráficas vacías
-         =================================================== */
-
-      if (
-        !resultado.hayDatos
-      ) {
-        return res
-          .status(200)
-          .json({
-            success:
-              true,
-
-            message:
-              "No se encontraron registros de recolección para el año y cuatrimestre seleccionados.",
-
-            hay_datos:
-              false,
-
-            export_id:
-              null,
-
-            export_expires_at:
-              null,
-
-            export_expires_in_seconds:
-              null,
-
-            filtros: {
-              anio:
-                resultado
-                  .filtros
-                  .anio,
-
-              cuatrimestre:
-                resultado
-                  .filtros
-                  .cuatrimestre,
-
-              meses:
-                resultado
-                  .filtros
-                  .meses,
-            },
-
-            data:
-              [],
-          });
-      }
-
-
-      /* ===================================================
-         5. SNAPSHOT
-
-         Solo se crea cuando existen datos reales.
-
-         Guardamos únicamente criterios normalizados.
-         =================================================== */
-
-      const filtrosSnapshot = {
-        anio:
-          resultado
-            .filtros
-            .anio,
-
-        cuatrimestre:
-          resultado
-            .filtros
-            .cuatrimestre,
-      };
-
-
-      const snapshot =
-        await crearSnapshot({
-          usuarioId:
-            req.user.id_usuario,
-
-          modulo:
-            MODULO,
-
-          filtros:
-            filtrosSnapshot,
-        });
-
-
-      /* ===================================================
-         6. RESPUESTA CON DATOS
-         =================================================== */
-
-      return res
-        .status(200)
-        .json({
-          success:
-            true,
+      if (!resultado.hayDatos) {
+        return res.status(200).json({
+          success: true,
 
           message:
-            "Gráficas de recolección obtenidas correctamente.",
+            "No se encontraron registros de recolección para el año y cuatrimestre seleccionados.",
 
-          hay_datos:
-            true,
+          hay_datos: false,
 
-          export_id:
-            snapshot.exportId,
-
-          export_expires_at:
-            snapshot.expiresAt,
-
-          export_expires_in_seconds:
-            snapshot.expiresInSeconds,
+          export_id: null,
+          export_expires_at: null,
+          export_expires_in_seconds: null,
 
           filtros: {
-            anio:
-              resultado
-                .filtros
-                .anio,
+            anio: resultado.filtros.anio,
 
             cuatrimestre:
-              resultado
-                .filtros
-                .cuatrimestre,
+              resultado.filtros.cuatrimestre,
 
-            meses:
-              resultado
-                .filtros
-                .meses,
+            meses: resultado.filtros.meses,
           },
 
-          data:
-            resultado.data,
+          data: [],
         });
+      }
 
-    } catch (
-      error
-    ) {
+      // 5. Crear snapshot únicamente si existen datos.
+
+      const filtrosSnapshot = {
+        anio: resultado.filtros.anio,
+
+        cuatrimestre:
+          resultado.filtros.cuatrimestre,
+      };
+
+      const snapshot = await crearSnapshot({
+        usuarioId: req.user.id_usuario,
+
+        modulo: MODULO,
+
+        filtros: filtrosSnapshot,
+      });
+
+      // 6. Responder con los datos y el snapshot.
+
+      return res.status(200).json({
+        success: true,
+
+        message:
+          "Gráficas de recolección obtenidas correctamente.",
+
+        hay_datos: true,
+
+        export_id: snapshot.exportId,
+
+        export_expires_at:
+          snapshot.expiresAt,
+
+        export_expires_in_seconds:
+          snapshot.expiresInSeconds,
+
+        filtros: {
+          anio: resultado.filtros.anio,
+
+          cuatrimestre:
+            resultado.filtros.cuatrimestre,
+
+          meses: resultado.filtros.meses,
+        },
+
+        data: resultado.data,
+      });
+
+    } catch (error) {
       console.error(
         "Error getGraficasRecoleccionCuatrimestral:",
         error
       );
 
-
-      return responderError(
-        res,
-        error
-      );
+      return responderError(res, error);
     }
   };
 
-
-/* =========================================================
-   OBTENER DATOS PARA EXPORTACIÓN
-
-   Frontend envía solamente:
-
-   exportId
-
-   Backend:
-   exportId
-      ↓
-   snapshot
-      ↓
-   usuario
-      ↓
-   módulo
-      ↓
-   filtros almacenados
-      ↓
-   Validator
-      ↓
-   PostgreSQL
-      ↓
-   Service
-      ↓
-   información reconstruida
-   ========================================================= */
+// ======================================================
+// OBTENER DATOS PARA EXPORTACIÓN
+//
+// El exportId recupera los filtros almacenados.
+// El backend vuelve a consultar PostgreSQL.
+// ======================================================
 
 async function obtenerDatosExportacion({
   exportId,
   usuarioId,
 }) {
+  // 1. Recuperar snapshot.
 
-  /* =======================================================
-     1. RECUPERAR SNAPSHOT
-     ======================================================= */
+  const snapshot = await obtenerSnapshotValido({
+    exportId,
+    usuarioId,
+    modulo: MODULO,
+  });
 
-  const snapshot =
-    await obtenerSnapshotValido({
-      exportId,
+  // 2. Validar snapshot.
 
-      usuarioId,
+  if (!snapshot) {
+    const error = new Error(
+      "La exportación no está disponible. Presione 'Filtrar' nuevamente para habilitar PDF y Excel."
+    );
 
-      modulo:
-        MODULO,
-    });
-
-
-  /* =======================================================
-     2. SNAPSHOT INVÁLIDO
-     ======================================================= */
-
-  if (
-    !snapshot
-  ) {
-    const error =
-      new Error(
-        "La exportación no está disponible. Presione 'Filtrar' nuevamente para habilitar PDF y Excel."
-      );
-
-
-    error.statusCode =
-      400;
-
-    error.type =
-      "validation";
-
-    error.code =
-      "EXPORT_SNAPSHOT_INVALIDO";
-
+    error.statusCode = 400;
+    error.type = "validation";
+    error.code = "EXPORT_SNAPSHOT_INVALIDO";
 
     throw error;
   }
 
-
-  /* =======================================================
-     3. RECUPERAR FILTROS DEL SNAPSHOT
-     ======================================================= */
+  // 3. Recuperar los filtros del snapshot.
 
   const filtrosSnapshot =
-    snapshot.filtros_json ||
-    {};
+    snapshot.filtros_json || {};
 
+  // 4. Validar nuevamente los filtros.
 
-  /* =======================================================
-     4. VALIDAR NUEVAMENTE LOS FILTROS
-     ======================================================= */
+  const validation = buildValidatedFilters({
+    source: filtrosSnapshot,
+  });
 
-  const validation =
-    buildValidatedFilters({
-      source:
-        filtrosSnapshot,
-    });
-
-
-  if (
-    !validation.ok
-  ) {
-    throw crearErrorDesdeValidacion(
-      validation
-    );
+  if (!validation.ok) {
+    throw crearErrorDesdeValidacion(validation);
   }
 
-
-  /* =======================================================
-     5. VOLVER A CONSULTAR POSTGRESQL
-
-     No usamos datos guardados en React.
-     No usamos series enviadas por el navegador.
-     ======================================================= */
+  // 5. Consultar nuevamente PostgreSQL.
 
   const resultado =
     await obtenerGraficasRecoleccionCuatrimestral({
-      anio:
-        validation
-          .filters
-          .anio,
+      anio: validation.filters.anio,
 
       cuatrimestre:
-        validation
-          .filters
-          .cuatrimestre,
+        validation.filters.cuatrimestre,
     });
 
+  // 6. Evitar exportaciones vacías.
 
-  /* =======================================================
-     6. LOS DATOS YA NO EXISTEN
+  if (!resultado.hayDatos) {
+    const error = new Error(
+      "Ya no existen registros para generar esta exportación. Presione 'Filtrar' nuevamente."
+    );
 
-     El snapshot puede seguir vigente, pero PostgreSQL sigue
-     siendo la fuente de verdad.
-
-     Si los datos desaparecieron después de crear el
-     snapshot, no generamos un archivo vacío.
-     ======================================================= */
-
-  if (
-    !resultado.hayDatos
-  ) {
-    const error =
-      new Error(
-        "Ya no existen registros para generar esta exportación. Presione 'Filtrar' nuevamente."
-      );
-
-
-    error.statusCode =
-      409;
-
-    error.type =
-      "validation";
-
-    error.code =
-      "EXPORT_DATA_NOT_FOUND";
-
+    error.statusCode = 409;
+    error.type = "validation";
+    error.code = "EXPORT_DATA_NOT_FOUND";
 
     throw error;
   }
 
-
-  /* =======================================================
-     7. FILTROS AUTORITATIVOS
-     ======================================================= */
+  // 7. Devolver los filtros autoritativos.
 
   const filtros = {
-    anio:
-      resultado
-        .filtros
-        .anio,
+    anio: resultado.filtros.anio,
 
     cuatrimestre:
-      resultado
-        .filtros
-        .cuatrimestre,
+      resultado.filtros.cuatrimestre,
 
-    meses:
-      resultado
-        .filtros
-        .meses,
+    meses: resultado.filtros.meses,
   };
-
 
   return {
     filtros,
@@ -826,434 +508,250 @@ async function obtenerDatosExportacion({
   };
 }
 
-
-/* =========================================================
-   EXPORTAR PDF
-
-   GET
-   /api/graficas-recoleccion/cuatrimestral/export/pdf
-   ========================================================= */
+// ======================================================
+// EXPORTAR PDF
+//
+// GET /api/graficas-recoleccion/cuatrimestral/export/pdf
+// ======================================================
 
 exports.exportarPdf =
-  async function exportarPdf(
-    req,
-    res
-  ) {
+  async function exportarPdf(req, res) {
 
-    /* =====================================================
-       1. AUTENTICACIÓN
-       ===================================================== */
-
-    if (
-      !requireAuth(
-        req,
-        res
-      )
-    ) {
+    if (!requireAuth(req, res)) {
       return;
     }
 
+    // El frontend solamente envía exportId.
 
-    /* =====================================================
-       2. EXPORT ID
+    const exportId = String(
+      req.query?.exportId || ""
+    ).trim();
 
-       Es el único dato que recibe la exportación.
-       ===================================================== */
-
-    const exportId =
-      String(
-        req.query
-          ?.exportId ||
-        ""
-      ).trim();
-
-
-    if (
-      !exportId
-    ) {
-      return res
-        .status(400)
-        .json({
-          success:
-            false,
-
-          message:
-            "exportId es requerido.",
-
-          type:
-            "validation",
-
-          code:
-            "EXPORT_ID_REQUIRED",
-        });
+    if (!exportId) {
+      return res.status(400).json({
+        success: false,
+        message: "exportId es requerido.",
+        type: "validation",
+        code: "EXPORT_ID_REQUIRED",
+      });
     }
 
-
-    let filtros =
-      null;
-
+    let filtros = null;
 
     try {
-
-      /* ===================================================
-         3. RECONSTRUIR DATOS DESDE BACKEND
-         =================================================== */
+      // 1. Recuperar y reconstruir datos.
 
       const {
-        filtros:
-          filtrosExportacion,
-
+        filtros: filtrosExportacion,
         resultado,
-      } =
-        await obtenerDatosExportacion({
-          exportId,
+      } = await obtenerDatosExportacion({
+        exportId,
+        usuarioId: req.user.id_usuario,
+      });
 
-          usuarioId:
-            req.user.id_usuario,
-        });
+      filtros = filtrosExportacion;
 
-
-      filtros =
-        filtrosExportacion;
-
-
-      /* ===================================================
-         4. GENERAR PDF
-         =================================================== */
+      // 2. Generar PDF.
 
       const pdfBuffer =
         await buildGraficasRecoleccionCuatrimestralPdfBuffer({
           filtros,
 
-          generadoPor:
-            req.user,
+          generadoPor: req.user,
 
-          data:
-            resultado.data,
+          data: resultado.data,
         });
 
-
-      /* ===================================================
-         5. AUDITORÍA EXITOSA
-         =================================================== */
+      // 3. Auditoría exitosa.
 
       await registrarAuditoriaExportacion({
-        usuario_id:
-          req.user.id_usuario,
+        usuario_id: req.user.id_usuario,
 
         usuario:
-          req.user.usuario ||
-          "N/A",
+          req.user.usuario || "N/A",
 
         rol:
-          req.user.rol ||
-          "N/A",
+          req.user.rol || "N/A",
 
-        modulo:
-          MODULO,
+        modulo: MODULO,
+        reporte: REPORTE,
+        formato: "PDF",
 
-        reporte:
-          REPORTE,
+        export_id: exportId,
 
-        formato:
-          "PDF",
-
-        export_id:
-          exportId,
-
-        filtros_json:
-          filtros,
+        filtros_json: filtros,
 
         total_registros:
           resultado.data.length,
 
         resumen_json:
-          construirResumenAuditoria(
-            resultado
-          ),
+          construirResumenAuditoria(resultado),
 
-        estado:
-          "GENERADO",
+        estado: "GENERADO",
 
-        error_mensaje:
-          null,
+        error_mensaje: null,
 
-        ip_origen:
-          getIp(
-            req
-          ),
+        ip_origen: getIp(req),
 
         user_agent:
-          req.headers[
-            "user-agent"
-          ] || null,
+          req.headers["user-agent"] || null,
       });
 
-
-      /* ===================================================
-         6. RESPONDER PDF
-         =================================================== */
+      // 4. Responder PDF.
 
       res.setHeader(
         "Content-Type",
         "application/pdf"
       );
 
-
       res.setHeader(
         "Content-Disposition",
         'inline; filename="recoleccion_cuatrimestral.pdf"'
       );
 
-
       return res
         .status(200)
-        .send(
-          pdfBuffer
-        );
+        .send(pdfBuffer);
 
-    } catch (
-      error
-    ) {
+    } catch (error) {
       console.error(
         "Error exportarPdf (GraficasRecoleccion):",
         error
       );
 
-
       await registrarAuditoriaFallida({
         req,
-
-        formato:
-          "PDF",
-
+        formato: "PDF",
         exportId,
-
         filtros,
-
         error,
       });
 
-
-      return responderError(
-        res,
-        error
-      );
+      return responderError(res, error);
     }
   };
 
-
-/* =========================================================
-   EXPORTAR EXCEL
-
-   GET
-   /api/graficas-recoleccion/cuatrimestral/export/excel
-   ========================================================= */
+// ======================================================
+// EXPORTAR EXCEL
+//
+// GET /api/graficas-recoleccion/cuatrimestral/export/excel
+// ======================================================
 
 exports.exportarExcel =
-  async function exportarExcel(
-    req,
-    res
-  ) {
+  async function exportarExcel(req, res) {
 
-    /* =====================================================
-       1. AUTENTICACIÓN
-       ===================================================== */
-
-    if (
-      !requireAuth(
-        req,
-        res
-      )
-    ) {
+    if (!requireAuth(req, res)) {
       return;
     }
 
+    // El frontend solamente envía exportId.
 
-    /* =====================================================
-       2. EXPORT ID
-       ===================================================== */
+    const exportId = String(
+      req.query?.exportId || ""
+    ).trim();
 
-    const exportId =
-      String(
-        req.query
-          ?.exportId ||
-        ""
-      ).trim();
-
-
-    if (
-      !exportId
-    ) {
-      return res
-        .status(400)
-        .json({
-          success:
-            false,
-
-          message:
-            "exportId es requerido.",
-
-          type:
-            "validation",
-
-          code:
-            "EXPORT_ID_REQUIRED",
-        });
+    if (!exportId) {
+      return res.status(400).json({
+        success: false,
+        message: "exportId es requerido.",
+        type: "validation",
+        code: "EXPORT_ID_REQUIRED",
+      });
     }
 
-
-    let filtros =
-      null;
-
+    let filtros = null;
 
     try {
-
-      /* ===================================================
-         3. RECONSTRUIR DATOS DESDE BACKEND
-         =================================================== */
+      // 1. Recuperar y reconstruir datos.
 
       const {
-        filtros:
-          filtrosExportacion,
-
+        filtros: filtrosExportacion,
         resultado,
-      } =
-        await obtenerDatosExportacion({
-          exportId,
+      } = await obtenerDatosExportacion({
+        exportId,
+        usuarioId: req.user.id_usuario,
+      });
 
-          usuarioId:
-            req.user.id_usuario,
-        });
+      filtros = filtrosExportacion;
 
-
-      filtros =
-        filtrosExportacion;
-
-
-      /* ===================================================
-         4. GENERAR EXCEL
-         =================================================== */
+      // 2. Generar Excel.
 
       const excelBuffer =
         await buildGraficasRecoleccionCuatrimestralExcelBuffer({
           filtros,
 
-          generadoPor:
-            req.user,
+          generadoPor: req.user,
 
-          data:
-            resultado.data,
+          data: resultado.data,
         });
 
-
-      /* ===================================================
-         5. AUDITORÍA EXITOSA
-         =================================================== */
+      // 3. Auditoría exitosa.
 
       await registrarAuditoriaExportacion({
-        usuario_id:
-          req.user.id_usuario,
+        usuario_id: req.user.id_usuario,
 
         usuario:
-          req.user.usuario ||
-          "N/A",
+          req.user.usuario || "N/A",
 
         rol:
-          req.user.rol ||
-          "N/A",
+          req.user.rol || "N/A",
 
-        modulo:
-          MODULO,
+        modulo: MODULO,
+        reporte: REPORTE,
+        formato: "EXCEL",
 
-        reporte:
-          REPORTE,
+        export_id: exportId,
 
-        formato:
-          "EXCEL",
-
-        export_id:
-          exportId,
-
-        filtros_json:
-          filtros,
+        filtros_json: filtros,
 
         total_registros:
           resultado.data.length,
 
         resumen_json:
-          construirResumenAuditoria(
-            resultado
-          ),
+          construirResumenAuditoria(resultado),
 
-        estado:
-          "GENERADO",
+        estado: "GENERADO",
 
-        error_mensaje:
-          null,
+        error_mensaje: null,
 
-        ip_origen:
-          getIp(
-            req
-          ),
+        ip_origen: getIp(req),
 
         user_agent:
-          req.headers[
-            "user-agent"
-          ] || null,
+          req.headers["user-agent"] || null,
       });
 
-
-      /* ===================================================
-         6. RESPONDER EXCEL
-         =================================================== */
+      // 4. Responder Excel.
 
       res.setHeader(
         "Content-Type",
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
       );
 
-
       res.setHeader(
         "Content-Disposition",
         'attachment; filename="recoleccion_cuatrimestral.xlsx"'
       );
 
-
       return res
         .status(200)
         .send(
-          Buffer.from(
-            excelBuffer
-          )
+          Buffer.from(excelBuffer)
         );
 
-    } catch (
-      error
-    ) {
+    } catch (error) {
       console.error(
         "Error exportarExcel (GraficasRecoleccion):",
         error
       );
 
-
       await registrarAuditoriaFallida({
         req,
-
-        formato:
-          "EXCEL",
-
+        formato: "EXCEL",
         exportId,
-
         filtros,
-
         error,
       });
 
-
-      return responderError(
-        res,
-        error
-      );
+      return responderError(res, error);
     }
   };

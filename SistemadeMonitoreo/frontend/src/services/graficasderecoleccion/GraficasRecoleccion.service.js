@@ -2,235 +2,249 @@
 
 import apiClient from "../../utils/apiClient";
 
+// ======================================================
+// CONSTANTES
+// ======================================================
 
-/* =========================================================
-   CONSTANTES
-   ========================================================= */
+const EXPORT_TIMEOUT_MS = 60_000;
 
-const EXPORT_TIMEOUT_MS =
-  60_000;
+// ======================================================
+// OBTENER AÑOS DISPONIBLES
+//
+// El backend consulta PostgreSQL para determinar:
+//
+// - Año de la primera recolección.
+// - Año actual en Guatemala.
+// - Lista de años permitidos.
+//
+// No se generan años desde el frontend.
+// No se permiten años futuros.
+// ======================================================
 
+export async function obtenerAniosDisponibles() {
 
-/* =========================================================
-   OBTENER REPORTE CUATRIMESTRAL
+  const response = await apiClient.get(
+    "/graficas-recoleccion/anios-disponibles"
+  );
 
-   El frontend únicamente envía criterios:
+  const resultado = response.data;
 
-   - anio
-   - cuatrimestre
+  // ====================================================
+  // VALIDAR RESPUESTA
+  // ====================================================
 
-   El backend valida y construye:
-   - meses
-   - semanas
-   - series
-   - totales
-   - promedios
-   - export_id
-   ========================================================= */
+  if (
+    !resultado?.success ||
+    !resultado?.data ||
+    !Array.isArray(resultado.data.anios)
+  ) {
+    throw new Error(
+      "No fue posible obtener los años disponibles."
+    );
+  }
+
+  return {
+    anioInicial:
+      resultado.data.anioInicial,
+
+    anioActual:
+      resultado.data.anioActual,
+
+    anios:
+      resultado.data.anios,
+  };
+}
+
+// ======================================================
+// OBTENER GRÁFICAS CUATRIMESTRALES
+//
+// El frontend envía únicamente:
+//
+// - anio
+// - cuatrimestre
+//
+// El backend valida y construye:
+//
+// - Meses.
+// - Semanas.
+// - Series.
+// - Totales.
+// - Promedios.
+// - Snapshot de exportación.
+// ======================================================
 
 export async function obtenerGraficasCuatrimestrales({
   anio,
   cuatrimestre,
 }) {
-  const response =
-    await apiClient.get(
-      "/graficas-recoleccion/cuatrimestral",
-      {
-        params: {
-          anio,
-          cuatrimestre,
-        },
-      }
-    );
 
+  const response = await apiClient.get(
+    "/graficas-recoleccion/cuatrimestral",
+    {
+      params: {
+        anio,
+        cuatrimestre,
+      },
+    }
+  );
 
   return response.data;
 }
 
-
-/* =========================================================
-   OBTENER PDF
-
-   IMPORTANTE:
-
-   Para exportar NO enviamos:
-   - año
-   - cuatrimestre
-   - series
-   - totales
-   - promedios
-
-   Solamente exportId.
-   ========================================================= */
+// ======================================================
+// OBTENER PDF
+//
+// Para exportar solamente enviamos exportId.
+// No enviamos datos calculados desde React.
+// ======================================================
 
 export async function obtenerPdfCuatrimestral(
   exportId
 ) {
-  const response =
-    await apiClient.get(
-      "/graficas-recoleccion/cuatrimestral/export/pdf",
-      {
-        params: {
-          exportId,
-        },
 
-        responseType:
-          "blob",
+  const response = await apiClient.get(
+    "/graficas-recoleccion/cuatrimestral/export/pdf",
+    {
+      params: {
+        exportId,
+      },
 
-        timeout:
-          EXPORT_TIMEOUT_MS,
-      }
-    );
+      responseType: "blob",
 
+      timeout: EXPORT_TIMEOUT_MS,
+    }
+  );
 
   return response.data;
 }
 
-
-/* =========================================================
-   OBTENER EXCEL
-   ========================================================= */
+// ======================================================
+// OBTENER EXCEL
+//
+// Para exportar solamente enviamos exportId.
+// ======================================================
 
 export async function obtenerExcelCuatrimestral(
   exportId
 ) {
-  const response =
-    await apiClient.get(
-      "/graficas-recoleccion/cuatrimestral/export/excel",
-      {
-        params: {
-          exportId,
-        },
 
-        responseType:
-          "blob",
+  const response = await apiClient.get(
+    "/graficas-recoleccion/cuatrimestral/export/excel",
+    {
+      params: {
+        exportId,
+      },
 
-        timeout:
-          EXPORT_TIMEOUT_MS,
-      }
-    );
+      responseType: "blob",
 
+      timeout: EXPORT_TIMEOUT_MS,
+    }
+  );
 
   return response.data;
 }
 
-
-/* =========================================================
-   NORMALIZAR ERROR DEL BACKEND
-
-   Los endpoints normales devuelven JSON.
-
-   PDF y Excel utilizan responseType: "blob".
-   Cuando backend devuelve un 400/410/500, Axios puede
-   entregar también ese JSON convertido a Blob.
-
-   Aquí lo recuperamos para que SweetAlert2 pueda mostrar:
-
-   data.message
-   data.code
-   data.field
-   ========================================================= */
+// ======================================================
+// NORMALIZAR ERRORES DEL BACKEND
+//
+// Los endpoints normales devuelven JSON.
+//
+// Las exportaciones utilizan responseType: "blob".
+// Cuando ocurre un error, recuperamos el mensaje
+// para mostrarlo correctamente mediante SweetAlert2.
+// ======================================================
 
 export async function normalizarErrorApi(
   error
 ) {
-  const status =
-    Number(
-      error?.response?.status
-    ) || 500;
 
+  const status =
+    Number(error?.response?.status) || 500;
 
   let data =
     error?.response?.data;
 
-
-  /* =======================================================
-     ERROR COMO BLOB
-     ======================================================= */
+  // ====================================================
+  // ERROR RECIBIDO COMO BLOB
+  // ====================================================
 
   if (
     typeof Blob !== "undefined" &&
     data instanceof Blob
   ) {
+
     try {
+
       const texto =
         await data.text();
-
 
       if (
         texto &&
         texto.trim()
       ) {
+
         try {
+
           data =
-            JSON.parse(
-              texto
-            );
+            JSON.parse(texto);
 
         } catch {
+
           data = {
-            message:
-              texto.trim(),
+            message: texto.trim(),
           };
         }
 
       } else {
-        data =
-          null;
+
+        data = null;
       }
 
     } catch {
-      data =
-        null;
+
+      data = null;
     }
   }
 
-
-  /* =======================================================
-     ERROR COMO STRING
-     ======================================================= */
+  // ====================================================
+  // ERROR RECIBIDO COMO STRING
+  // ====================================================
 
   if (
-    typeof data ===
-    "string"
+    typeof data === "string"
   ) {
+
     try {
+
       data =
-        JSON.parse(
-          data
-        );
+        JSON.parse(data);
 
     } catch {
+
       data = {
-        message:
-          data,
+        message: data,
       };
     }
   }
 
-
-  /* =======================================================
-     ERROR SIN RESPUESTA DEL SERVIDOR
-     ======================================================= */
+  // ====================================================
+  // ERROR SIN RESPUESTA VÁLIDA
+  // ====================================================
 
   if (
     !data ||
-    typeof data !==
-      "object" ||
-    Array.isArray(
-      data
-    )
+    typeof data !== "object" ||
+    Array.isArray(data)
   ) {
+
     data = {
       message:
-        error?.code ===
-        "ECONNABORTED"
+        error?.code === "ECONNABORTED"
           ? "La solicitud tardó demasiado tiempo. Intente nuevamente."
           : error?.message ||
             "No fue posible comunicarse con el servidor.",
     };
   }
-
 
   return {
     status,
