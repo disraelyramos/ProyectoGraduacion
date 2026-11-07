@@ -248,10 +248,12 @@ async function consultarResumenRecoleccion() {
           total_en_libras
         )::int AS pesajes_disponibles,
 
-        TO_CHAR(
-          MAX(fecha_recoleccion),
-          'DD/MM/YYYY HH24:MI'
-        ) AS ultima_recoleccion
+    TO_CHAR(
+    MAX(fecha_recoleccion)
+        AT TIME ZONE 'UTC'
+        AT TIME ZONE 'America/Guatemala',
+    'DD/MM/YYYY HH24:MI'
+) AS ultima_recoleccion
 
       FROM registros
 
@@ -379,15 +381,15 @@ async function consultarResumenRecoleccion() {
         averagePerCollection:
           availableWeights > 0
             ? redondear(
-                collected / availableWeights
-              )
+              collected / availableWeights
+            )
             : 0,
 
         monthlyAverage:
           periodo === "year"
             ? redondear(
-                collected / mesesTranscurridos
-              )
+              collected / mesesTranscurridos
+            )
             : 0,
 
         lastCollection:
@@ -426,9 +428,9 @@ async function consultarResumenRecoleccion() {
         monthlyAverage:
           periodo === "year"
             ? redondear(
-                totalCollected /
-                  mesesTranscurridos
-              )
+              totalCollected /
+              mesesTranscurridos
+            )
             : 0,
       },
 
@@ -471,10 +473,10 @@ async function consultarResumenRecoleccion() {
       const percentage =
         totalActual > 0
           ? redondear(
-              (actual.collected /
-                totalActual) *
-                100
-            )
+            (actual.collected /
+              totalActual) *
+            100
+          )
           : 0;
 
       const comparison = compararPesos(
