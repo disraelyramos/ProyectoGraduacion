@@ -498,7 +498,7 @@ async function obtenerDatosRecoleccion({
     calculoDisponible
   ) {
     validarProcesoFoto4(proceso);
-    const esSimulacion = Boolean(proceso.es_simulacion);
+    
   } else {
     if (
       Number(proceso.contenedor_estado_id) ===
@@ -1104,7 +1104,6 @@ async function guardarRecoleccion({
       porcentaje_recolectado:
         porcentajeRecolectado,
 
-      demostracion: esSimulacion,
       fecha_recoleccion:
         recoleccion.fecha_recoleccion,
     };
