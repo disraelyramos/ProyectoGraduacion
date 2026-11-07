@@ -1340,11 +1340,6 @@ const ModalTotales = ({
 
                  {hayResultado && (
            <>
-           {resultadoVisual?.estado_medicion === "HISTORICO" && (
-             <div className="small text-muted mb-2">
-               Datos históricos de demostración. No se realizó un nuevo pesaje.
-             </div>
-           )}
            <Form>
 
             <Row>
