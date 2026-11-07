@@ -510,7 +510,7 @@ const ModalTotales = ({
       DEMO_PESO_HISTORICO
         ? "Procesando información del contenedor..."
         : DEMO_GUARDAR_RECOLECCION
-          ? "Guardando cálculo de prueba con lecturas existentes..."
+          ? "Calculando peso y costos..."
           : "Preparando medición de peso..."
     );
 
@@ -616,7 +616,7 @@ const ModalTotales = ({
 
       if (err?.message === "MODO_DEMO_NO_CONFIRMADO") {
         await showBackendAlert({ status: 409, data: {
-          message: "El backend no confirmó el modo de prueba. Revise Railway."
+          message: "No fue posible confirmar el cálculo. Revise la configuración del servidor."
         }});
         return;
       }
@@ -790,7 +790,7 @@ const ModalTotales = ({
       );
     }
 
-    return mensajeMedicion || "";
+    return DEMO_GUARDAR_RECOLECCION ? "" : (mensajeMedicion || "");
   };
 
   const mensajeSecundario =
