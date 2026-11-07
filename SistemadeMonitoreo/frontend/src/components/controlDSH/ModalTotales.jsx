@@ -1,4 +1,3 @@
-
 import React, {
   useEffect,
   useRef,
@@ -25,1183 +24,1544 @@ import apiClient from "../../utils/apiClient";
 
 import "../../styles/nuevo-registro.css";
 
+
 // ======================================================
-// CONFIGURACIÓN
+// CONFIGURACION DESDE .ENV
 // ======================================================
 
-const leerMilisegundos = (valor, predeterminado) => {
-  const numero = Number(valor);
+const leerMilisegundos = (
+  valor,
+  predeterminado
+) => {
 
-  return Number.isSafeInteger(numero) && numero > 0
+  const numero =
+    Number(valor);
+
+
+  return (
+    Number.isSafeInteger(numero) &&
+    numero > 0
+  )
     ? numero
     : predeterminado;
 };
 
-const INTERVALO_CONSULTA_MS = leerMilisegundos(
-  import.meta.env.VITE_MEDICION_PESO_POLL_MS,
-  700
-);
 
-const TIMEOUT_CALCULO_MS = leerMilisegundos(
-  import.meta.env.VITE_MEDICION_PESO_TIMEOUT_MS,
-  135000
-);
+const INTERVALO_CONSULTA_MS =
+  leerMilisegundos(
+    import.meta.env
+      .VITE_MEDICION_PESO_POLL_MS,
+    700
+  );
 
 
+const TIMEOUT_CALCULO_MS =
+  leerMilisegundos(
+    import.meta.env
+      .VITE_MEDICION_PESO_TIMEOUT_MS,
+    135000
+  );
 
-const DEMO_PESO_HISTORICO = true;
 
 // ======================================================
-// ENDPOINTS
+// CONSTANTES
 // ======================================================
 
-const URL_BASE =
-  "/control-dsh/registro-pesaje";
+const ESTADO_UI =
+  Object.freeze({
+
+    ESPERANDO:
+      "ESPERANDO",
+
+    PROCESANDO:
+      "PROCESANDO",
+
+    RESULTADO:
+      "RESULTADO",
+
+  });
+
+
+const ESTADO_MEDICION =
+  Object.freeze({
+
+    OBTENIENDO_LECTURA:
+      "OBTENIENDO_LECTURA",
+
+    PENDIENTE:
+      "PENDIENTE",
+
+    MIDIENDO:
+      "MIDIENDO",
+
+    ESTABILIZANDO:
+      "ESTABILIZANDO",
+
+    MOVIMIENTO_DETECTADO:
+      "MOVIMIENTO_DETECTADO",
+
+    COMPLETADO:
+      "COMPLETADO",
+
+    ERROR:
+      "ERROR",
+
+    TIMEOUT:
+      "TIMEOUT",
+
+    CANCELADO:
+      "CANCELADO",
+
+  });
+
+
+const ESTADOS_VALIDOS =
+  new Set(
+    Object.values(
+      ESTADO_MEDICION
+    )
+  );
+
 
 const URL_CALCULO =
-  `${URL_BASE}/calculo`;
+  "/control-dsh/registro-pesaje/calculo";
 
-const URL_PROCESO_ACTIVO =
-  `${URL_BASE}/proceso-activo`;
 
 // ======================================================
-// ESTADOS
+// HELPERS
 // ======================================================
 
-const ESTADO_UI = Object.freeze({
-  ESPERANDO: "ESPERANDO",
-  PROCESANDO: "PROCESANDO",
-  RESULTADO: "RESULTADO",
-  HISTORICO: "HISTORICO",
-});
+const obtenerNumero = (
+  valor
+) => {
 
-const ESTADO_MEDICION = Object.freeze({
-  OBTENIENDO_LECTURA: "OBTENIENDO_LECTURA",
-  PENDIENTE: "PENDIENTE",
-  MIDIENDO: "MIDIENDO",
-  ESTABILIZANDO: "ESTABILIZANDO",
-  MOVIMIENTO_DETECTADO: "MOVIMIENTO_DETECTADO",
-  COMPLETADO: "COMPLETADO",
-  ERROR: "ERROR",
-  TIMEOUT: "TIMEOUT",
-  CANCELADO: "CANCELADO",
-});
-
-const ESTADOS_VALIDOS = new Set(
-  Object.values(ESTADO_MEDICION)
-);
-
-// ======================================================
-// FUNCIONES AUXILIARES
-// ======================================================
-
-const obtenerNumero = (valor) => {
   if (
     valor === null ||
     valor === undefined ||
     valor === ""
   ) {
+
     return 0;
   }
 
-  const numero = Number(valor);
 
-  return Number.isFinite(numero)
+  const numero =
+    Number(valor);
+
+
+  return Number.isFinite(
+    numero
+  )
     ? numero
     : 0;
 };
 
-const obtenerTipoResiduo = (resultado) => {
-  const tipoId = Number(
-    resultado?.contenedor?.id_tipo_residuo ??
-    resultado?.id_tipo_residuo
-  );
+
+const obtenerTipoResiduo = (
+  resultado
+) => {
+
+  const tipoId =
+    Number(
+      resultado
+        ?.contenedor
+        ?.id_tipo_residuo ??
+      resultado
+        ?.id_tipo_residuo
+    );
+
 
   const tipos = {
+
     1: "Bioinfeccioso",
+
     2: "Punzocortante",
+
   };
+
 
   return tipos[tipoId] || "";
 };
 
-const normalizarEstado = (estado) => {
-  const valor = String(estado || "")
-    .trim()
-    .toUpperCase();
 
-  return ESTADOS_VALIDOS.has(valor)
-    ? valor
-    : null;
+const normalizarEstado = (
+  estado
+) => {
+
+  const valor =
+    String(
+      estado || ""
+    )
+      .trim()
+      .toUpperCase();
+
+
+  return ESTADOS_VALIDOS
+    .has(valor)
+      ? valor
+      : null;
 };
 
-const respuestaCalculoValida = (data) => {
+
+const respuestaCalculoValida = (
+  data
+) => {
+
   if (
     !data ||
     typeof data !== "object" ||
     data.estado_medicion !==
       ESTADO_MEDICION.COMPLETADO
   ) {
+
     return false;
   }
 
-  const peso = Number(data.total_en_libras);
-  const costo = Number(data.total_costo_q);
+
+  const peso =
+    Number(
+      data.total_en_libras
+    );
+
+
+  const costo =
+    Number(
+      data.total_costo_q
+    );
+
 
   return (
-    data.total_en_libras !== null &&
-    data.total_en_libras !== undefined &&
-    data.total_costo_q !== null &&
-    data.total_costo_q !== undefined &&
-    Number.isFinite(peso) &&
+
+    data.total_en_libras !==
+      null &&
+
+    data.total_en_libras !==
+      undefined &&
+
+    data.total_costo_q !==
+      null &&
+
+    data.total_costo_q !==
+      undefined &&
+
+    Number.isFinite(
+      peso
+    ) &&
+
     peso >= 0 &&
-    Number.isFinite(costo) &&
+
+    Number.isFinite(
+      costo
+    ) &&
+
     costo >= 0
+
   );
 };
 
-// Se muestra la fecha enviada por el backend.
-// Si la BD usa timestamp sin zona horaria,
-// se debe verificar su interpretación.
-
-const formatearFecha = (valor) => {
-  if (!valor) {
-    return "No disponible";
-  }
-
-  const fecha = new Date(valor);
-
-  if (Number.isNaN(fecha.getTime())) {
-    return String(valor);
-  }
-
-  return fecha.toLocaleString("es-GT", {
-    dateStyle: "short",
-    timeStyle: "medium",
-    timeZone: "America/Guatemala",
-  });
-};
 
 // ======================================================
 // COMPONENTE
 // ======================================================
 
 const ModalTotales = ({
+
   show,
+
   handleClose,
+
   handleShowRecoleccion,
+
   onCancel,
+
 }) => {
 
+
   // ====================================================
-  // ESTADOS VISUALES
+  // ESTADOS
   // ====================================================
 
   const [
     estadoUI,
     setEstadoUI,
-  ] = useState(ESTADO_UI.ESPERANDO);
+  ] =
+    useState(
+      ESTADO_UI.ESPERANDO
+    );
+
 
   const [
     resultadoVisual,
     setResultadoVisual,
-  ] = useState(null);
+  ] =
+    useState(null);
 
-  const [
-    resultadoHistorico,
-    setResultadoHistorico,
-  ] = useState(null);
 
   const [
     estadoMedicion,
     setEstadoMedicion,
-  ] = useState(null);
+  ] =
+    useState(null);
+
 
   const [
     mensajeMedicion,
     setMensajeMedicion,
-  ] = useState("");
+  ] =
+    useState("");
+
 
   // ====================================================
   // REFERENCIAS
   // ====================================================
 
-  const solicitudEnCursoRef = useRef(false);
+  const solicitudEnCursoRef =
+    useRef(false);
 
-  const pollingActivoRef = useRef(false);
 
-  const pollingTimerRef = useRef(null);
+  const pollingActivoRef =
+    useRef(false);
 
-  const generacionPollingRef = useRef(0);
 
-  const generacionCalculoRef = useRef(0);
+  const pollingTimerRef =
+    useRef(null);
+
+
+  const generacionPollingRef =
+    useRef(0);
+
+
+  const generacionCalculoRef =
+    useRef(0);
+
 
   // ====================================================
-  // DETENER CONSULTAS AUTOMÁTICAS
+  // DETENER POLLING
   // ====================================================
 
   const detenerPolling = () => {
-    pollingActivoRef.current = false;
 
-    generacionPollingRef.current += 1;
+    pollingActivoRef.current =
+      false;
 
-    if (pollingTimerRef.current !== null) {
-      clearTimeout(pollingTimerRef.current);
-      pollingTimerRef.current = null;
+
+    generacionPollingRef.current +=
+      1;
+
+
+    if (
+      pollingTimerRef.current !==
+      null
+    ) {
+
+      clearTimeout(
+        pollingTimerRef.current
+      );
+
+
+      pollingTimerRef.current =
+        null;
     }
   };
 
+
   // ====================================================
-  // LIMPIEZA AL DESMONTAR
+  // LIMPIEZA
   // ====================================================
 
   useEffect(() => {
+
     return () => {
-      pollingActivoRef.current = false;
 
-      generacionPollingRef.current += 1;
-      generacionCalculoRef.current += 1;
+      pollingActivoRef.current =
+        false;
 
-      if (pollingTimerRef.current !== null) {
-        clearTimeout(pollingTimerRef.current);
+
+      generacionPollingRef.current +=
+        1;
+
+
+      generacionCalculoRef.current +=
+        1;
+
+
+      if (
+        pollingTimerRef.current !==
+        null
+      ) {
+
+        clearTimeout(
+          pollingTimerRef.current
+        );
       }
     };
+
   }, []);
+
 
   // ====================================================
   // REINICIAR AL ABRIR
   // ====================================================
 
   useEffect(() => {
+
     if (!show) {
-      generacionCalculoRef.current += 1;
-      detenerPolling();
+
       return;
     }
 
+
     detenerPolling();
 
-    solicitudEnCursoRef.current = false;
 
-    generacionCalculoRef.current += 1;
+    solicitudEnCursoRef.current =
+      false;
 
-    setEstadoUI(ESTADO_UI.ESPERANDO);
 
-    setResultadoVisual(null);
-    setResultadoHistorico(null);
+    generacionCalculoRef.current +=
+      1;
 
-    setEstadoMedicion(null);
-    setMensajeMedicion("");
+
+    setEstadoUI(
+      ESTADO_UI.ESPERANDO
+    );
+
+
+    setResultadoVisual(
+      null
+    );
+
+
+    setEstadoMedicion(
+      null
+    );
+
+
+    setMensajeMedicion(
+      ""
+    );
 
   }, [show]);
+
 
   // ====================================================
   // ESTADOS DERIVADOS
   // ====================================================
 
   const calculando =
-    estadoUI === ESTADO_UI.PROCESANDO;
+    estadoUI ===
+    ESTADO_UI.PROCESANDO;
+
 
   const hayResultado =
-    estadoUI === ESTADO_UI.RESULTADO &&
-    resultadoVisual !== null;
 
-  const hayHistorico =
-    estadoUI === ESTADO_UI.HISTORICO &&
-    resultadoHistorico !== null;
+    estadoUI ===
+      ESTADO_UI.RESULTADO &&
+
+    resultadoVisual !==
+      null;
+
 
   const movimientoDetectado =
+
     estadoMedicion ===
-    ESTADO_MEDICION.MOVIMIENTO_DETECTADO;
+    ESTADO_MEDICION
+      .MOVIMIENTO_DETECTADO;
+
 
   const estabilizando =
+
     estadoMedicion ===
-    ESTADO_MEDICION.ESTABILIZANDO;
+    ESTADO_MEDICION
+      .ESTABILIZANDO;
+
 
   // ====================================================
   // ACTUALIZAR ESTADO DESDE BACKEND
   // ====================================================
 
-  const aplicarEstadoBackend = (data) => {
+  const aplicarEstadoBackend = (
+    data
+  ) => {
+
     if (
       !data ||
       typeof data !== "object"
     ) {
+
       return;
     }
 
-    const estado = normalizarEstado(
-      data.estado_medicion
-    );
 
-    if (!estado) {
-      return;
-    }
-
-    setEstadoMedicion(estado);
-
-    setMensajeMedicion(
-      typeof data.mensaje === "string"
-        ? data.mensaje
-        : ""
-    );
-  };
-
-  // ====================================================
-  // CONSULTAR ESTADO DE MEDICIÓN FÍSICA
-  // ====================================================
-
-  const consultarEstadoMedicion = async (
-    generacion
-  ) => {
-    try {
-      const res = await apiClient.get(
-        `${URL_CALCULO}/estado`,
-        {
-          timeout: 5000,
-        }
+    const estado =
+      normalizarEstado(
+        data.estado_medicion
       );
 
-      if (
-        !pollingActivoRef.current ||
-        generacion !==
-          generacionPollingRef.current
-      ) {
-        return;
-      }
 
-      aplicarEstadoBackend(res?.data);
+    if (!estado) {
 
-    } catch (error) {
-      // El POST /calculo controla errores finales.
+      return;
     }
+
+
+    setEstadoMedicion(
+      estado
+    );
+
+
+    setMensajeMedicion(
+
+      typeof data.mensaje ===
+        "string"
+
+        ? data.mensaje
+
+        : ""
+
+    );
   };
 
+
   // ====================================================
-  // INICIAR POLLING FÍSICO
+  // CONSULTAR ESTADO DE MEDICION
+  // ====================================================
+
+  const consultarEstadoMedicion =
+    async (
+      generacion
+    ) => {
+
+      try {
+
+        const res =
+          await apiClient.get(
+
+            `${URL_CALCULO}/estado`,
+
+            {
+              timeout: 5000,
+            }
+          );
+
+
+        if (
+
+          !pollingActivoRef
+            .current ||
+
+          generacion !==
+            generacionPollingRef
+              .current
+
+        ) {
+
+          return;
+        }
+
+
+        aplicarEstadoBackend(
+          res?.data
+        );
+
+
+      } catch (error) {
+
+        /*
+         * El POST /calculo
+         * controla errores finales.
+         *
+         * No mostramos alertas
+         * repetidas durante polling.
+         */
+      }
+    };
+
+
+  // ====================================================
+  // INICIAR POLLING
   // ====================================================
 
   const iniciarPolling = () => {
+
     detenerPolling();
 
-    pollingActivoRef.current = true;
+
+    pollingActivoRef.current =
+      true;
+
 
     const generacion =
-      generacionPollingRef.current;
+      generacionPollingRef
+        .current;
 
-    const ejecutar = async () => {
-      if (
-        !pollingActivoRef.current ||
-        generacion !==
-          generacionPollingRef.current
-      ) {
-        return;
-      }
 
-      await consultarEstadoMedicion(generacion);
+    const ejecutar =
+      async () => {
 
-      if (
-        !pollingActivoRef.current ||
-        generacion !==
-          generacionPollingRef.current
-      ) {
-        return;
-      }
+        if (
 
-      pollingTimerRef.current = setTimeout(
-        ejecutar,
-        INTERVALO_CONSULTA_MS
-      );
-    };
+          !pollingActivoRef
+            .current ||
+
+          generacion !==
+            generacionPollingRef
+              .current
+
+        ) {
+
+          return;
+        }
+
+
+        await consultarEstadoMedicion(
+          generacion
+        );
+
+
+        if (
+
+          !pollingActivoRef
+            .current ||
+
+          generacion !==
+            generacionPollingRef
+              .current
+
+        ) {
+
+          return;
+        }
+
+
+        pollingTimerRef.current =
+          setTimeout(
+
+            ejecutar,
+
+            INTERVALO_CONSULTA_MS
+
+          );
+      };
+
 
     ejecutar();
   };
 
-  // ====================================================
-  // CONSULTAR ÚLTIMO PESO HISTÓRICO
-  // ====================================================
-  //
-  // Solo se utiliza cuando:
-  // VITE_DEMO_PESO_HISTORICO=true
-  //
-  // No ejecuta POST /calculo.
-  // No crea una solicitud de pesaje.
-  // No guarda costos.
-  // No permite continuar a recolección.
-  // ====================================================
-
-  const consultarPesoHistorico = async (
-    generacion
-  ) => {
-    const procesoRes = await apiClient.get(
-      URL_PROCESO_ACTIVO,
-      {
-        timeout: 10000,
-      }
-    );
-
-    const procesoData = procesoRes?.data;
-
-    if (
-      procesoData?.tiene_proceso_activo !== true ||
-      !procesoData?.proceso
-    ) {
-      throw new Error(
-        "NO_EXISTE_PROCESO_ACTIVO"
-      );
-    }
-
-    const proceso = procesoData.proceso;
-
-    const contenedorId = Number(
-      proceso.contenedor_id
-    );
-
-    if (
-      !Number.isSafeInteger(contenedorId) ||
-      contenedorId <= 0
-    ) {
-      throw new Error(
-        "CONTENEDOR_INVALIDO"
-      );
-    }
-
-    const historicoRes = await apiClient.get(
-      `${URL_BASE}/ultimo-peso/${contenedorId}`,
-      {
-        timeout: 10000,
-      }
-    );
-
-    if (
-      generacion !==
-      generacionCalculoRef.current
-    ) {
-      return;
-    }
-
-    const historico = historicoRes?.data;
-
-    if (
-      historico?.disponible !== true ||
-      historico?.origen !== "historial" ||
-      historico?.lectura_historica !== true
-    ) {
-      throw new Error(
-        "SIN_PESO_HISTORICO"
-      );
-    }
-
-    const peso = Number(historico.peso_lb);
-
-    if (
-      !Number.isFinite(peso) ||
-      peso < 0
-    ) {
-      throw new Error(
-        "PESO_HISTORICO_INVALIDO"
-      );
-    }
-
-    setResultadoHistorico({
-      ...historico,
-      peso_lb: peso,
-      id_tipo_residuo:
-        proceso.id_tipo_residuo,
-      contenedor_id: contenedorId,
-    });
-
-    setEstadoUI(ESTADO_UI.HISTORICO);
-  };
 
   // ====================================================
-  // MOSTRAR ERRORES
+  // CANCELAR
   // ====================================================
 
-  const mostrarErrorCalculo = async (error) => {
-    const erroresLocales = {
-      NO_EXISTE_PROCESO_ACTIVO:
-        "No existe un proceso activo para consultar el peso.",
+  const handleCancelar = () => {
 
-      CONTENEDOR_INVALIDO:
-        "No fue posible identificar el contenedor.",
-
-      SIN_PESO_HISTORICO:
-        "El contenedor no tiene lecturas históricas de peso.",
-
-      PESO_HISTORICO_INVALIDO:
-        "El peso almacenado no es válido.",
-
-      RESPUESTA_INVALIDA:
-        "El servidor devolvió una respuesta de cálculo inválida.",
-    };
-
-    if (erroresLocales[error?.message]) {
-      await showBackendAlert({
-        status: 400,
-        data: {
-          message:
-            erroresLocales[error.message],
-        },
-      });
+    if (
+      solicitudEnCursoRef
+        .current
+    ) {
 
       return;
     }
 
-    const esTimeout =
-      error?.code === "ECONNABORTED" ||
-      error?.code === "ETIMEDOUT";
 
-    if (esTimeout) {
-      await showBackendAlert({
-        status: 504,
-        data: {
-          message:
-            "No se recibió una respuesta del servidor dentro del tiempo esperado.",
-        },
-      });
+    showConfirmAlert(
 
-      return;
-    }
+      "¿Desea cancelar el proceso?",
 
-    await showBackendAlert({
-      status: error?.response?.status || 500,
-      data: error?.response?.data || {
-        message:
-          "No fue posible obtener la medición de peso.",
+      "Si confirma, el proceso actual será cancelado y deberá iniciar uno nuevo.",
+
+      async () => {
+
+        await onCancel?.();
+
       },
-    });
+
+      null
+
+    );
   };
+
 
   // ====================================================
   // CALCULAR PESO
   // ====================================================
-  //
-  // DEMO:
-  //   GET del último peso almacenado.
-  //
-  // NORMAL:
-  //   POST /calculo y espera del HX711.
-  // ====================================================
 
-  const handleCalcular = async () => {
-    if (solicitudEnCursoRef.current) {
-      return;
-    }
+  const handleCalcular =
+    async () => {
 
-    solicitudEnCursoRef.current = true;
-
-    const generacion =
-      ++generacionCalculoRef.current;
-
-    setResultadoVisual(null);
-    setResultadoHistorico(null);
-
-    setEstadoMedicion(
-      ESTADO_MEDICION.OBTENIENDO_LECTURA
-    );
-
-    setMensajeMedicion(
-      DEMO_PESO_HISTORICO
-        ? "Consultando último peso registrado..."
-        : "Preparando medición de peso..."
-    );
-
-    setEstadoUI(ESTADO_UI.PROCESANDO);
-
-    try {
-      // ================================================
-      // MODO DEMOSTRACIÓN
-      // ================================================
-
-      if (DEMO_PESO_HISTORICO) {
-        await consultarPesoHistorico(
-          generacion
-        );
+      if (
+        solicitudEnCursoRef
+          .current
+      ) {
 
         return;
       }
 
-      // ================================================
-      // MODO NORMAL - MÓDULO HX711
-      // ================================================
+
+      solicitudEnCursoRef.current =
+        true;
+
+
+      const generacionCalculo =
+        ++generacionCalculoRef
+          .current;
+
+
+      setResultadoVisual(
+        null
+      );
+
+
+      setEstadoMedicion(
+
+        ESTADO_MEDICION
+          .OBTENIENDO_LECTURA
+
+      );
+
+
+      setMensajeMedicion(
+
+        "Preparando medición de peso..."
+
+      );
+
+
+      setEstadoUI(
+
+        ESTADO_UI.PROCESANDO
+
+      );
+
 
       iniciarPolling();
 
-      const res = await apiClient.post(
-        URL_CALCULO,
-        {},
-        {
-          timeout: TIMEOUT_CALCULO_MS,
+
+      try {
+
+        /*
+         * El frontend NO envía:
+         *
+         * - peso
+         * - costo
+         * - porcentaje
+         * - contenedor
+         *
+         * El backend determina
+         * y valida todo.
+         */
+
+        const res =
+          await apiClient.post(
+
+            URL_CALCULO,
+
+            {},
+
+            {
+              timeout:
+                TIMEOUT_CALCULO_MS,
+            }
+
+          );
+
+
+        if (
+
+          generacionCalculo !==
+          generacionCalculoRef
+            .current
+
+        ) {
+
+          return;
         }
-      );
+
+
+        detenerPolling();
+
+
+        const data =
+          res?.data;
+
+
+        if (
+          !respuestaCalculoValida(
+            data
+          )
+        ) {
+
+          throw new Error(
+            "RESPUESTA_INVALIDA"
+          );
+        }
+
+
+        aplicarEstadoBackend(
+          data
+        );
+
+
+        setResultadoVisual(
+          data
+        );
+
+
+        setEstadoUI(
+
+          ESTADO_UI.RESULTADO
+
+        );
+
+
+      } catch (err) {
+
+        if (
+
+          generacionCalculo !==
+          generacionCalculoRef
+            .current
+
+        ) {
+
+          return;
+        }
+
+
+        detenerPolling();
+
+
+        setEstadoUI(
+
+          ESTADO_UI.ESPERANDO
+
+        );
+
+
+        setResultadoVisual(
+          null
+        );
+
+
+        const esTimeoutAxios =
+
+          err?.code ===
+            "ECONNABORTED" ||
+
+          err?.code ===
+            "ETIMEDOUT";
+
+
+        if (
+          err?.message ===
+          "RESPUESTA_INVALIDA"
+        ) {
+
+          await showBackendAlert({
+
+            status: 502,
+
+            data: {
+
+              message:
+                "El servidor devolvió una respuesta de cálculo inválida.",
+
+            },
+
+          });
+
+
+          return;
+        }
+
+
+        if (
+          esTimeoutAxios
+        ) {
+
+          await showBackendAlert({
+
+            status: 504,
+
+            data: {
+
+              message:
+                "No se recibió una respuesta del servidor dentro del tiempo esperado. Verifique el estado del proceso antes de intentar nuevamente.",
+
+            },
+
+          });
+
+
+          return;
+        }
+
+
+        await showBackendAlert({
+
+          status:
+            err?.response
+              ?.status ||
+            500,
+
+          data:
+            err?.response
+              ?.data ||
+            {
+
+              message:
+                "No fue posible realizar la medición de peso.",
+
+            },
+
+        });
+
+
+      } finally {
+
+        if (
+
+          generacionCalculo ===
+          generacionCalculoRef
+            .current
+
+        ) {
+
+          detenerPolling();
+
+
+          solicitudEnCursoRef
+            .current =
+            false;
+        }
+      }
+    };
+
+
+  // ====================================================
+  // CONTINUAR A RECOLECCION
+  // ====================================================
+
+  const handleContinuar =
+    () => {
 
       if (
-        generacion !==
-        generacionCalculoRef.current
+
+        !hayResultado ||
+
+        calculando ||
+
+        solicitudEnCursoRef
+          .current
+
       ) {
+
         return;
       }
 
-      detenerPolling();
 
-      const data = res?.data;
+      handleShowRecoleccion?.();
+    };
 
-      if (!respuestaCalculoValida(data)) {
-        throw new Error(
-          "RESPUESTA_INVALIDA"
+
+  // ====================================================
+  // DATOS DEL RESULTADO
+  // ====================================================
+
+  const totalLb =
+    obtenerNumero(
+
+      resultadoVisual
+        ?.total_en_libras
+
+    );
+
+
+  const porcentajeLlenado =
+    obtenerNumero(
+
+      resultadoVisual
+        ?.porcentaje_llenado
+
+    );
+
+
+  const costoAplicado =
+    obtenerNumero(
+
+      resultadoVisual
+        ?.costo_por_libra_aplicado
+
+    );
+
+
+  const totalCosto =
+    obtenerNumero(
+
+      resultadoVisual
+        ?.total_costo_q
+
+    );
+
+
+  const tipoTexto =
+    obtenerTipoResiduo(
+      resultadoVisual
+    );
+
+
+  // ====================================================
+  // MENSAJES DURANTE MEDICION
+  // ====================================================
+
+  const obtenerMensajePrincipal =
+    () => {
+
+      if (
+        movimientoDetectado
+      ) {
+
+        return (
+          "MOVIMIENTO DETECTADO"
         );
       }
 
-      aplicarEstadoBackend(data);
 
-      setResultadoVisual(data);
-
-      setEstadoUI(ESTADO_UI.RESULTADO);
-
-    } catch (error) {
       if (
-        generacion !==
-        generacionCalculoRef.current
+        estabilizando
       ) {
-        return;
+
+        return (
+          "NO MUEVA EL CONTENEDOR MIENTRAS SE CALCULA EL PESO"
+        );
       }
 
-      detenerPolling();
 
-      setResultadoVisual(null);
-      setResultadoHistorico(null);
-
-      setEstadoUI(ESTADO_UI.ESPERANDO);
-
-      await mostrarErrorCalculo(error);
-
-    } finally {
       if (
-        generacion ===
-        generacionCalculoRef.current
+        estadoMedicion ===
+        ESTADO_MEDICION.MIDIENDO
       ) {
-        detenerPolling();
-        solicitudEnCursoRef.current = false;
+
+        return (
+          "CALCULANDO PESO"
+        );
       }
-    }
-  };
 
-  // ====================================================
-  // CONTINUAR A RECOLECCIÓN
-  // ====================================================
 
-  const handleContinuar = () => {
-    // Nunca permite continuar usando
-    // una consulta histórica.
+      if (
+        estadoMedicion ===
+        ESTADO_MEDICION.PENDIENTE
+      ) {
 
-    if (
-      !hayResultado ||
-      calculando ||
-      solicitudEnCursoRef.current ||
-      DEMO_PESO_HISTORICO
-    ) {
-      return;
-    }
+        return (
+          "ESPERANDO MÓDULO DE PESO"
+        );
+      }
 
-    handleShowRecoleccion?.();
-  };
 
-  // ====================================================
-  // CANCELAR PROCESO
-  // ====================================================
-
-  const handleCancelar = () => {
-    if (solicitudEnCursoRef.current) {
-      return;
-    }
-
-    showConfirmAlert(
-      "¿Desea cancelar el proceso?",
-      "Si confirma, el proceso actual será cancelado y deberá iniciar uno nuevo.",
-      async () => {
-        await onCancel?.();
-      },
-      null
-    );
-  };
-
-  // ====================================================
-  // VOLVER A LA PANTALLA DE CÁLCULO
-  // ====================================================
-
-  const handleVolver = () => {
-    if (solicitudEnCursoRef.current) {
-      return;
-    }
-
-    setResultadoHistorico(null);
-    setResultadoVisual(null);
-
-    setEstadoUI(ESTADO_UI.ESPERANDO);
-  };
-
-  // ====================================================
-  // DATOS DEL RESULTADO REAL
-  // ====================================================
-
-  const totalLb = obtenerNumero(
-    resultadoVisual?.total_en_libras
-  );
-
-  const porcentajeLlenado = obtenerNumero(
-    resultadoVisual?.porcentaje_llenado
-  );
-
-  const costoAplicado = obtenerNumero(
-    resultadoVisual?.costo_por_libra_aplicado
-  );
-
-  const totalCosto = obtenerNumero(
-    resultadoVisual?.total_costo_q
-  );
-
-  const tipoTexto = obtenerTipoResiduo(
-    resultadoVisual
-  );
-
-  // ====================================================
-  // DATOS HISTÓRICOS
-  // ====================================================
-
-  const pesoHistorico = obtenerNumero(
-    resultadoHistorico?.peso_lb
-  );
-
-  const tipoHistorico = obtenerTipoResiduo(
-    resultadoHistorico
-  );
-
-  const fechaHistorica = formatearFecha(
-    resultadoHistorico?.fecha_hora
-  );
-
-  // ====================================================
-  // MENSAJES DEL MÓDULO
-  // ====================================================
-
-  const obtenerMensajePrincipal = () => {
-    if (DEMO_PESO_HISTORICO) {
-      return "CONSULTANDO PESO REGISTRADO";
-    }
-
-    if (movimientoDetectado) {
-      return "MOVIMIENTO DETECTADO";
-    }
-
-    if (estabilizando) {
       return (
-        "NO MUEVA EL CONTENEDOR MIENTRAS SE CALCULA EL PESO"
-      );
-    }
 
-    if (
-      estadoMedicion ===
-      ESTADO_MEDICION.MIDIENDO
-    ) {
-      return "CALCULANDO PESO";
-    }
-
-    if (
-      estadoMedicion ===
-      ESTADO_MEDICION.PENDIENTE
-    ) {
-      return "ESPERANDO MÓDULO DE PESO";
-    }
-
-    return (
-      mensajeMedicion ||
-      "Consultando estado de medición..."
-    );
-  };
-
-  const obtenerMensajeSecundario = () => {
-    if (DEMO_PESO_HISTORICO) {
-      return "Recuperando la última lectura almacenada.";
-    }
-
-    if (
-      movimientoDetectado ||
-      estabilizando
-    ) {
-      return (
         mensajeMedicion ||
-        "Mantenga el contenedor inmóvil."
-      );
-    }
 
-    return mensajeMedicion || "";
-  };
+        "Consultando estado de medición..."
+
+      );
+    };
+
+
+  const obtenerMensajeSecundario =
+    () => {
+
+      if (
+        movimientoDetectado
+      ) {
+
+        return (
+
+          mensajeMedicion ||
+
+          "Mantenga el contenedor inmóvil para continuar con la medición."
+
+        );
+      }
+
+
+      if (
+        estabilizando
+      ) {
+
+        return (
+
+          mensajeMedicion ||
+
+          "Espere mientras se obtiene una lectura estable."
+
+        );
+      }
+
+
+      return (
+        mensajeMedicion || ""
+      );
+    };
+
 
   const mensajeSecundario =
     obtenerMensajeSecundario();
 
+
   const varianteProceso =
-    movimientoDetectado &&
-    !DEMO_PESO_HISTORICO
+
+    movimientoDetectado
       ? "warning"
       : "info";
+
 
   // ====================================================
   // RENDER
   // ====================================================
 
   return (
+
     <Modal
+
       show={show}
+
       onHide={
         calculando
           ? undefined
           : handleClose
       }
-      backdrop={
-        calculando ? "static" : true
-      }
-      keyboard={!calculando}
-      centered
-      size="lg"
-    >
 
-      {/* ================================================
-          ENCABEZADO
-      ================================================ */}
+      backdrop={
+        calculando
+          ? "static"
+          : true
+      }
+
+      keyboard={
+        !calculando
+      }
+
+      centered
+
+      size="lg"
+
+    >
 
       <Modal.Header
         className="modal-costo-header"
       >
+
         <Modal.Title>
+
           Total en libras y Costos
+
         </Modal.Title>
+
       </Modal.Header>
+
 
       <Modal.Body>
 
-        {/* ==============================================
-            PANTALLA INICIAL
-        ============================================== */}
+
+        {/* ==========================================
+            ESPERANDO
+        ========================================== */}
 
         {estadoUI ===
           ESTADO_UI.ESPERANDO && (
-          <Alert variant="info">
-            {DEMO_PESO_HISTORICO ? (
-              <>
-                Presione{" "}
-                <strong>
-                  Calcular peso
-                </strong>{" "}
-                para consultar el último peso
-                registrado durante la demostración.
-              </>
-            ) : (
-              <>
-                Presione{" "}
-                <strong>
-                  Calcular peso
-                </strong>{" "}
-                para iniciar la medición
-                del contenedor.
-              </>
-            )}
+
+          <Alert
+            variant="info"
+          >
+
+            Presione{" "}
+
+            <strong>
+              Calcular peso
+            </strong>
+
+            {" "}para iniciar la
+            medición del contenedor.
+
           </Alert>
+
         )}
 
-        {/* ==============================================
+
+        {/* ==========================================
             PROCESANDO
-        ============================================== */}
+        ========================================== */}
 
         {calculando && (
-          <div className="py-4">
+
+          <div
+            className="py-4"
+          >
 
             <Alert
-              variant={varianteProceso}
+
+              variant={
+                varianteProceso
+              }
+
               className="text-center mb-4"
+
             >
 
               <Spinner
+
                 animation="border"
+
                 role="status"
+
                 className="mb-3"
+
                 variant={
-                  movimientoDetectado &&
-                  !DEMO_PESO_HISTORICO
+
+                  movimientoDetectado
+
                     ? "warning"
+
                     : undefined
+
                 }
+
               >
-                <span className="visually-hidden">
+
+                <span
+                  className="visually-hidden"
+                >
+
                   Procesando medición
+
                 </span>
+
               </Spinner>
 
-              <h5 className="mb-3">
+
+              <h5
+                className="mb-3"
+              >
+
                 <strong>
-                  {obtenerMensajePrincipal()}
+
+                  {
+                    obtenerMensajePrincipal()
+                  }
+
                 </strong>
+
               </h5>
 
-              {mensajeSecundario && (
-                <p className="mb-0">
-                  {mensajeSecundario}
-                </p>
-              )}
+
+              {
+                mensajeSecundario &&
+                (
+
+                  <p
+                    className="mb-0"
+                  >
+
+                    {
+                      mensajeSecundario
+                    }
+
+                  </p>
+
+                )
+              }
 
             </Alert>
 
+
             <ProgressBar
+
               animated
+
               striped
+
               now={100}
+
               variant={
-                movimientoDetectado &&
-                !DEMO_PESO_HISTORICO
+
+                movimientoDetectado
+
                   ? "warning"
+
                   : undefined
+
               }
+
             />
 
           </div>
+
         )}
 
-        {/* ==============================================
-            RESULTADO HISTÓRICO
-        ============================================== */}
 
-        {hayHistorico && (
-          <>
-            <Alert variant="warning">
-              <strong>
-                LECTURA HISTÓRICA — DEMOSTRACIÓN
-              </strong>
-
-              <p className="mb-0 mt-2">
-                El peso se recuperó de PostgreSQL.
-                No es una medición en tiempo real
-                del módulo HX711.
-              </p>
-            </Alert>
-
-            <Form>
-              <Row>
-
-                <Col md={6}>
-                  <Form.Group className="mb-3">
-                    <Form.Label>
-                      Total en libras
-                    </Form.Label>
-
-                    <Form.Control
-                      type="text"
-                      value={`${pesoHistorico.toFixed(2)} lb`}
-                      disabled
-                    />
-                  </Form.Group>
-
-                  <Form.Group className="mb-3">
-                    <Form.Label>
-                      Tipo de residuo
-                    </Form.Label>
-
-                    <Form.Control
-                      type="text"
-                      value={tipoHistorico}
-                      disabled
-                    />
-                  </Form.Group>
-                </Col>
-
-                <Col md={6}>
-                  <Form.Group className="mb-3">
-                    <Form.Label>
-                      Fecha de la lectura
-                    </Form.Label>
-
-                    <Form.Control
-                      type="text"
-                      value={fechaHistorica}
-                      disabled
-                    />
-                  </Form.Group>
-
-                  <Form.Group className="mb-3">
-                    <Form.Label>
-                      Estado del peso
-                    </Form.Label>
-
-                    <Form.Control
-                      type="text"
-                      value="Histórico / No vigente"
-                      disabled
-                    />
-                  </Form.Group>
-                </Col>
-
-              </Row>
-            </Form>
-
-            <Alert
-              variant="secondary"
-              className="mb-0"
-            >
-              Esta consulta no guarda costos
-              ni registra una nueva recolección.
-            </Alert>
-          </>
-        )}
-
-        {/* ==============================================
-            RESULTADO DEL PESAJE REAL
-        ============================================== */}
+        {/* ==========================================
+            RESULTADO
+        ========================================== */}
 
         {hayResultado && (
+
           <Form>
+
             <Row>
 
+
               <Col md={6}>
-                <Form.Group className="mb-3">
+
+                <Form.Group
+                  className="mb-3"
+                >
+
                   <Form.Label>
+
                     Total en libras
+
                   </Form.Label>
 
+
                   <Form.Control
+
                     type="text"
-                    value={`${totalLb.toFixed(2)} lb`}
+
+                    value={
+                      `${totalLb.toFixed(2)} lb`
+                    }
+
                     disabled
+
                   />
+
                 </Form.Group>
 
-                <Form.Group className="mb-3">
+
+                <Form.Group
+                  className="mb-3"
+                >
+
                   <Form.Label>
+
                     % de llenado
+
                   </Form.Label>
 
+
                   <Form.Control
+
                     type="text"
-                    value={`${porcentajeLlenado.toFixed(2)} %`}
+
+                    value={
+                      `${porcentajeLlenado.toFixed(2)} %`
+                    }
+
                     disabled
+
                   />
+
                 </Form.Group>
+
               </Col>
+
 
               <Col md={6}>
-                <Form.Group className="mb-3">
+
+                <Form.Group
+                  className="mb-3"
+                >
+
                   <Form.Label>
-                    Tipo de residuo
+
+                    Tipo de desecho
+
                   </Form.Label>
 
+
                   <Form.Control
+
                     type="text"
-                    value={tipoTexto}
+
+                    value={
+                      tipoTexto
+                    }
+
                     disabled
+
                   />
+
                 </Form.Group>
 
-                <Form.Group className="mb-3">
+
+                <Form.Group
+                  className="mb-3"
+                >
+
                   <Form.Label>
+
                     Costo aplicado (Q/LB)
+
                   </Form.Label>
 
+
                   <Form.Control
+
                     type="text"
-                    value={costoAplicado.toFixed(4)}
+
+                    value={
+                      costoAplicado
+                        .toFixed(4)
+                    }
+
                     disabled
+
                   />
+
                 </Form.Group>
 
-                <Form.Group className="mb-3">
+
+                <Form.Group
+                  className="mb-3"
+                >
+
                   <Form.Label>
+
                     Total de costos (Q)
+
                   </Form.Label>
 
+
                   <Form.Control
+
                     type="text"
-                    value={totalCosto.toFixed(2)}
+
+                    value={
+                      totalCosto
+                        .toFixed(2)
+                    }
+
                     disabled
+
                   />
+
                 </Form.Group>
+
               </Col>
+
 
             </Row>
+
           </Form>
+
         )}
+
 
       </Modal.Body>
 
-      {/* ================================================
-          BOTONES
-      ================================================ */}
+
+      {/* ============================================
+          FOOTER
+      ============================================ */}
 
       <Modal.Footer>
 
-        {/* SOLO UN BOTÓN PARA CALCULAR */}
 
-        {estadoUI ===
-          ESTADO_UI.ESPERANDO && (
+        {!hayResultado && (
+
           <Button
+
             variant="success"
-            onClick={handleCalcular}
+
+            onClick={
+              handleCalcular
+            }
+
+            disabled={
+              calculando
+            }
+
           >
-            Calcular peso
+
+            {calculando ? (
+
+              <>
+
+                <Spinner
+
+                  animation="border"
+
+                  size="sm"
+
+                  className="me-2"
+
+                />
+
+                Procesando...
+
+              </>
+
+            ) : (
+
+              "Calcular peso"
+
+            )}
+
           </Button>
+
         )}
 
-        {/* PROCESANDO */}
-
-        {calculando && (
-          <Button
-            variant="success"
-            disabled
-          >
-            <Spinner
-              animation="border"
-              size="sm"
-              className="me-2"
-            />
-
-            Procesando...
-          </Button>
-        )}
-
-        {/* RESULTADO REAL */}
 
         {hayResultado && (
+
           <Button
+
             variant="success"
-            onClick={handleContinuar}
+
+            onClick={
+              handleContinuar
+            }
+
+            disabled={
+              calculando
+            }
+
           >
+
             Continuar
+
           </Button>
+
         )}
 
-        {/* CONSULTA HISTÓRICA */}
-
-        {hayHistorico && (
-          <Button
-            variant="outline-secondary"
-            onClick={handleVolver}
-          >
-            Volver
-          </Button>
-        )}
-
-        {/* CANCELAR */}
 
         <Button
+
           variant="secondary"
-          onClick={handleCancelar}
-          disabled={calculando}
+
+          onClick={
+            handleCancelar
+          }
+
+          disabled={
+            calculando
+          }
+
         >
+
           Cancelar
+
         </Button>
+
 
       </Modal.Footer>
 
     </Modal>
+
   );
 };
+
 
 export default ModalTotales;
