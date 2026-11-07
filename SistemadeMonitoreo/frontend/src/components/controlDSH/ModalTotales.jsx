@@ -754,7 +754,7 @@ const ModalTotales = ({
       setMensajeMedicion(
 
         DEMO_PESO_HISTORICO
-          ? "Consultando cálculo histórico..."
+          ? "Calculando peso..."
           : "Preparando medición de peso..."
 
       );
