@@ -954,8 +954,8 @@ const RegistroRecoleccion = ({
               <select
                 id="recoleccion-empresa"
                 className={`system-form-select ${errors.empresa_id
-                    ? "is-invalid"
-                    : ""
+                  ? "is-invalid"
+                  : ""
                   }`}
                 value={
                   formData.empresa_id
@@ -1008,16 +1008,15 @@ const RegistroRecoleccion = ({
               <select
                 id="recoleccion-distrito"
                 className={`system-form-select ${errors.distrito_id
-                    ? "is-invalid"
-                    : ""
+                  ? "is-invalid"
+                  : ""
                   }`}
                 value={
                   formData.distrito_id
                 }
                 disabled={
                   saving ||
-                  previewLoading ||
-                  !datosCargados
+                  previewLoading
                 }
               >
                 <option value="">
@@ -1061,8 +1060,8 @@ const RegistroRecoleccion = ({
                 id="recoleccion-recibo"
                 type="text"
                 className={`system-form-control ${errors.numero_recibo
-                    ? "is-invalid"
-                    : ""
+                  ? "is-invalid"
+                  : ""
                   }`}
                 value={
                   formData.numero_recibo
@@ -1103,8 +1102,8 @@ const RegistroRecoleccion = ({
                 id="recoleccion-libras"
                 type="text"
                 className={`system-form-control ${errors.cantidad_libras_pendientes
-                    ? "is-invalid"
-                    : ""
+                  ? "is-invalid"
+                  : ""
                   }`}
                 value={
                   formData.cantidad_libras_pendientes
