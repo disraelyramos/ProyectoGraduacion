@@ -76,6 +76,10 @@ const URL_CALCULO_HISTORICO =
 // Restaurar después de la defensa.
 // ======================================================
 
+// Activar con VITE_DEMO_GUARDAR_RECOLECCION=true en Netlify.
+// El servidor también requiere DEMO_GUARDAR_RECOLECCION=true en Railway.
+const DEMO_GUARDAR_RECOLECCION =
+  import.meta.env.VITE_DEMO_GUARDAR_RECOLECCION === "true";
 const DEMO_PESO_HISTORICO = false;
 
 // ======================================================
@@ -505,7 +509,9 @@ const ModalTotales = ({
     setMensajeMedicion(
       DEMO_PESO_HISTORICO
         ? "Procesando información del contenedor..."
-        : "Preparando medición de peso..."
+        : DEMO_GUARDAR_RECOLECCION
+          ? "Guardando cálculo de prueba con lecturas existentes..."
+          : "Preparando medición de peso..."
     );
 
     setEstadoUI(
@@ -518,7 +524,7 @@ const ModalTotales = ({
       //
       // El frontend no envía esos valores.
 
-      if (!DEMO_PESO_HISTORICO) {
+      if (!DEMO_PESO_HISTORICO && !DEMO_GUARDAR_RECOLECCION) {
         iniciarPolling();
       }
 
@@ -558,6 +564,11 @@ const ModalTotales = ({
           "RESPUESTA_INVALIDA"
         );
       }
+
+      if (DEMO_GUARDAR_RECOLECCION && data.demostracion !== true) {
+        throw new Error("MODO_DEMO_NO_CONFIRMADO");
+      }
+
 
       if (!DEMO_PESO_HISTORICO) {
         aplicarEstadoBackend(data);
@@ -602,6 +613,13 @@ const ModalTotales = ({
       const esTimeoutAxios =
         err?.code === "ECONNABORTED" ||
         err?.code === "ETIMEDOUT";
+
+      if (err?.message === "MODO_DEMO_NO_CONFIRMADO") {
+        await showBackendAlert({ status: 409, data: {
+          message: "El backend no confirmó el modo de prueba. Revise Railway."
+        }});
+        return;
+      }
 
       if (
         err?.message ===
@@ -669,7 +687,7 @@ const ModalTotales = ({
     if (
       resultadoVisual?.estado_medicion !== ESTADO_MEDICION.COMPLETADO ||
       resultadoVisual?.etapa !== "RECOLECCION" ||
-      resultadoVisual?.demostracion === true ||
+      (resultadoVisual?.demostracion === true && !DEMO_GUARDAR_RECOLECCION) ||
       resultadoVisual?.permite_registrar_recoleccion === false
     ) {
       showBackendAlert({
@@ -818,6 +836,13 @@ const ModalTotales = ({
       </Modal.Header>
 
       <Modal.Body>
+        {DEMO_GUARDAR_RECOLECCION && (
+          <Alert variant="warning" className="mb-3">
+            <strong>REGISTRO DE PRUEBA:</strong> se guardará un cálculo basado
+            en lecturas históricas simuladas de ML; no corresponde a una
+            medición física del HX711.
+          </Alert>
+        )}
 
         {/* ==========================================
             ESTADO INICIAL

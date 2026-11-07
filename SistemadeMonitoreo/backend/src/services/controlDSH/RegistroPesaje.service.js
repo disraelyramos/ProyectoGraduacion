@@ -110,6 +110,12 @@ const ESTADO_MEDICION = {
 
 const TIPOS_DSH = [1, 2];
 
+// MODO TEMPORAL DE PRUEBA: genera un cálculo persistente con lecturas
+// existentes de ml_simulacion_lecturas. NO es una medición física HX711.
+// En producción normal mantener false o eliminar la variable.
+const DEMO_GUARDAR_RECOLECCION =
+  process.env.DEMO_GUARDAR_RECOLECCION === "true";
+
 
 
 
@@ -1847,6 +1853,10 @@ function construirRespuestaCalculo({
 
 
   return {
+    demostracion: String(proceso.observaciones || "").includes("[PRUEBA_SIMULACION_ML]"),
+    origen_peso: String(proceso.observaciones || "").includes("[PRUEBA_SIMULACION_ML]")
+      ? "simulacion_ml" : "modulo_o_proveedor_configurado",
+
 
 
 
@@ -4332,6 +4342,43 @@ async function guardarCostoGlobal({
 
 
 
+// Devuelve SOLO una pareja nivel/peso existente y validada del mismo contenedor.
+// No inventa lecturas ni inserta filas en la tabla lecturas.
+async function obtenerParejaSimulacion(client, contenedorId) {
+  const { rows } = await client.query(`
+    SELECT s.nivel_nuevo, s.peso_nuevo_lb,
+           s.lectura_nivel_id, s.lectura_peso_id
+    FROM public.ml_simulacion_lecturas s
+    JOIN lecturas ln ON ln.id = s.lectura_nivel_id
+      AND ln.contenedor_id = s.contenedor_id
+    JOIN lecturas lp ON lp.id = s.lectura_peso_id
+      AND lp.contenedor_id = s.contenedor_id
+    JOIN tipos_lectura tn ON tn.id = ln.tipo_lectura_id
+    JOIN tipos_lectura tp ON tp.id = lp.tipo_lectura_id
+    JOIN unidad_medida un ON un.id = ln.unidad_id
+    JOIN unidad_medida up ON up.id = lp.unidad_id
+    WHERE s.contenedor_id = $1
+      AND tn.nombre = 'nivel_porcentaje'
+      AND tp.nombre = 'peso_lb'
+      AND un.nombre = '%'
+      AND up.nombre = 'lb'
+      AND ln.estado_lectura = 'normal'
+      AND lp.estado_lectura = 'normal'
+      AND ln.valor = s.nivel_nuevo
+      AND lp.valor = s.peso_nuevo_lb
+      AND s.nivel_nuevo BETWEEN 0 AND 100
+      AND s.peso_nuevo_lb >= 0
+    ORDER BY lp.fecha_hora DESC, lp.id DESC
+    LIMIT 1
+  `, [contenedorId]);
+  if (!rows.length) {
+    throw new RegistroPesajeError(404,
+      "No hay una pareja de lecturas simuladas válidas para este contenedor.",
+      { codigo: "DEMO_LECTURAS_NO_DISPONIBLES" });
+  }
+  return rows[0];
+}
+
 async function guardarCalculo({
 
   idUsuario,
@@ -4868,26 +4915,15 @@ async function guardarCalculo({
 
 
 
-    const medicionPeso =
+    const parejaDemo = DEMO_GUARDAR_RECOLECCION
+      ? await obtenerParejaSimulacion(client, contenedorId)
+      : null;
 
-      await medicionesService
-
-        .obtenerPesoActual({
-
-
-
-          procesoId,
-
-
-
-          contenedorId,
-
-
-
-          db:
-
-            client,
-
+    const medicionPeso = parejaDemo
+      ? { valor: parejaDemo.peso_nuevo_lb,
+          lectura_id: parejaDemo.lectura_peso_id }
+      : await medicionesService.obtenerPesoActual({
+          procesoId, contenedorId, db: client
         });
 
 
@@ -5342,11 +5378,8 @@ async function guardarCalculo({
 
     //
 
-    // porcentaje_llenado NO se modifica.
-
-    //
-
-    // Fue guardado al iniciar el proceso.
+    // En modo físico: el nivel permanece congelado al iniciar el proceso.
+    // En modo de prueba: se registra el nivel del mismo par simulado.
 
     // ==================================================
 
@@ -5363,15 +5396,13 @@ async function guardarCalculo({
 
 
           SET
-
             total_en_libras = $1,
-
             total_costo_q = $2,
-
-            lectura_id = $3
-
-
-
+            lectura_id = $3,
+            porcentaje_llenado = COALESCE($8, porcentaje_llenado),
+            observaciones = CASE WHEN $7 THEN
+              CONCAT_WS(' ', NULLIF(observaciones, ''), '[PRUEBA_SIMULACION_ML]')
+              ELSE observaciones END
           WHERE id = $4
 
             AND calculado_por = $5
@@ -5454,6 +5485,8 @@ async function guardarCalculo({
 
             .EN_PROCESO,
 
+          DEMO_GUARDAR_RECOLECCION,
+          parejaDemo ? Number(parejaDemo.nivel_nuevo) : null,
         ]
 
       );

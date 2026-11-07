@@ -527,6 +527,9 @@ async function obtenerDatosRecoleccion({
     solo_lectura:
       !calculoDisponible,
 
+    demostracion: String(proceso.observaciones || "")
+      .includes("[PRUEBA_SIMULACION_ML]"),
+
     calculo_completado:
       calculoDisponible,
   };
@@ -873,6 +876,13 @@ async function guardarRecoleccion({
 
     validarProcesoFoto4(proceso);
 
+    // Conservar procedencia de prueba incluso si el operador edita observaciones.
+    const esSimulacion = String(proceso.observaciones || "")
+      .includes("[PRUEBA_SIMULACION_ML]");
+    const observacionesRegistro = esSimulacion
+      ? ["[PRUEBA_SIMULACION_ML]", datos.observaciones].filter(Boolean).join(" ")
+      : datos.observaciones;
+
     if (
       proceso.recoleccion_id !== null &&
       proceso.recoleccion_id !== undefined
@@ -986,7 +996,7 @@ async function guardarRecoleccion({
         responsable,
         porcentajePendiente,
         datos.pendientesLb,
-        datos.observaciones,
+        observacionesRegistro,
       ]
     );
 
@@ -1028,7 +1038,7 @@ async function guardarRecoleccion({
       [
         recoleccion.id,
         porcentajeRecolectado,
-        datos.observaciones,
+        observacionesRegistro,
         ESTADO_PROCESO.FINALIZADO,
         proceso.id,
         usuarioId,
@@ -1093,6 +1103,7 @@ async function guardarRecoleccion({
       porcentaje_recolectado:
         porcentajeRecolectado,
 
+      demostracion: esSimulacion,
       fecha_recoleccion:
         recoleccion.fecha_recoleccion,
     };
