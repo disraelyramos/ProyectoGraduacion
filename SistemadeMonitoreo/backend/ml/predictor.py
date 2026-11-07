@@ -638,6 +638,11 @@ def predecir_contenedor(
         lecturas,
         fechas_recoleccion
     )
+    print(
+    f"DIAGNOSTICO ML - Contenedor {contenedor_id}: "
+    f"{tendencia}",
+    file=sys.stderr
+)
 
     if not tendencia:
         return {
