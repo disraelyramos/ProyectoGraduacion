@@ -416,13 +416,13 @@ const RegistroRecoleccion = ({
           data:
             errorLocal
               ? {
-                  message:
-                    "El servidor no devolvió todos los datos del proceso de recolección.",
-                }
+                message:
+                  "El servidor no devolvió todos los datos del proceso de recolección.",
+              }
               : err?.response?.data || {
-                  message:
-                    "No fue posible cargar la información de recolección.",
-                },
+                message:
+                  "No fue posible cargar la información de recolección.",
+              },
         });
 
       } finally {
@@ -953,11 +953,10 @@ const RegistroRecoleccion = ({
 
               <select
                 id="recoleccion-empresa"
-                className={`system-form-select ${
-                  errors.empresa_id
+                className={`system-form-select ${errors.empresa_id
                     ? "is-invalid"
                     : ""
-                }`}
+                  }`}
                 value={
                   formData.empresa_id
                 }
@@ -1008,20 +1007,17 @@ const RegistroRecoleccion = ({
 
               <select
                 id="recoleccion-distrito"
-                className={`system-form-select ${
-                  errors.distrito_id
+                className={`system-form-select ${errors.distrito_id
                     ? "is-invalid"
                     : ""
-                }`}
+                  }`}
                 value={
                   formData.distrito_id
                 }
-                disabled={saving}
-                onChange={(event) =>
-                  setField(
-                    "distrito_id",
-                    event.target.value
-                  )
+                disabled={
+                  saving ||
+                  previewLoading ||
+                  !datosCargados
                 }
               >
                 <option value="">
@@ -1064,11 +1060,10 @@ const RegistroRecoleccion = ({
               <input
                 id="recoleccion-recibo"
                 type="text"
-                className={`system-form-control ${
-                  errors.numero_recibo
+                className={`system-form-control ${errors.numero_recibo
                     ? "is-invalid"
                     : ""
-                }`}
+                  }`}
                 value={
                   formData.numero_recibo
                 }
@@ -1107,11 +1102,10 @@ const RegistroRecoleccion = ({
               <input
                 id="recoleccion-libras"
                 type="text"
-                className={`system-form-control ${
-                  errors.cantidad_libras_pendientes
+                className={`system-form-control ${errors.cantidad_libras_pendientes
                     ? "is-invalid"
                     : ""
-                }`}
+                  }`}
                 value={
                   formData.cantidad_libras_pendientes
                 }
@@ -1156,8 +1150,8 @@ const RegistroRecoleccion = ({
                   previewLoading
                     ? "Calculando..."
                     : `${Number(
-                        preview.porcentaje_pendiente || 0
-                      ).toFixed(2)} %`
+                      preview.porcentaje_pendiente || 0
+                    ).toFixed(2)} %`
                 }
                 disabled
               />
@@ -1185,8 +1179,8 @@ const RegistroRecoleccion = ({
                   previewLoading
                     ? "Calculando..."
                     : `${Number(
-                        preview.porcentaje_recolectado || 0
-                      ).toFixed(2)} %`
+                      preview.porcentaje_recolectado || 0
+                    ).toFixed(2)} %`
                 }
                 disabled
               />
