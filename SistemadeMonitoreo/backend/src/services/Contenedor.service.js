@@ -1,4 +1,3 @@
-
 "use strict";
 
 const pool = require("../config/db");
@@ -12,21 +11,13 @@ const nivelCache = require(
 // ======================================================
 
 function porcentajeValido(valor) {
-  if (
-    valor === null ||
-    valor === undefined ||
-    valor === ""
-  ) {
+  if (valor === null || valor === undefined || valor === "") {
     return null;
   }
 
   const numero = Number(valor);
 
-  if (
-    !Number.isFinite(numero) ||
-    numero < 0 ||
-    numero > 100
-  ) {
+  if (!Number.isFinite(numero) || numero < 0 || numero > 100) {
     return null;
   }
 
@@ -39,9 +30,6 @@ function porcentajeValido(valor) {
 // Las fechas válidas se envían en formato ISO UTC.
 // No se suman ni restan horas manualmente.
 // No se modifican registros en PostgreSQL.
-//
-// La configuración de zona horaria de PostgreSQL
-// y del controlador debe respetar el UTC.
 // ======================================================
 
 function normalizarFecha(fecha) {
@@ -49,7 +37,6 @@ function normalizarFecha(fecha) {
     return null;
   }
 
-  // Un Date válido representa un instante absoluto.
   if (fecha instanceof Date) {
     if (Number.isNaN(fecha.getTime())) {
       return null;
@@ -68,12 +55,7 @@ function normalizarFecha(fecha) {
     return null;
   }
 
-  // Solo aceptar cadenas con zona horaria explícita.
-  // Evita interpretar silenciosamente una fecha local
-  // como UTC o como hora de Guatemala.
-  if (
-    !/[zZ]$|[+-]\d{2}:\d{2}$/.test(texto)
-  ) {
+  if (!/[zZ]$|[+-]\d{2}:\d{2}$/.test(texto)) {
     return null;
   }
 
@@ -91,20 +73,10 @@ function normalizarFecha(fecha) {
 // ======================================================
 
 async function listarContenedores() {
-
-  // ====================================================
-  // CONSULTAR INFORMACIÓN E HISTORIAL
-  // ====================================================
-  // La consulta NO crea mediciones nuevas.
-  //
-  // Si Railway pierde su caché, se recupera
-  // el último nivel almacenado en PostgreSQL.
-  //
-  // La fecha histórica mantiene su valor original
-  // para que el controlador PostgreSQL la procese
-  // según el tipo de columna y su configuración.
-  // ====================================================
-
+  // Se consulta la lectura de nivel insertada más recientemente.
+  // El ID identifica el orden de inserción, aunque una lectura
+  // anterior tenga una fecha_hora futura o distinta.
+  // Esta consulta es de solo lectura.
   const { rows } = await pool.query(`
     SELECT
       c.id_contenedor,
@@ -128,12 +100,8 @@ async function listarContenedores() {
       ec.nombre AS estado,
 
       historial.valor AS nivel_historico_valor,
-
-      historial.fecha_hora
-        AS nivel_historico_fecha,
-
-      historial.fuente_lectura
-        AS nivel_historico_fuente
+      historial.fecha_hora AS nivel_historico_fecha,
+      historial.fuente_lectura AS nivel_historico_fuente
 
     FROM contenedores c
 
@@ -151,154 +119,73 @@ async function listarContenedores() {
         l.valor,
         l.fecha_hora,
         l.fuente_lectura
-
       FROM lecturas l
-
       JOIN tipos_lectura tl
         ON tl.id = l.tipo_lectura_id
-
       JOIN unidad_medida um
         ON um.id = l.unidad_id
-
-      WHERE
-        l.contenedor_id = c.id_contenedor
-
+      WHERE l.contenedor_id = c.id_contenedor
         AND tl.nombre = 'nivel_porcentaje'
-
         AND um.nombre = '%'
-
         AND l.estado_lectura = 'normal'
-
         AND l.valor BETWEEN 0 AND 100
-
-      ORDER BY
-        l.fecha_hora DESC,
-        l.id DESC
-
+      ORDER BY l.id DESC
       LIMIT 1
     ) historial ON TRUE
 
-    ORDER BY
-      c.id_contenedor DESC
+    ORDER BY c.id_contenedor DESC
   `);
 
-  // ====================================================
-  // CONSTRUIR RESPUESTA
-  // ====================================================
-
   const contenedores = rows.map((contenedor) => {
-
     const nivel = nivelCache.obtenerNivel(
       contenedor.id_contenedor
     );
 
-    // ==================================================
-    // NIVEL PROCEDENTE DE CACHÉ
-    // ==================================================
-
-    const porcentajeCache = (
-      nivel?.fechaActualizacion
-    )
+    const porcentajeCache = nivel?.fechaActualizacion
       ? porcentajeValido(nivel.porcentaje)
       : null;
-
-    // ==================================================
-    // NIVEL PROCEDENTE DEL HISTORIAL
-    // ==================================================
 
     const porcentajeHistorico = porcentajeValido(
       contenedor.nivel_historico_valor
     );
-
-    // ==================================================
-    // IDENTIFICAR LECTURA VIGENTE
-    // ==================================================
 
     const nivelVigente =
       nivel?.vigente === true &&
       porcentajeCache !== null &&
       nivel?.proveedor !== "historial";
 
-    // ==================================================
-    // SELECCIONAR INFORMACIÓN
-    // ==================================================
-    // Prioridad:
-    //
-    // 1. Lectura vigente del módulo.
-    // 2. Última lectura del historial.
-    // 3. Lectura conservada en caché.
-    //
-    // Una lectura histórica NO se considera
-    // una transmisión nueva del módulo.
-    // ==================================================
-
     let porcentaje = null;
     let fechaActualizacion = null;
     let proveedor = null;
     let origenDato = null;
 
-    if (nivelVigente) {
-
-      porcentaje = porcentajeCache;
-
-      fechaActualizacion =
-        nivel.fechaActualizacion;
-
-      proveedor =
-        nivel.proveedor || null;
-
-      origenDato = "cache_vigente";
-
-    } else if (porcentajeHistorico !== null) {
-
+    // Prioridad: última lectura guardada en PostgreSQL.
+    // Esto permite reflejar los INSERT sin reiniciar Railway.
+    // Si no hay lecturas en BD, se usa la caché como respaldo.
+    if (porcentajeHistorico !== null) {
       porcentaje = porcentajeHistorico;
-
-      fechaActualizacion =
-        contenedor.nivel_historico_fecha;
-
+      fechaActualizacion = contenedor.nivel_historico_fecha;
       proveedor = "historial";
-
       origenDato = "base_datos_historica";
-
-    } else if (porcentajeCache !== null) {
-
+    } else if (nivelVigente) {
       porcentaje = porcentajeCache;
-
-      fechaActualizacion =
-        nivel.fechaActualizacion;
-
-      proveedor =
-        nivel.proveedor || null;
-
+      fechaActualizacion = nivel.fechaActualizacion;
+      proveedor = nivel.proveedor || null;
+      origenDato = "cache_vigente";
+    } else if (porcentajeCache !== null) {
+      porcentaje = porcentajeCache;
+      fechaActualizacion = nivel.fechaActualizacion;
+      proveedor = nivel.proveedor || null;
       origenDato = "cache_historica";
     }
 
-    // ==================================================
-    // DISPONIBILIDAD DEL DATO
-    // ==================================================
-
-    const nivelDisponible =
-      porcentaje !== null;
+    const nivelDisponible = porcentaje !== null;
 
     const nivelEnVivo =
       nivelDisponible &&
-      nivelVigente &&
       origenDato === "cache_vigente";
 
-    // ==================================================
-    // NORMALIZAR FECHA
-    // ==================================================
-    // No se realiza una conversión manual UTC-6.
-    // La zona America/Guatemala se aplica
-    // únicamente al presentar la fecha.
-    // ==================================================
-
-    const fechaNormalizada =
-      normalizarFecha(fechaActualizacion);
-
-    // ==================================================
-    // RESPUESTA AL FRONTEND
-    // ==================================================
+    const fechaNormalizada = normalizarFecha(fechaActualizacion);
 
     const {
       nivel_historico_valor,
@@ -309,36 +196,15 @@ async function listarContenedores() {
 
     return {
       ...datosContenedor,
-
-      // Compatibilidad con NuevoRegistro.
       estado_actual_litros: porcentaje,
-
-      // Porcentaje para el dashboard.
       porcentaje_llenado: porcentaje,
-
-      // Existe un dato que se puede mostrar.
       nivel_disponible: nivelDisponible,
-
-      // Estado real de vigencia.
       nivel_vigente: nivelEnVivo,
-
-      // Indica que no es lectura en vivo.
-      nivel_historico:
-        nivelDisponible && !nivelEnVivo,
-
-      // Última fecha conocida en formato UTC.
-      nivel_actualizado_en:
-        fechaNormalizada,
-
-      // Procedencia del dato mostrado.
+      nivel_historico: nivelDisponible && !nivelEnVivo,
+      nivel_actualizado_en: fechaNormalizada,
       nivel_proveedor: proveedor,
-
-      // Información para diagnóstico.
       nivel_origen_dato: origenDato,
-
-      // Fuente declarada en la lectura histórica.
-      nivel_fuente_historica:
-        nivel_historico_fuente || null,
+      nivel_fuente_historica: nivel_historico_fuente || null,
     };
   });
 
