@@ -6246,118 +6246,262 @@ async function cancelarProceso({
 // Utiliza el tipo del proceso EN_PROCESO autenticado.
 // ======================================================
 
+
 async function obtenerUltimoCalculoHistorico({ idUsuario }) {
+
+  // ====================================================
+  // 1. VALIDAR USUARIO
+  // ====================================================
+
   const usuarioId = toInt(idUsuario);
 
-  if (!Number.isSafeInteger(usuarioId) || usuarioId <= 0) {
-    throw new RegistroPesajeError(401, "Usuario no autenticado");
+  if (
+    !Number.isSafeInteger(usuarioId) ||
+    usuarioId <= 0
+  ) {
+    throw new RegistroPesajeError(
+      401,
+      "Usuario no autenticado"
+    );
   }
 
-  const proceso = await requerirProcesoActivo(pool, usuarioId);
+  // ====================================================
+  // 2. OBTENER PROCESO ACTIVO
+  // ====================================================
 
-  // No permitimos mostrar cálculos de otro tipo de residuo.
-  const tipoResiduoId = Number(proceso.id_tipo_residuo);
-  if (![1, 2].includes(tipoResiduoId)) {
-    throw new RegistroPesajeError(409, "Tipo de residuo inválido.");
+  const proceso = await requerirProcesoActivo(
+    pool,
+    usuarioId
+  );
+
+  const contenedorId = toInt(
+    proceso.contenedor_id
+  );
+
+  const tipoResiduoId = toInt(
+    proceso.id_tipo_residuo
+  );
+
+  const costoPorLibra = toNumber(
+    proceso.costo_por_libra_aplicado
+  );
+
+  if (
+    !contenedorId ||
+    ![1, 2].includes(tipoResiduoId)
+  ) {
+    throw new RegistroPesajeError(
+      409,
+      "Contenedor o tipo de residuo inválido."
+    );
   }
+
+  if (
+    !procesoTieneCostoConfirmado(proceso) ||
+    costoPorLibra === null
+  ) {
+    throw new RegistroPesajeError(
+      409,
+      "Debe confirmar el costo antes de consultar el resultado.",
+      {
+        codigo: "COSTO_NO_CONFIRMADO"
+      }
+    );
+  }
+
+  // ====================================================
+  // 3. CONSULTAR ÚLTIMO PESO Y NIVEL ALMACENADOS
+  // ====================================================
+  //
+  // Se recuperan ambas lecturas de una misma
+  // ejecución del procedimiento generar_lecturas_ml().
+  //
+  // NO se utiliza el peso de un cálculo antiguo.
+  // NO se registra un nuevo pesaje.
+  // NO se modifica historial_calculo_costos.
+  // ====================================================
 
   const { rows } = await pool.query(
     `
       SELECT
-        h.id,
-        h.contenedor_id,
-        h.id_tipo_residuo,
-        h.total_en_libras,
-        h.porcentaje_llenado,
-        h.costo_por_libra_aplicado,
-        h.total_costo_q,
-        h.lectura_id,
-        h.calculado_en,
-        c.codigo AS codigo_contenedor
-      FROM historial_calculo_costos h
-      JOIN contenedores c
-        ON c.id_contenedor = h.contenedor_id
-      WHERE h.id_tipo_residuo = $1
-        AND h.id <> $2
-        AND h.estado_proceso = $3
-        AND h.total_en_libras > 0
-        AND h.total_costo_q IS NOT NULL
-        AND h.costo_por_libra_aplicado IS NOT NULL
-        AND h.porcentaje_llenado BETWEEN 0 AND 100
-        AND h.lectura_id IS NOT NULL
-      ORDER BY h.calculado_en DESC, h.id DESC
+        c.codigo,
+        c.id_tipo_residuo,
+
+        s.nivel_nuevo,
+        s.peso_nuevo_lb,
+
+        s.lectura_nivel_id,
+        s.lectura_peso_id,
+
+        ln.fecha_hora AS fecha_nivel,
+        lp.fecha_hora AS fecha_peso
+
+      FROM public.ml_simulacion_lecturas s
+
+      INNER JOIN contenedores c
+        ON c.id_contenedor = s.contenedor_id
+
+      INNER JOIN lecturas ln
+        ON ln.id = s.lectura_nivel_id
+       AND ln.contenedor_id = s.contenedor_id
+
+      INNER JOIN lecturas lp
+        ON lp.id = s.lectura_peso_id
+       AND lp.contenedor_id = s.contenedor_id
+
+      INNER JOIN tipos_lectura tn
+        ON tn.id = ln.tipo_lectura_id
+
+      INNER JOIN tipos_lectura tp
+        ON tp.id = lp.tipo_lectura_id
+
+      INNER JOIN unidad_medida un
+        ON un.id = ln.unidad_id
+
+      INNER JOIN unidad_medida up
+        ON up.id = lp.unidad_id
+
+      WHERE s.contenedor_id = $1
+
+        AND c.id_tipo_residuo = $2
+
+        AND tn.nombre = 'nivel_porcentaje'
+        AND tp.nombre = 'peso_lb'
+
+        AND un.nombre = '%'
+        AND up.nombre = 'lb'
+
+        AND ln.estado_lectura = 'normal'
+        AND lp.estado_lectura = 'normal'
+
+        AND ln.valor = s.nivel_nuevo
+        AND lp.valor = s.peso_nuevo_lb
+
+        AND s.nivel_nuevo BETWEEN 0 AND 100
+        AND s.peso_nuevo_lb >= 0
+
+      ORDER BY
+        lp.fecha_hora DESC,
+        lp.id DESC
+
       LIMIT 1
     `,
-    [tipoResiduoId, proceso.id, ESTADO_PROCESO.FINALIZADO]
+    [
+      contenedorId,
+      tipoResiduoId
+    ]
   );
 
-  if (!rows.length) {
+  // ====================================================
+  // 4. VALIDAR RESULTADOS
+  // ====================================================
+
+  if (rows.length === 0) {
     throw new RegistroPesajeError(
       404,
-      "No hay cálculos históricos finalizados con peso válido para este residuo.",
-      { codigo: "CALCULO_HISTORICO_NO_DISPONIBLE" }
+      "No existen lecturas de nivel y peso disponibles para este contenedor.",
+      {
+        codigo: "LECTURAS_SIMULACION_NO_DISPONIBLES"
+      }
     );
   }
 
-  const historico = rows[0];
+  const lectura = rows[0];
 
-  // El peso y el costo provienen del cálculo histórico.
-  // El nivel se obtiene por separado, del último registro
-  // disponible del contenedor del proceso activo, igual
-  // que el respaldo histórico empleado en el dashboard.
-  // No se presenta como lectura en vivo del sensor.
-  const { rows: niveles } = await pool.query(
-    `
-      SELECT l.id, l.valor, l.fecha_hora
-      FROM lecturas l
-      INNER JOIN tipos_lectura tl
-        ON tl.id = l.tipo_lectura_id
-      INNER JOIN unidad_medida um
-        ON um.id = l.unidad_id
-      WHERE l.contenedor_id = $1
-        AND tl.nombre = 'nivel_porcentaje'
-        AND um.nombre = '%'
-        AND l.estado_lectura = 'normal'
-        AND l.valor BETWEEN 0 AND 100
-      ORDER BY l.fecha_hora DESC, l.id DESC
-      LIMIT 1
-    `,
-    [proceso.contenedor_id]
+  const peso = toNumber(
+    lectura.peso_nuevo_lb
   );
 
-  if (!niveles.length) {
+  const nivel = toNumber(
+    lectura.nivel_nuevo
+  );
+
+  if (
+    peso === null ||
+    peso < 0 ||
+    nivel === null ||
+    nivel < 0 ||
+    nivel > 100
+  ) {
     throw new RegistroPesajeError(
-      404,
-      'No existe un nivel registrado para el contenedor.',
-      { codigo: 'NIVEL_HISTORICO_NO_DISPONIBLE' }
+      503,
+      "Las lecturas almacenadas contienen valores inválidos."
     );
   }
 
-  const nivelAlmacenado = Number(niveles[0].valor);
-  if (!Number.isFinite(nivelAlmacenado)) {
-    throw new RegistroPesajeError(503, 'Nivel almacenado inválido.');
-  }
+  // ====================================================
+  // 5. CALCULAR COSTO PARA LA CONSULTA
+  // ====================================================
+  //
+  // Se utiliza el costo por libra confirmado
+  // en el proceso actual.
+  //
+  // El cálculo es únicamente visual.
+  // No se guarda en PostgreSQL.
+  // ====================================================
+
+  const totalCostoQ = Number(
+    (
+      peso * costoPorLibra
+    ).toFixed(2)
+  );
+
+  // ====================================================
+  // 6. RESPUESTA PARA MODALTOTALES
+  // ====================================================
 
   return {
+
     estado_medicion: "HISTORICO",
+
+    // Conservado para compatibilidad con
+    // la validación del frontend actual.
     origen: "historial_calculo_costos",
+
     demostracion: true,
+
     permite_registrar_recoleccion: false,
-    total_en_libras: Number(historico.total_en_libras),
-    // Mismo redondeo visual de la tarjeta: 17.31 -> 17 %.
-    porcentaje_llenado: Math.round(nivelAlmacenado),
-    nivel_origen: 'ultima_lectura_almacenada',
-    nivel_fecha_hora: niveles[0].fecha_hora,
-    nivel_lectura_id: niveles[0].id,
-    costo_por_libra_aplicado: Number(historico.costo_por_libra_aplicado),
-    total_costo_q: Number(historico.total_costo_q),
-    fecha_historica: historico.calculado_en,
+
+    total_en_libras: Number(
+      peso.toFixed(2)
+    ),
+
+    // Mismo redondeo de la tarjeta:
+    // 17.31 -> 17 %
+    porcentaje_llenado: Math.round(nivel),
+
+    costo_por_libra_aplicado:
+      costoPorLibra,
+
+    total_costo_q: totalCostoQ,
+
+    // Procedencia efectiva de los datos
+    peso_origen: "ml_simulacion_lecturas",
+    nivel_origen: "ml_simulacion_lecturas",
+    costo_origen: "proceso_activo_confirmado",
+
+    lectura_peso_id:
+      lectura.lectura_peso_id,
+
+    lectura_nivel_id:
+      lectura.lectura_nivel_id,
+
+    fecha_historica:
+      lectura.fecha_peso,
+
+    nivel_fecha_hora:
+      lectura.fecha_nivel,
+
     contenedor: {
-      codigo: historico.codigo_contenedor,
-      id_tipo_residuo: Number(historico.id_tipo_residuo),
-    },
+      codigo: lectura.codigo,
+
+      id_tipo_residuo: Number(
+        lectura.id_tipo_residuo
+      )
+    }
   };
 }
+
 
 module.exports = {
 
