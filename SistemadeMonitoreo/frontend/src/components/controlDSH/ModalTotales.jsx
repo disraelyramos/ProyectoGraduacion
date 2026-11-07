@@ -836,14 +836,6 @@ const ModalTotales = ({
       </Modal.Header>
 
       <Modal.Body>
-        {DEMO_GUARDAR_RECOLECCION && (
-          <Alert variant="warning" className="mb-3">
-            <strong>REGISTRO DE PRUEBA:</strong> se guardará un cálculo basado
-            en lecturas históricas simuladas de ML; no corresponde a una
-            medición física del HX711.
-          </Alert>
-        )}
-
         {/* ==========================================
             ESTADO INICIAL
         ========================================== */}
