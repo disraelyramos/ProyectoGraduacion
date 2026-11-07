@@ -22,6 +22,10 @@ const ESTADO_ALERTA = {
   ACTIVA: "ACTIVA",
   RESUELTA: "RESUELTA",
 };
+// Activación temporal y explícita en Railway.
+// No modifica las validaciones para guardar recolecciones.
+const DEMO_RECOLECCION_SOLO_LECTURA =
+  process.env.DEMO_RECOLECCION_SOLO_LECTURA === "true";
 
 // CORRECCIÓN:
 // La recolección cierra también las alertas predictivas
@@ -453,6 +457,10 @@ async function reiniciarAlertasPorRecoleccion(
 // FOTO 4 - OBTENER DATOS INICIALES
 // ======================================================
 
+// ======================================================
+// FOTO 4 - OBTENER DATOS INICIALES
+// ======================================================
+
 async function obtenerDatosRecoleccion({
   idUsuario,
   nombreUsuario,
@@ -472,7 +480,30 @@ async function obtenerDatosRecoleccion({
     { usuarioId }
   );
 
-  validarProcesoFoto4(proceso);
+  const calculoDisponible =
+    procesoTieneCalculo(proceso);
+
+  // En funcionamiento normal se conserva
+  // la validación original completa.
+  //
+  // En demostración solo se permite
+  // consultar información del formulario.
+  if (
+    !DEMO_RECOLECCION_SOLO_LECTURA ||
+    calculoDisponible
+  ) {
+    validarProcesoFoto4(proceso);
+  } else {
+    if (
+      Number(proceso.contenedor_estado_id) ===
+      ESTADO_CONTENEDOR.INACTIVO
+    ) {
+      throw new RecoleccionError(
+        409,
+        "El contenedor está inactivo."
+      );
+    }
+  }
 
   const responsable = String(
     nombreUsuario ||
@@ -481,9 +512,7 @@ async function obtenerDatosRecoleccion({
   ).trim() || "Responsable";
 
   const { rows } = await pool.query(
-    `
-      SELECT NOW() AS fecha_servidor
-    `
+    `SELECT NOW() AS fecha_servidor`
   );
 
   return {
@@ -494,6 +523,12 @@ async function obtenerDatosRecoleccion({
 
     fecha_servidor:
       rows[0]?.fecha_servidor || null,
+
+    solo_lectura:
+      !calculoDisponible,
+
+    calculo_completado:
+      calculoDisponible,
   };
 }
 
@@ -505,6 +540,10 @@ async function obtenerDatosRecoleccion({
 // No modifica el proceso.
 // Solo calcula porcentajes en backend.
 //
+// ======================================================
+
+// ======================================================
+// FOTO 4 - PREVISUALIZAR PORCENTAJES
 // ======================================================
 
 async function previewPendiente({
@@ -529,17 +568,79 @@ async function previewPendiente({
     { usuarioId }
   );
 
-  validarProcesoFoto4(proceso);
+  const calculoDisponible =
+    procesoTieneCalculo(proceso);
 
-  const totalLb = toNumber(
-    proceso.total_en_libras
-  );
+  let totalLb;
 
-  if (totalLb === null || totalLb < 0) {
+  if (calculoDisponible) {
+    // Flujo original del sistema.
+    validarProcesoFoto4(proceso);
+
+    totalLb = toNumber(
+      proceso.total_en_libras
+    );
+
+  } else {
+    // Se conserva el rechazo original salvo
+    // cuando el modo de consulta está activado.
+    if (!DEMO_RECOLECCION_SOLO_LECTURA) {
+      validarProcesoFoto4(proceso);
+    }
+
+    // Recuperar únicamente un peso simulado
+    // auditado del contenedor seleccionado.
+    const { rows } = await pool.query(
+      `
+        SELECT
+          s.peso_nuevo_lb
+        FROM public.ml_simulacion_lecturas s
+        INNER JOIN lecturas l
+          ON l.id = s.lectura_peso_id
+         AND l.contenedor_id = s.contenedor_id
+        INNER JOIN tipos_lectura t
+          ON t.id = l.tipo_lectura_id
+        INNER JOIN unidad_medida u
+          ON u.id = l.unidad_id
+        WHERE s.contenedor_id = $1
+          AND t.nombre = 'peso_lb'
+          AND u.nombre = 'lb'
+          AND l.estado_lectura = 'normal'
+          AND l.valor = s.peso_nuevo_lb
+          AND s.peso_nuevo_lb >= 0
+        ORDER BY
+          l.fecha_hora DESC,
+          l.id DESC
+        LIMIT 1
+      `,
+      [proceso.contenedor_id]
+    );
+
+    if (!rows.length) {
+      throw new RecoleccionError(
+        404,
+        "No existe un peso almacenado para consultar.",
+        {
+          codigo: "PESO_HISTORICO_NO_DISPONIBLE",
+        }
+      );
+    }
+
+    totalLb = toNumber(
+      rows[0].peso_nuevo_lb
+    );
+  }
+
+  if (
+    totalLb === null ||
+    totalLb < 0
+  ) {
     throw new RecoleccionError(
       409,
-      "El peso total del proceso no es válido.",
-      { codigo: "PESO_PROCESO_INVALIDO" }
+      "El peso total no es válido.",
+      {
+        codigo: "PESO_PROCESO_INVALIDO",
+      }
     );
   }
 
@@ -557,6 +658,9 @@ async function previewPendiente({
 
     porcentaje_recolectado:
       porcentajeRecolectado,
+
+    solo_lectura:
+      !calculoDisponible,
   };
 }
 
