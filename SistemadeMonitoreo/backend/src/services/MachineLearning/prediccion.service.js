@@ -382,22 +382,9 @@ function ejecutarPrediccion() {
     // STDERR
     // ==================================================
 
-  // ======================================================
-// STDERR - DIAGNÓSTICO MACHINE LEARNING
-// ======================================================
-
-proceso.stderr.on("data", (data) => {
-  const mensaje = data.toString();
-
-  errorSalida += mensaje;
-
-  // Mostrar únicamente los diagnósticos ML.
-  for (const linea of mensaje.split(/\r?\n/)) {
-    if (linea.startsWith("DIAGNOSTICO ML -")) {
-      console.log(linea);
-    }
-  }
-});
+    proceso.stderr.on("data", (data) => {
+      errorSalida += data.toString();
+    });
 
     // ==================================================
     // ERROR AL EJECUTAR PYTHON

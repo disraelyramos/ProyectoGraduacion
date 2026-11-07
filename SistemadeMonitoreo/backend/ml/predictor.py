@@ -489,9 +489,11 @@ def calcular_tendencia_historica(
         )
 
         if resultado:
-            resultados.append(
-                resultado
-            )
+            # Solo usar ciclos cuya tendencia Huber es significativa.
+            # No modifica las lecturas ni las recolecciones históricas.
+            pendiente = resultado["pendiente"]
+            if pendiente >= ML_MIN_CRECIMIENTO_DIA:
+                resultados.append(resultado)
 
     if not resultados:
         return None
@@ -638,11 +640,12 @@ def predecir_contenedor(
         lecturas,
         fechas_recoleccion
     )
+
+    # Diagnóstico seguro: stderr no altera el JSON consumido por Node.js.
     print(
-    f"DIAGNOSTICO ML - Contenedor {contenedor_id}: "
-    f"{tendencia}",
-    file=sys.stderr
-)
+        f"DIAGNOSTICO ML - Contenedor {contenedor_id}: {tendencia}",
+        file=sys.stderr
+    )
 
     if not tendencia:
         return {
