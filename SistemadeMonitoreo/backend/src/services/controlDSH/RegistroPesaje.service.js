@@ -6300,13 +6300,55 @@ async function obtenerUltimoCalculoHistorico({ idUsuario }) {
   }
 
   const historico = rows[0];
+
+  // El peso y el costo provienen del cálculo histórico.
+  // El nivel se obtiene por separado, del último registro
+  // disponible del contenedor del proceso activo, igual
+  // que el respaldo histórico empleado en el dashboard.
+  // No se presenta como lectura en vivo del sensor.
+  const { rows: niveles } = await pool.query(
+    `
+      SELECT l.id, l.valor, l.fecha_hora
+      FROM lecturas l
+      INNER JOIN tipos_lectura tl
+        ON tl.id = l.tipo_lectura_id
+      INNER JOIN unidad_medida um
+        ON um.id = l.unidad_id
+      WHERE l.contenedor_id = $1
+        AND tl.nombre = 'nivel_porcentaje'
+        AND um.nombre = '%'
+        AND l.estado_lectura = 'normal'
+        AND l.valor BETWEEN 0 AND 100
+      ORDER BY l.fecha_hora DESC, l.id DESC
+      LIMIT 1
+    `,
+    [proceso.contenedor_id]
+  );
+
+  if (!niveles.length) {
+    throw new RegistroPesajeError(
+      404,
+      'No existe un nivel registrado para el contenedor.',
+      { codigo: 'NIVEL_HISTORICO_NO_DISPONIBLE' }
+    );
+  }
+
+  const nivelAlmacenado = Number(niveles[0].valor);
+  if (!Number.isFinite(nivelAlmacenado)) {
+    throw new RegistroPesajeError(503, 'Nivel almacenado inválido.');
+  }
+
   return {
     estado_medicion: "HISTORICO",
     origen: "historial_calculo_costos",
     demostracion: true,
     permite_registrar_recoleccion: false,
     total_en_libras: Number(historico.total_en_libras),
-    porcentaje_llenado: Number(historico.porcentaje_llenado),
+    // Mismo redondeo visual de la tarjeta: 17.31 -> 17 %.
+    porcentaje_llenado: Math.round(nivelAlmacenado),
+    nivel_origen: 'ultima_lectura_almacenada',
+    nivel_fecha_hora: niveles[0].fecha_hora,
+    nivel_lectura_id: niveles[0].id,
     costo_por_libra_aplicado: Number(historico.costo_por_libra_aplicado),
     total_costo_q: Number(historico.total_costo_q),
     fecha_historica: historico.calculado_en,
