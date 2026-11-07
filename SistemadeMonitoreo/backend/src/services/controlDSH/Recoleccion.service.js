@@ -498,6 +498,7 @@ async function obtenerDatosRecoleccion({
     calculoDisponible
   ) {
     validarProcesoFoto4(proceso);
+    const esSimulacion = Boolean(proceso.es_simulacion);
   } else {
     if (
       Number(proceso.contenedor_estado_id) ===
