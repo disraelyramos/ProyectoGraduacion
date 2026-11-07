@@ -76,7 +76,7 @@ const URL_CALCULO_HISTORICO =
 // Restaurar después de la defensa.
 // ======================================================
 
-const DEMO_PESO_HISTORICO = true;
+const DEMO_PESO_HISTORICO = false;
 
 // ======================================================
 // ESTADOS
@@ -157,7 +157,8 @@ const respuestaCalculoValida = (data) => {
     !data ||
     typeof data !== "object" ||
     data.estado_medicion !==
-      ESTADO_MEDICION.COMPLETADO
+      ESTADO_MEDICION.COMPLETADO ||
+    data.etapa !== "RECOLECCION"
   ) {
     return false;
   }
@@ -664,6 +665,20 @@ const ModalTotales = ({
   // ====================================================
 
   const handleContinuar = () => {
+    // Solo permitir recolección con un cálculo oficial confirmado.
+    if (
+      resultadoVisual?.estado_medicion !== ESTADO_MEDICION.COMPLETADO ||
+      resultadoVisual?.etapa !== "RECOLECCION" ||
+      resultadoVisual?.demostracion === true ||
+      resultadoVisual?.permite_registrar_recoleccion === false
+    ) {
+      showBackendAlert({
+        status: 409,
+        data: { message: "Para registrar la recolección debe completar el pesaje oficial del módulo." },
+      });
+      return;
+    }
+
     if (
       !hayResultado ||
       calculando ||
