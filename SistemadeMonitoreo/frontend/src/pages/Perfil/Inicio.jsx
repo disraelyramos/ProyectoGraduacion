@@ -198,25 +198,16 @@ const formatearActualizacion = (
   ) {
     return "Sin actualización";
   }
-  return valor.toLocaleString(
-    "es-GT",
-    {
-      dateStyle:
-        "short",
-      timeStyle:
-        "short",
-    }
-  );
+return valor.toLocaleString(
+  "es-GT",
+  {
+    timeZone: "America/Guatemala",
+    dateStyle: "short",
+    timeStyle: "short",
+  }
+);
 };
-// ======================================================
-// VALIDACIÓN DE RESPUESTA DEL RESUMEN
-// ======================================================
-//
-// El backend calcula todos los valores.
-//
-// Aquí únicamente comprobamos que la respuesta
-// tenga la estructura necesaria para presentarla.
-// ======================================================
+
 const esNumeroValido = (
   valor
 ) =>

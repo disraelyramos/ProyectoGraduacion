@@ -34,6 +34,59 @@ function porcentajeValido(valor) {
 }
 
 // ======================================================
+// NORMALIZAR FECHA PARA RESPUESTA API
+// ======================================================
+// Las fechas válidas se envían en formato ISO UTC.
+// No se suman ni restan horas manualmente.
+// No se modifican registros en PostgreSQL.
+//
+// La configuración de zona horaria de PostgreSQL
+// y del controlador debe respetar el UTC.
+// ======================================================
+
+function normalizarFecha(fecha) {
+  if (fecha === null || fecha === undefined || fecha === "") {
+    return null;
+  }
+
+  // Un Date válido representa un instante absoluto.
+  if (fecha instanceof Date) {
+    if (Number.isNaN(fecha.getTime())) {
+      return null;
+    }
+
+    return fecha.toISOString();
+  }
+
+  if (typeof fecha !== "string") {
+    return null;
+  }
+
+  const texto = fecha.trim();
+
+  if (!texto) {
+    return null;
+  }
+
+  // Solo aceptar cadenas con zona horaria explícita.
+  // Evita interpretar silenciosamente una fecha local
+  // como UTC o como hora de Guatemala.
+  if (
+    !/[zZ]$|[+-]\d{2}:\d{2}$/.test(texto)
+  ) {
+    return null;
+  }
+
+  const valor = new Date(texto);
+
+  if (Number.isNaN(valor.getTime())) {
+    return null;
+  }
+
+  return valor.toISOString();
+}
+
+// ======================================================
 // LISTAR CONTENEDORES
 // ======================================================
 
@@ -46,6 +99,10 @@ async function listarContenedores() {
   //
   // Si Railway pierde su caché, se recupera
   // el último nivel almacenado en PostgreSQL.
+  //
+  // La fecha histórica mantiene su valor original
+  // para que el controlador PostgreSQL la procese
+  // según el tipo de columna y su configuración.
   // ====================================================
 
   const { rows } = await pool.query(`
@@ -229,6 +286,17 @@ async function listarContenedores() {
       origenDato === "cache_vigente";
 
     // ==================================================
+    // NORMALIZAR FECHA
+    // ==================================================
+    // No se realiza una conversión manual UTC-6.
+    // La zona America/Guatemala se aplica
+    // únicamente al presentar la fecha.
+    // ==================================================
+
+    const fechaNormalizada =
+      normalizarFecha(fechaActualizacion);
+
+    // ==================================================
     // RESPUESTA AL FRONTEND
     // ==================================================
 
@@ -258,9 +326,9 @@ async function listarContenedores() {
       nivel_historico:
         nivelDisponible && !nivelEnVivo,
 
-      // Última fecha conocida.
+      // Última fecha conocida en formato UTC.
       nivel_actualizado_en:
-        fechaActualizacion,
+        fechaNormalizada,
 
       // Procedencia del dato mostrado.
       nivel_proveedor: proveedor,
