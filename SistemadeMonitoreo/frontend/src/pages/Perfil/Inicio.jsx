@@ -301,7 +301,7 @@ const esDistribucionValida = (
         coincidencias[0];
       return (
         typeof item.name ===
-        "string" &&
+          "string" &&
         esNumeroValido(
           item.collected
         ) &&
@@ -428,7 +428,7 @@ const Dashboard = ({
   // ====================================================
   const {
     metrics:
-    mockMetrics,
+      mockMetrics,
   } = dashboardMockData;
   // ====================================================
   // RESUMEN REAL DE RECOLECCIÓN
@@ -483,7 +483,7 @@ const Dashboard = ({
             data
           );
         } catch (
-        error
+          error
         ) {
           console.error(
             "Error consultando resumen de recolección:",
@@ -512,120 +512,118 @@ const Dashboard = ({
   // La KPI recibe su resultado procesado desde el backend.
   //
   // ====================================================
-  const metrics =
-    mockMetrics.map(
-      (metric) => {
-        // ==================================================
-        // PREDICCIÓN DE LLENADO: SOLO PRESENTACIÓN
-        // ==================================================
-        if (metric.id === "prediction") {
-          if (cargandoPredicciones) {
-            return {
-              ...metric,
-              value: "Cargando...",
-              subtitle: "Consultando predicción",
-            };
-          }
-
-          if (errorPredicciones || !kpiPrediccion) {
-            return {
-              ...metric,
-              value: "No disponible",
-              subtitle: errorPredicciones
-                ? "Error al consultar predicción"
-                : predicciones.some((item) => item?.estado === "OK")
-                  ? "Resumen pendiente del servidor"
-                  : "Datos insuficientes",
-            };
-          }
-
+ const metrics =
+  mockMetrics.map(
+    (metric) => {
+      // ==================================================
+      // PREDICCIÓN DE LLENADO: SOLO PRESENTACIÓN
+      // ==================================================
+      if (metric.id === "prediction") {
+        if (cargandoPredicciones) {
           return {
             ...metric,
-            value: kpiPrediccion.value,
-            subtitle: kpiPrediccion.subtitle,
+            value: "Cargando...",
+            subtitle: "Consultando predicción",
           };
         }
-        // ==================================================
-        // MES / AÑO
-        // ==================================================
-        if (
-          metric.id !==
+
+        if (errorPredicciones || !kpiPrediccion) {
+          return {
+            ...metric,
+            value: "No disponible",
+            subtitle: errorPredicciones
+              ? "Error al consultar predicción"
+              : "Datos insuficientes",
+          };
+        }
+
+        return {
+          ...metric,
+          value: kpiPrediccion.value,
+          subtitle: kpiPrediccion.subtitle,
+        };
+      }
+      // ==================================================
+      // MES / AÑO
+      // ==================================================
+      if (
+        metric.id !==
           "month" &&
-          metric.id !==
+        metric.id !==
           "year"
-        ) {
-          return metric;
-        }
-        const periodo =
-          metric.id === "month"
-            ? "week"
-            : "year";
+      ) {
+        return metric;
+      }
+    const periodo =
+  metric.id === "month"
+    ? "week"
+    : "year";
 
-        const summary =
-          resumenRecoleccion?.[periodo]?.summary;
-        if (
-          cargandoResumen
-        ) {
-          return {
-            ...metric,
-            value:
-              "Cargando...",
-            subtitle:
-              "Consultando recolecciones",
-          };
-        }
-        if (
-          errorResumen ||
-          !summary
-        ) {
-          return {
-            ...metric,
-            value:
-              "No disponible",
-            subtitle:
-              "No fue posible consultar las recolecciones",
-          };
-        }
-        const total =
-          summary
-            .totalCollected;
-        const count =
-          summary
-            .totalCollections;
-        if (
-          !esNumeroValido(
-            total
-          ) ||
-          !esNumeroValido(
-            count
-          )
-        ) {
-          return {
-            ...metric,
-            value:
-              "No disponible",
-            subtitle:
-              "Datos de recolección no válidos",
-          };
-        }
+const summary =
+  resumenRecoleccion?.[periodo]?.summary;
+      if (
+        cargandoResumen
+      ) {
         return {
           ...metric,
           value:
-            `${total.toLocaleString(
-              "es-GT",
-              {
-                maximumFractionDigits:
-                  2,
-              }
-            )} lb`,
+            "Cargando...",
           subtitle:
-            `${count.toLocaleString(
-              "es-GT"
-            )} recolecciones`,
+            "Consultando recolecciones",
         };
       }
-    );
-  // ====================================================
+      if (
+        errorResumen ||
+        !summary
+      ) {
+        return {
+          ...metric,
+          value:
+            "No disponible",
+          subtitle:
+            "No fue posible consultar las recolecciones",
+        };
+      }
+      const total =
+        summary
+          .totalCollected;
+      const count =
+        summary
+          .totalCollections;
+      if (
+        !esNumeroValido(
+          total
+        ) ||
+        !esNumeroValido(
+          count
+        )
+      ) {
+        return {
+          ...metric,
+          value:
+            "No disponible",
+          subtitle:
+            "Datos de recolección no válidos",
+        };
+      }
+      return {
+        ...metric,
+        value:
+          `${total.toLocaleString(
+            "es-GT",
+            {
+              maximumFractionDigits:
+                2,
+            }
+          )} lb`,
+        subtitle:
+          `${count.toLocaleString(
+            "es-GT"
+          )} recolecciones`,
+      };
+    }
+  );
+// ====================================================
   // CONSULTAR CONTENEDORES
   // ====================================================
   const cargarContenedores =
@@ -649,7 +647,7 @@ const Dashboard = ({
             response.data
           );
         } catch (
-        error
+          error
         ) {
           console.error(
             "Error consultando contenedores:",
@@ -690,7 +688,7 @@ const Dashboard = ({
             );
           if (
             response.data?.success !==
-            true ||
+              true ||
             ![
               40,
               50,
@@ -706,7 +704,7 @@ const Dashboard = ({
               segundoAviso
             ) ||
             primerAviso >=
-            segundoAviso
+              segundoAviso
           ) {
             throw new Error(
               "La configuración de alertas no es válida."
@@ -723,7 +721,7 @@ const Dashboard = ({
               true,
           });
         } catch (
-        error
+          error
         ) {
           console.error(
             "Error consultando configuración de alertas:",
@@ -752,43 +750,32 @@ const Dashboard = ({
             await apiClient.get(
               "/predicciones"
             );
-          const data = response.data?.data;
+       const data = response.data?.data;
 
-          if (
-            response.data?.ok !== true ||
-            !data ||
-            typeof data !== "object" ||
-            !Array.isArray(data.predicciones) ||
-            !data.kpi ||
-            typeof data.kpi !== "object" ||
-            typeof data.kpi.disponible !== "boolean"
-          ) {
-            throw new Error(
-              "La respuesta de predicciones no es válida."
-            );
-          }
+if (
+  response.data?.ok !== true ||
+  !data ||
+  typeof data !== "object" ||
+  !Array.isArray(data.predicciones) ||
+  !data.kpi ||
+  typeof data.kpi !== "object" ||
+  typeof data.kpi.disponible !== "boolean"
+) {
+  throw new Error(
+    "La respuesta de predicciones no es válida."
+  );
+}
 
-          // El backend es la única fuente de cálculos y selección
-          // de la predicción prioritaria. React solo presenta datos.
-          // IMPORTANTE: actualizar también el modal y la gráfica.
           setPredicciones(data.predicciones);
-
-          if (
+          setKpiPrediccion(
             data.kpi.disponible === true &&
             typeof data.kpi.value === "string" &&
-            data.kpi.value.trim() !== "" &&
             typeof data.kpi.subtitle === "string"
-          ) {
-            setKpiPrediccion({
-              value: data.kpi.value,
-              subtitle: data.kpi.subtitle,
-            });
-          } else {
-            // No inventar un resumen cuando el backend no lo ofrece.
-            setKpiPrediccion(null);
-          }
+              ? { value: data.kpi.value, subtitle: data.kpi.subtitle }
+              : null
+          );
         } catch (
-        error
+          error
         ) {
           console.error(
             "Error consultando predicciones ML:",
@@ -998,7 +985,7 @@ const Dashboard = ({
   ) => {
     const modalId =
       metricModalMap[
-      metricId
+        metricId
       ];
     if (
       modalId
@@ -1121,42 +1108,42 @@ const Dashboard = ({
           />
         </section>
       </main>
-      <DashboardModalManager
-        activeModalId={
-          activeModalId
-        }
-        onClose={
-          closeModal
-        }
-        containerStatus={
-          contenedores
-        }
-        predictions={
-          predicciones
-        }
-        predictionLoading={
-          cargandoPredicciones
-        }
-        predictionError={
-          errorPredicciones
-        }
-        onNewRecord={
-          handleNewRecord
-        }
-        onHistory={
-          handleHistory
-        }
-        collectionSummary={
-          resumenRecoleccion
-        }
-        collectionLoading={
-          cargandoResumen
-        }
-        collectionError={
-          errorResumen
-        }
-      />
-    </>
+ <DashboardModalManager
+  activeModalId={
+    activeModalId
+  }
+  onClose={
+    closeModal
+  }
+  containerStatus={
+    contenedores
+  }
+  predictions={
+    predicciones
+  }
+  predictionLoading={
+    cargandoPredicciones
+  }
+  predictionError={
+    errorPredicciones
+  }
+  onNewRecord={
+    handleNewRecord
+  }
+  onHistory={
+    handleHistory
+  }
+  collectionSummary={
+    resumenRecoleccion
+  }
+  collectionLoading={
+    cargandoResumen
+  }
+  collectionError={
+    errorResumen
+  }
+/>
+</>
   );
 };
 export default Dashboard;

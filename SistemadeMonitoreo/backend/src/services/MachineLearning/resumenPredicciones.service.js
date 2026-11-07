@@ -19,7 +19,7 @@ function esPrediccionDisponible(item) {
     item.dias_para_alto >= 0 &&
     item.dias_para_alto <= 3650 &&
     Number.isInteger(item.ciclos_utilizados) &&
-    item.ciclos_utilizados >= 2 &&
+    item.ciclos_utilizados >= 1 &&
     typeof item.tiempo_para_alto_texto === "string" &&
     item.tiempo_para_alto_texto.trim().length > 0 &&
     ["BAJO", "MEDIO", "ALTO"].includes(item.riesgo)
@@ -65,7 +65,7 @@ function construirResumenPredicciones(predicciones) {
     disponibles.reduce(
       (menor, actual) =>
         actual.dias_para_alto <
-        menor.dias_para_alto
+          menor.dias_para_alto
           ? actual
           : menor
     );
