@@ -47,27 +47,9 @@ const TIMEOUT_CALCULO_MS = leerMilisegundos(
   135000
 );
 
-// ======================================================
-// MODO DE DEMOSTRACIÓN
-// ======================================================
-//
-// true:
-//   Consulta el último peso registrado.
-//   No inicia el módulo HX711.
-//   No calcula ni guarda nuevos costos.
-//
-// false:
-//   Funcionamiento normal del HX711.
-//
-// El valor se configura desde Netlify.
-// ======================================================
 
-const DEMO_PESO_HISTORICO =
-  String(
-    import.meta.env.VITE_DEMO_PESO_HISTORICO || ""
-  )
-    .trim()
-    .toLowerCase() === "true";
+
+const DEMO_PESO_HISTORICO = true;
 
 // ======================================================
 // ENDPOINTS
