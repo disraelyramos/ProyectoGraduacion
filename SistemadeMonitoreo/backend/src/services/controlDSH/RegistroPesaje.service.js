@@ -1847,14 +1847,15 @@ function construirRespuestaCalculo({
   contenedor,
 
   yaCalculado = false,
+  esSimulacion = false,
 
 }) {
 
 
 
   return {
-    demostracion: String(proceso.observaciones || "").includes("[PRUEBA_SIMULACION_ML]"),
-    origen_peso: String(proceso.observaciones || "").includes("[PRUEBA_SIMULACION_ML]")
+    demostracion: esSimulacion,
+    origen_peso: esSimulacion
       ? "simulacion_ml" : "modulo_o_proveedor_configurado",
 
 
@@ -4599,6 +4600,12 @@ async function guardarCalculo({
 
 
 
+      const { rows: origenRows } = await client.query(
+        `SELECT 1 FROM registro_origen_calculo
+         WHERE proceso_id = $1 AND origen = 'simulacion_ml' LIMIT 1`,
+        [proceso.id]
+      );
+
       return construirRespuestaCalculo({
 
         proceso,
@@ -4608,6 +4615,7 @@ async function guardarCalculo({
         yaCalculado:
 
           true,
+        esSimulacion: origenRows.length > 0,
 
       });
 
@@ -5400,9 +5408,7 @@ async function guardarCalculo({
             total_costo_q = $2,
             lectura_id = $3,
             porcentaje_llenado = COALESCE($8, porcentaje_llenado),
-            observaciones = CASE WHEN $7 THEN
-              CONCAT_WS(' ', NULLIF(observaciones, ''), '[PRUEBA_SIMULACION_ML]')
-              ELSE observaciones END
+            observaciones = observaciones
           WHERE id = $4
 
             AND calculado_por = $5
@@ -5525,6 +5531,19 @@ async function guardarCalculo({
 
 
 
+    // Registrar procedencia técnica, sin mostrarla en observaciones.
+    if (parejaDemo) {
+      await client.query(
+        `INSERT INTO registro_origen_calculo
+           (proceso_id, lectura_id, origen)
+         VALUES ($1, $2, 'simulacion_ml')
+         ON CONFLICT (proceso_id)
+         DO UPDATE SET lectura_id = EXCLUDED.lectura_id,
+                       origen = EXCLUDED.origen`,
+        [procesoId, lecturaId]
+      );
+    }
+
     const procesoActualizado =
 
       rows[0];
@@ -5566,6 +5585,7 @@ async function guardarCalculo({
       yaCalculado:
 
         false,
+      esSimulacion: Boolean(parejaDemo),
 
     });
 
