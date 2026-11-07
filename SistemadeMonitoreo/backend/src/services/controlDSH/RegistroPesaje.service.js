@@ -4345,39 +4345,69 @@ async function guardarCostoGlobal({
 
 // Devuelve SOLO una pareja nivel/peso existente y validada del mismo contenedor.
 // No inventa lecturas ni inserta filas en la tabla lecturas.
-async function obtenerParejaSimulacion(client, contenedorId) {
-  const { rows } = await client.query(`
-    SELECT s.nivel_nuevo, s.peso_nuevo_lb,
-           s.lectura_nivel_id, s.lectura_peso_id
-    FROM public.ml_simulacion_lecturas s
-    JOIN lecturas ln ON ln.id = s.lectura_nivel_id
-      AND ln.contenedor_id = s.contenedor_id
-    JOIN lecturas lp ON lp.id = s.lectura_peso_id
-      AND lp.contenedor_id = s.contenedor_id
-    JOIN tipos_lectura tn ON tn.id = ln.tipo_lectura_id
-    JOIN tipos_lectura tp ON tp.id = lp.tipo_lectura_id
-    JOIN unidad_medida un ON un.id = ln.unidad_id
-    JOIN unidad_medida up ON up.id = lp.unidad_id
-    WHERE s.contenedor_id = $1
-      AND tn.nombre = 'nivel_porcentaje'
-      AND tp.nombre = 'peso_lb'
-      AND un.nombre = '%'
-      AND up.nombre = 'lb'
-      AND ln.estado_lectura = 'normal'
-      AND lp.estado_lectura = 'normal'
-      AND ln.valor = s.nivel_nuevo
-      AND lp.valor = s.peso_nuevo_lb
-      AND s.nivel_nuevo BETWEEN 0 AND 100
-      AND s.peso_nuevo_lb >= 0
-    ORDER BY lp.fecha_hora DESC, lp.id DESC
-    LIMIT 1
-  `, [contenedorId]);
-  if (!rows.length) {
-    throw new RegistroPesajeError(404,
-      "No hay una pareja de lecturas simuladas válidas para este contenedor.",
-      { codigo: "DEMO_LECTURAS_NO_DISPONIBLES" });
+// Consulta las últimas lecturas válidas de nivel y peso del mismo contenedor.
+// Se usa únicamente en la ruta de demostración / consulta histórica.
+// El pesaje físico continúa usando medicionesService.obtenerPesoActual().
+async function obtenerUltimasLecturasContenedor(client, contenedorId, tipoResiduoId = null) {
+  const { rows } = await client.query(
+    `
+      SELECT
+        c.codigo,
+        c.id_tipo_residuo,
+        ln.valor AS nivel_nuevo,
+        lp.valor AS peso_nuevo_lb,
+        ln.id AS lectura_nivel_id,
+        lp.id AS lectura_peso_id,
+        ln.fecha_hora AS fecha_nivel,
+        lp.fecha_hora AS fecha_peso
+      FROM contenedores c
+      JOIN LATERAL (
+        SELECT l.id, l.valor, l.fecha_hora
+        FROM lecturas l
+        JOIN tipos_lectura t ON t.id = l.tipo_lectura_id
+        JOIN unidad_medida u ON u.id = l.unidad_id
+        WHERE l.contenedor_id = c.id_contenedor
+          AND t.nombre = 'nivel_porcentaje'
+          AND u.nombre = '%'
+          AND l.estado_lectura = 'normal'
+          AND l.valor BETWEEN 0 AND 100
+        ORDER BY l.id DESC
+        LIMIT 1
+      ) ln ON TRUE
+      JOIN LATERAL (
+        SELECT l.id, l.valor, l.fecha_hora
+        FROM lecturas l
+        JOIN tipos_lectura t ON t.id = l.tipo_lectura_id
+        JOIN unidad_medida u ON u.id = l.unidad_id
+        WHERE l.contenedor_id = c.id_contenedor
+          AND t.nombre = 'peso_lb'
+          AND u.nombre = 'lb'
+          AND l.estado_lectura = 'normal'
+          AND l.valor >= 0
+          AND l.valor <= c.capacidad_max_lb
+        ORDER BY l.id DESC
+        LIMIT 1
+      ) lp ON TRUE
+      WHERE c.id_contenedor = $1
+        AND ($2::integer IS NULL OR c.id_tipo_residuo = $2)
+      LIMIT 1
+    `,
+    [contenedorId, tipoResiduoId]
+  );
+
+  if (rows.length === 0) {
+    throw new RegistroPesajeError(
+      404,
+      "No existen lecturas válidas de nivel y peso para este contenedor.",
+      { codigo: "LECTURAS_NO_DISPONIBLES" }
+    );
   }
   return rows[0];
+}
+
+// Conserva el nombre por compatibilidad con guardarCalculo().
+async function obtenerParejaSimulacion(client, contenedorId) {
+  return obtenerUltimasLecturasContenedor(client, contenedorId);
 }
 
 async function guardarCalculo({
@@ -6280,269 +6310,66 @@ async function cancelarProceso({
 
 
 // ======================================================
-// DEMOSTRACIÓN: CONSULTAR ÚLTIMO CÁLCULO COMPLETO
+// DEMOSTRACIÓN: CONSULTAR ÚLTIMO NIVEL Y PESO
 // ======================================================
-// Exclusivamente SELECT. Nunca completa una solicitud
-// de HX711 ni modifica el proceso vigente.
-// Utiliza el tipo del proceso EN_PROCESO autenticado.
-// ======================================================
-
-
+// Solo lectura de la base de datos. No guarda un cálculo
+// ni completa la solicitud del módulo HX711.
 async function obtenerUltimoCalculoHistorico({ idUsuario }) {
-
-  // ====================================================
-  // 1. VALIDAR USUARIO
-  // ====================================================
-
   const usuarioId = toInt(idUsuario);
-
-  if (
-    !Number.isSafeInteger(usuarioId) ||
-    usuarioId <= 0
-  ) {
-    throw new RegistroPesajeError(
-      401,
-      "Usuario no autenticado"
-    );
+  if (!usuarioId) {
+    throw new RegistroPesajeError(401, "Usuario no autenticado");
   }
 
-  // ====================================================
-  // 2. OBTENER PROCESO ACTIVO
-  // ====================================================
+  const proceso = await requerirProcesoActivo(pool, usuarioId);
+  const contenedorId = toInt(proceso.contenedor_id);
+  const tipoResiduoId = toInt(proceso.id_tipo_residuo);
+  const costoPorLibra = toNumber(proceso.costo_por_libra_aplicado);
 
-  const proceso = await requerirProcesoActivo(
+  if (!contenedorId || !TIPOS_DSH.includes(tipoResiduoId)) {
+    throw new RegistroPesajeError(409, "Contenedor o tipo de residuo inválido.");
+  }
+  if (!procesoTieneCostoConfirmado(proceso) || costoPorLibra === null) {
+    throw new RegistroPesajeError(409, "Debe confirmar el costo antes de consultar el resultado.", {
+      codigo: "COSTO_NO_CONFIRMADO"
+    });
+  }
+
+  const lectura = await obtenerUltimasLecturasContenedor(
     pool,
-    usuarioId
+    contenedorId,
+    tipoResiduoId
   );
+  const peso = toNumber(lectura.peso_nuevo_lb);
+  const nivel = toNumber(lectura.nivel_nuevo);
 
-  const contenedorId = toInt(
-    proceso.contenedor_id
-  );
-
-  const tipoResiduoId = toInt(
-    proceso.id_tipo_residuo
-  );
-
-  const costoPorLibra = toNumber(
-    proceso.costo_por_libra_aplicado
-  );
-
-  if (
-    !contenedorId ||
-    ![1, 2].includes(tipoResiduoId)
-  ) {
-    throw new RegistroPesajeError(
-      409,
-      "Contenedor o tipo de residuo inválido."
-    );
+  if (peso === null || peso < 0 || nivel === null || nivel < 0 || nivel > 100) {
+    throw new RegistroPesajeError(503, "Las lecturas almacenadas contienen valores inválidos.");
   }
 
-  if (
-    !procesoTieneCostoConfirmado(proceso) ||
-    costoPorLibra === null
-  ) {
-    throw new RegistroPesajeError(
-      409,
-      "Debe confirmar el costo antes de consultar el resultado.",
-      {
-        codigo: "COSTO_NO_CONFIRMADO"
-      }
-    );
-  }
-
-  // ====================================================
-  // 3. CONSULTAR ÚLTIMO PESO Y NIVEL ALMACENADOS
-  // ====================================================
-  //
-  // Se recuperan ambas lecturas de una misma
-  // ejecución del procedimiento generar_lecturas_ml().
-  //
-  // NO se utiliza el peso de un cálculo antiguo.
-  // NO se registra un nuevo pesaje.
-  // NO se modifica historial_calculo_costos.
-  // ====================================================
-
-  const { rows } = await pool.query(
-    `
-      SELECT
-        c.codigo,
-        c.id_tipo_residuo,
-
-        s.nivel_nuevo,
-        s.peso_nuevo_lb,
-
-        s.lectura_nivel_id,
-        s.lectura_peso_id,
-
-        ln.fecha_hora AS fecha_nivel,
-        lp.fecha_hora AS fecha_peso
-
-      FROM public.ml_simulacion_lecturas s
-
-      INNER JOIN contenedores c
-        ON c.id_contenedor = s.contenedor_id
-
-      INNER JOIN lecturas ln
-        ON ln.id = s.lectura_nivel_id
-       AND ln.contenedor_id = s.contenedor_id
-
-      INNER JOIN lecturas lp
-        ON lp.id = s.lectura_peso_id
-       AND lp.contenedor_id = s.contenedor_id
-
-      INNER JOIN tipos_lectura tn
-        ON tn.id = ln.tipo_lectura_id
-
-      INNER JOIN tipos_lectura tp
-        ON tp.id = lp.tipo_lectura_id
-
-      INNER JOIN unidad_medida un
-        ON un.id = ln.unidad_id
-
-      INNER JOIN unidad_medida up
-        ON up.id = lp.unidad_id
-
-      WHERE s.contenedor_id = $1
-
-        AND c.id_tipo_residuo = $2
-
-        AND tn.nombre = 'nivel_porcentaje'
-        AND tp.nombre = 'peso_lb'
-
-        AND un.nombre = '%'
-        AND up.nombre = 'lb'
-
-        AND ln.estado_lectura = 'normal'
-        AND lp.estado_lectura = 'normal'
-
-        AND ln.valor = s.nivel_nuevo
-        AND lp.valor = s.peso_nuevo_lb
-
-        AND s.nivel_nuevo BETWEEN 0 AND 100
-        AND s.peso_nuevo_lb >= 0
-
-      ORDER BY
-        lp.fecha_hora DESC,
-        lp.id DESC
-
-      LIMIT 1
-    `,
-    [
-      contenedorId,
-      tipoResiduoId
-    ]
-  );
-
-  // ====================================================
-  // 4. VALIDAR RESULTADOS
-  // ====================================================
-
-  if (rows.length === 0) {
-    throw new RegistroPesajeError(
-      404,
-      "No existen lecturas de nivel y peso disponibles para este contenedor.",
-      {
-        codigo: "LECTURAS_SIMULACION_NO_DISPONIBLES"
-      }
-    );
-  }
-
-  const lectura = rows[0];
-
-  const peso = toNumber(
-    lectura.peso_nuevo_lb
-  );
-
-  const nivel = toNumber(
-    lectura.nivel_nuevo
-  );
-
-  if (
-    peso === null ||
-    peso < 0 ||
-    nivel === null ||
-    nivel < 0 ||
-    nivel > 100
-  ) {
-    throw new RegistroPesajeError(
-      503,
-      "Las lecturas almacenadas contienen valores inválidos."
-    );
-  }
-
-  // ====================================================
-  // 5. CALCULAR COSTO PARA LA CONSULTA
-  // ====================================================
-  //
-  // Se utiliza el costo por libra confirmado
-  // en el proceso actual.
-  //
-  // El cálculo es únicamente visual.
-  // No se guarda en PostgreSQL.
-  // ====================================================
-
-  const totalCostoQ = Number(
-    (
-      peso * costoPorLibra
-    ).toFixed(2)
-  );
-
-  // ====================================================
-  // 6. RESPUESTA PARA MODALTOTALES
-  // ====================================================
+  const totalCostoQ = Number((peso * costoPorLibra).toFixed(2));
 
   return {
-
     estado_medicion: "HISTORICO",
-
-    // Conservado para compatibilidad con
-    // la validación del frontend actual.
     origen: "historial_calculo_costos",
-
     demostracion: true,
-
     permite_registrar_recoleccion: false,
-
-    total_en_libras: Number(
-      peso.toFixed(2)
-    ),
-
-    // Mismo redondeo de la tarjeta:
-    // 17.31 -> 17 %
+    total_en_libras: Number(peso.toFixed(2)),
     porcentaje_llenado: Math.round(nivel),
-
-    costo_por_libra_aplicado:
-      costoPorLibra,
-
+    costo_por_libra_aplicado: costoPorLibra,
     total_costo_q: totalCostoQ,
-
-    // Procedencia efectiva de los datos
-    peso_origen: "ml_simulacion_lecturas",
-    nivel_origen: "ml_simulacion_lecturas",
+    peso_origen: "lecturas",
+    nivel_origen: "lecturas",
     costo_origen: "proceso_activo_confirmado",
-
-    lectura_peso_id:
-      lectura.lectura_peso_id,
-
-    lectura_nivel_id:
-      lectura.lectura_nivel_id,
-
-    fecha_historica:
-      lectura.fecha_peso,
-
-    nivel_fecha_hora:
-      lectura.fecha_nivel,
-
+    lectura_peso_id: lectura.lectura_peso_id,
+    lectura_nivel_id: lectura.lectura_nivel_id,
+    fecha_historica: lectura.fecha_peso,
+    nivel_fecha_hora: lectura.fecha_nivel,
     contenedor: {
       codigo: lectura.codigo,
-
-      id_tipo_residuo: Number(
-        lectura.id_tipo_residuo
-      )
+      id_tipo_residuo: Number(lectura.id_tipo_residuo)
     }
   };
 }
-
 
 module.exports = {
 
