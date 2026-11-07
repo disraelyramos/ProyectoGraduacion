@@ -1,43 +1,32 @@
+
+"use strict";
+
 const pool = require("../../../../config/db");
 
 // ======================================================
-// CONSTANTES
+// ESTADOS DE SOLICITUD
 // ======================================================
 
 const ESTADO_SOLICITUD = Object.freeze({
-
   PENDIENTE: "PENDIENTE",
-
   MIDIENDO: "MIDIENDO",
-
   ESTABILIZANDO: "ESTABILIZANDO",
-
   MOVIMIENTO_DETECTADO: "MOVIMIENTO_DETECTADO",
-
   COMPLETADO: "COMPLETADO",
-
   ERROR: "ERROR",
-
   TIMEOUT: "TIMEOUT",
-
   CANCELADO: "CANCELADO",
-
 });
 
 const ESTADOS_ACTIVOS = Object.freeze([
-
   ESTADO_SOLICITUD.PENDIENTE,
-
   ESTADO_SOLICITUD.MIDIENDO,
-
   ESTADO_SOLICITUD.ESTABILIZANDO,
-
   ESTADO_SOLICITUD.MOVIMIENTO_DETECTADO,
-
 ]);
 
 // ======================================================
-// CONFIGURACION DESDE .env
+// CONFIGURACIÓN DESDE RAILWAY
 // ======================================================
 
 function obtenerEnteroPositivo(nombre, respaldo) {
@@ -59,15 +48,21 @@ const TIMEOUT_MEDICION_MS = obtenerEnteroPositivo(
 );
 
 // ======================================================
-// HELPERS
+// FUNCIONES AUXILIARES
 // ======================================================
 
 function esperar(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 function toInt(value) {
-  if (value === null || value === undefined || value === "") {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
     return null;
   }
 
@@ -79,7 +74,11 @@ function toInt(value) {
 }
 
 function toNumber(value) {
-  if (value === null || value === undefined || value === "") {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
     return null;
   }
 
@@ -91,7 +90,7 @@ function toNumber(value) {
 }
 
 // ======================================================
-// ERROR DEL PROVEEDOR
+// ERRORES DEL MÓDULO
 // ======================================================
 
 class ModuloMedicionesError extends Error {
@@ -110,22 +109,21 @@ class ModuloMedicionesError extends Error {
   }
 }
 
-
+// ======================================================
+// OBTENER MÓDULO SEGÚN CONTENEDOR
+// ======================================================
 
 async function obtenerModuloPorContenedor({
   contenedorId,
-  db,
+  db = pool,
 }) {
   const { rows } = await db.query(
     `
       SELECT
         id_contenedor,
         id_tipo_residuo
-
       FROM contenedores
-
       WHERE id_contenedor = $1
-
       LIMIT 1
     `,
     [contenedorId]
@@ -172,7 +170,7 @@ async function obtenerModuloPorContenedor({
 
 async function buscarSolicitudActiva({
   procesoId,
-  db,
+  db = pool,
 }) {
   const { rows } = await db.query(
     `
@@ -188,14 +186,10 @@ async function buscarSolicitudActiva({
         creado_en,
         actualizado_en,
         completado_en
-
       FROM solicitudes_medicion_peso
-
       WHERE proceso_id = $1
         AND estado = ANY($2::varchar[])
-
       ORDER BY id DESC
-
       LIMIT 1
     `,
     [
@@ -208,14 +202,14 @@ async function buscarSolicitudActiva({
 }
 
 // ======================================================
-// CREAR SOLICITUD
+// CREAR SOLICITUD DE MEDICIÓN
 // ======================================================
 
 async function crearSolicitud({
   procesoId,
   contenedorId,
   moduloCodigo,
-  db,
+  db = pool,
 }) {
   try {
     const { rows } = await db.query(
@@ -229,17 +223,10 @@ async function crearSolicitud({
           creado_en,
           actualizado_en
         )
-
         VALUES (
-          $1,
-          $2,
-          $3,
-          $4,
-          $5,
-          NOW(),
-          NOW()
+          $1, $2, $3, $4, $5,
+          NOW(), NOW()
         )
-
         RETURNING
           id,
           proceso_id,
@@ -265,10 +252,6 @@ async function crearSolicitud({
     return rows[0];
 
   } catch (error) {
-    // Conservamos el manejo de concurrencia original.
-    // Si existe una solicitud activa, se reutiliza
-    // después de validar contenedor y módulo.
-
     if (error?.code === "23505") {
       const existente = await buscarSolicitudActiva({
         procesoId,
@@ -325,19 +308,21 @@ async function obtenerOCrearSolicitud({
   procesoId,
   contenedorId,
   moduloCodigo,
-  db,
+  db = pool,
 }) {
   const existente = await buscarSolicitudActiva({
     procesoId,
     db,
   });
 
-  const solicitud = existente || await crearSolicitud({
-    procesoId,
-    contenedorId,
-    moduloCodigo,
-    db,
-  });
+  const solicitud =
+    existente ||
+    await crearSolicitud({
+      procesoId,
+      contenedorId,
+      moduloCodigo,
+      db,
+    });
 
   return validarSolicitudExistente({
     solicitud,
@@ -347,12 +332,12 @@ async function obtenerOCrearSolicitud({
 }
 
 // ======================================================
-// CONSULTAR SOLICITUD
+// CONSULTAR SOLICITUD POR ID
 // ======================================================
 
 async function obtenerSolicitudPorId({
   solicitudId,
-  db,
+  db = pool,
 }) {
   const { rows } = await db.query(
     `
@@ -368,11 +353,8 @@ async function obtenerSolicitudPorId({
         creado_en,
         actualizado_en,
         completado_en
-
       FROM solicitudes_medicion_peso
-
       WHERE id = $1
-
       LIMIT 1
     `,
     [solicitudId]
@@ -387,17 +369,15 @@ async function obtenerSolicitudPorId({
 
 async function marcarTimeout({
   solicitudId,
-  db,
+  db = pool,
 }) {
   await db.query(
     `
       UPDATE solicitudes_medicion_peso
-
       SET
         estado = $1,
         mensaje = $2,
         actualizado_en = NOW()
-
       WHERE id = $3
         AND estado = ANY($4::varchar[])
     `,
@@ -411,22 +391,13 @@ async function marcarTimeout({
 }
 
 // ======================================================
-// OBTENER LECTURA FINAL
-// ======================================================
-//
-// Se verifica que la lectura:
-// - exista;
-// - corresponda al contenedor;
-// - sea de tipo peso_lb;
-// - utilice libras;
-// - tenga estado normal.
-//
+// VALIDAR LECTURA FINAL DEL MÓDULO
 // ======================================================
 
 async function obtenerLecturaFinal({
   lecturaId,
   contenedorId,
-  db,
+  db = pool,
 }) {
   const { rows } = await db.query(
     `
@@ -437,24 +408,18 @@ async function obtenerLecturaFinal({
         l.fuente_lectura,
         l.estado_lectura,
         l.fecha_hora,
-
         tl.nombre AS tipo_lectura,
         um.nombre AS unidad
-
       FROM lecturas l
-
       JOIN tipos_lectura tl
         ON tl.id = l.tipo_lectura_id
-
       JOIN unidad_medida um
         ON um.id = l.unidad_id
-
       WHERE l.id = $1
         AND l.contenedor_id = $2
         AND tl.nombre = $3
         AND um.nombre = $4
         AND l.estado_lectura = $5
-
       LIMIT 1
     `,
     [
@@ -470,13 +435,13 @@ async function obtenerLecturaFinal({
 }
 
 // ======================================================
-// VALIDAR RESULTADO COMPLETADO
+// VALIDAR MEDICIÓN COMPLETADA
 // ======================================================
 
 async function validarResultadoCompletado({
   solicitud,
   contenedorId,
-  db,
+  db = pool,
 }) {
   const lecturaId = toInt(
     solicitud.lectura_id
@@ -514,9 +479,7 @@ async function validarResultadoCompletado({
     );
   }
 
-  const valor = toNumber(
-    lectura.valor
-  );
+  const valor = toNumber(lectura.valor);
 
   if (
     valor === null ||
@@ -530,8 +493,8 @@ async function validarResultadoCompletado({
     );
   }
 
-  // La lectura registrada en BD es la fuente
-  // utilizada para calcular el costo.
+  // Solo una solicitud completada con lectura
+  // validada permite continuar al cálculo de costo.
 
   return {
     tipo: "peso_lb",
@@ -551,6 +514,7 @@ async function validarResultadoCompletado({
 
 function validarEstadoTerminal(solicitud) {
   switch (solicitud.estado) {
+
     case ESTADO_SOLICITUD.ERROR:
       throw new ModuloMedicionesError(
         solicitud.mensaje ||
@@ -585,26 +549,18 @@ function validarEstadoTerminal(solicitud) {
 }
 
 // ======================================================
-// ESPERAR RESULTADO DEL MODULO
-// ======================================================
-//
-// ESPERANDO_RETIRO sigue siendo un estado activo.
-//
-// El resultado final únicamente se devuelve
-// cuando el módulo registra COMPLETADO.
-//
+// ESPERAR RESULTADO REAL DEL MÓDULO
 // ======================================================
 
 async function esperarResultado({
   solicitudId,
   contenedorId,
-  db,
+  db = pool,
 }) {
   const inicio = Date.now();
 
   while (
-    Date.now() - inicio <
-    TIMEOUT_MEDICION_MS
+    Date.now() - inicio < TIMEOUT_MEDICION_MS
   ) {
     const solicitud = await obtenerSolicitudPorId({
       solicitudId,
@@ -633,14 +589,6 @@ async function esperarResultado({
 
     validarEstadoTerminal(solicitud);
 
-    // Estados que todavía esperan resultado:
-    //
-    // PENDIENTE
-    // MIDIENDO
-    // ESTABILIZANDO
-    // MOVIMIENTO_DETECTADO
-    // ESPERANDO_RETIRO
-
     if (!ESTADOS_ACTIVOS.includes(solicitud.estado)) {
       throw new ModuloMedicionesError(
         "La solicitud tiene un estado de medición desconocido.",
@@ -650,13 +598,8 @@ async function esperarResultado({
       );
     }
 
-    await esperar(
-      INTERVALO_CONSULTA_MS
-    );
+    await esperar(INTERVALO_CONSULTA_MS);
   }
-
-  // No se sobrescribe una medición que ya
-  // haya sido completada por el módulo.
 
   await marcarTimeout({
     solicitudId,
@@ -673,7 +616,7 @@ async function esperarResultado({
 }
 
 // ======================================================
-// OBTENER PESO ACTUAL DESDE EL MODULO
+// PESO ACTUAL DESDE EL MÓDULO FÍSICO
 // ======================================================
 
 async function obtenerPesoActual({
@@ -681,13 +624,8 @@ async function obtenerPesoActual({
   contenedorId,
   db = pool,
 }) {
-  const procesoIdNumero = toInt(
-    procesoId
-  );
-
-  const contenedorIdNumero = toInt(
-    contenedorId
-  );
+  const procesoIdNumero = toInt(procesoId);
+  const contenedorIdNumero = toInt(contenedorId);
 
   if (!procesoIdNumero) {
     throw new ModuloMedicionesError(
@@ -707,15 +645,11 @@ async function obtenerPesoActual({
     );
   }
 
-  // 1. Determinar módulo según contenedor.
-
   const { moduloCodigo } =
     await obtenerModuloPorContenedor({
       contenedorId: contenedorIdNumero,
       db,
     });
-
-  // 2. Obtener o crear solicitud.
 
   const solicitud =
     await obtenerOCrearSolicitud({
@@ -725,8 +659,6 @@ async function obtenerPesoActual({
       db,
     });
 
-  // 3. Esperar el peso final.
-
   return esperarResultado({
     solicitudId: solicitud.id,
     contenedorId: contenedorIdNumero,
@@ -735,10 +667,112 @@ async function obtenerPesoActual({
 }
 
 // ======================================================
+// CONSULTAR ÚLTIMO PESO HISTÓRICO
+// ======================================================
+//
+// Uso: visualización y consulta únicamente.
+//
+// NO crea solicitudes de medición.
+// NO devuelve un peso como medición actual.
+// NO completa procesos.
+// NO genera lecturas nuevas.
+// NO habilita cálculos de costos.
+// ======================================================
+
+async function obtenerUltimoPesoHistorico({
+  contenedorId,
+  db = pool,
+}) {
+  const id = toInt(contenedorId);
+
+  if (!id) {
+    throw new ModuloMedicionesError(
+      "El contenedor de peso no es válido.",
+      {
+        codigo: "CONTENEDOR_INVALIDO",
+      }
+    );
+  }
+
+  const { rows } = await db.query(
+    `
+      SELECT
+        l.id,
+        l.contenedor_id,
+        l.valor,
+        l.fecha_hora,
+        l.fuente_lectura,
+        l.estado_lectura
+      FROM lecturas l
+      JOIN tipos_lectura tl
+        ON tl.id = l.tipo_lectura_id
+      JOIN unidad_medida um
+        ON um.id = l.unidad_id
+      WHERE l.contenedor_id = $1
+        AND tl.nombre = 'peso_lb'
+        AND um.nombre = 'lb'
+        AND l.estado_lectura = 'normal'
+        AND l.valor >= 0
+      ORDER BY
+        l.fecha_hora DESC,
+        l.id DESC
+      LIMIT 1
+    `,
+    [id]
+  );
+
+  if (!rows.length) {
+    return {
+      disponible: false,
+      contenedor_id: id,
+      peso_lb: null,
+      lectura_id: null,
+      fecha_hora: null,
+      origen: "sin_datos",
+      vigente: false,
+      lectura_historica: false,
+      mensaje: "No existen pesos registrados.",
+    };
+  }
+
+  const lectura = rows[0];
+
+  const peso = toNumber(lectura.valor);
+
+  if (
+    peso === null ||
+    peso < 0
+  ) {
+    throw new ModuloMedicionesError(
+      "El peso histórico es inválido.",
+      {
+        codigo: "PESO_HISTORICO_INVALIDO",
+      }
+    );
+  }
+
+  return {
+    disponible: true,
+    contenedor_id: id,
+    peso_lb: Number(peso.toFixed(2)),
+    lectura_id: lectura.id,
+    fecha_hora: lectura.fecha_hora,
+    fuente_registrada: lectura.fuente_lectura,
+    estado_lectura: lectura.estado_lectura,
+    origen: "historial",
+    vigente: false,
+    lectura_historica: true,
+    permite_calculo_costo: false,
+    mensaje: "Último peso registrado",
+  };
+}
+
+// ======================================================
 // EXPORTACIONES
 // ======================================================
 
 module.exports = {
   obtenerPesoActual,
+  obtenerUltimoPesoHistorico,
   ModuloMedicionesError,
 };
