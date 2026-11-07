@@ -66,8 +66,8 @@ const URL_CALCULO_HISTORICO =
 // CONFIGURACIÓN TEMPORAL
 // ======================================================
 //
-// true: consulta registros de demostración.
-// false: utiliza el módulo físico de peso.
+// true  = consultar datos históricos.
+// false = utilizar el módulo de peso.
 //
 // Restaurar después de la defensa.
 // ======================================================
@@ -179,7 +179,7 @@ const respuestaCalculoValida = (data) => {
 };
 
 // ======================================================
-// VALIDAR CONSULTA HISTÓRICA
+// VALIDAR RESULTADO HISTÓRICO
 // ======================================================
 
 const respuestaHistoricaValida = (data) => {
@@ -277,7 +277,9 @@ const ModalTotales = ({
     generacionPollingRef.current += 1;
 
     if (pollingTimerRef.current !== null) {
-      clearTimeout(pollingTimerRef.current);
+      clearTimeout(
+        pollingTimerRef.current
+      );
 
       pollingTimerRef.current = null;
     }
@@ -292,11 +294,12 @@ const ModalTotales = ({
       pollingActivoRef.current = false;
 
       generacionPollingRef.current += 1;
-
       generacionCalculoRef.current += 1;
 
       if (pollingTimerRef.current !== null) {
-        clearTimeout(pollingTimerRef.current);
+        clearTimeout(
+          pollingTimerRef.current
+        );
       }
     };
   }, []);
@@ -325,9 +328,7 @@ const ModalTotales = ({
     );
 
     setResultadoVisual(null);
-
     setEstadoMedicion(null);
-
     setMensajeMedicion("");
 
   }, [show]);
@@ -403,10 +404,12 @@ const ModalTotales = ({
         return;
       }
 
-      aplicarEstadoBackend(res?.data);
+      aplicarEstadoBackend(
+        res?.data
+      );
 
     } catch (error) {
-      // El POST de cálculo controla
+      // El POST /calculo controla
       // los errores finales del módulo.
     }
   };
@@ -458,7 +461,9 @@ const ModalTotales = ({
   // ====================================================
 
   const handleCancelar = () => {
-    if (solicitudEnCursoRef.current) {
+    if (
+      solicitudEnCursoRef.current
+    ) {
       return;
     }
 
@@ -477,7 +482,9 @@ const ModalTotales = ({
   // ====================================================
 
   const handleCalcular = async () => {
-    if (solicitudEnCursoRef.current) {
+    if (
+      solicitudEnCursoRef.current
+    ) {
       return;
     }
 
@@ -503,8 +510,11 @@ const ModalTotales = ({
     );
 
     try {
-      // El backend obtiene y valida los datos.
-      // El frontend no envía peso ni costos.
+      // El backend obtiene y valida
+      // todos los datos.
+      //
+      // El frontend no envía:
+      // peso, costo, porcentaje o contenedor.
 
       if (!DEMO_PESO_HISTORICO) {
         iniciarPolling();
@@ -551,7 +561,20 @@ const ModalTotales = ({
         aplicarEstadoBackend(data);
       }
 
+      // ================================================
+      // GUARDAR RESULTADO VISUAL
+      // ================================================
+
       setResultadoVisual(data);
+
+      // ================================================
+      // HABILITAR PANTALLA DE RESULTADOS
+      //
+      // Aquí aparecen:
+      // - Los cinco campos
+      // - Continuar
+      // - Cancelar
+      // ================================================
 
       setEstadoUI(
         ESTADO_UI.RESULTADO
@@ -628,7 +651,7 @@ const ModalTotales = ({
   };
 
   // ====================================================
-  // CONTINUAR A RECOLECCIÓN
+  // CONTINUAR
   // ====================================================
 
   const handleContinuar = () => {
@@ -640,9 +663,9 @@ const ModalTotales = ({
       return;
     }
 
-    // La consulta de registros no registra
-    // una recolección nueva ni completa
-    // el proceso real de pesaje.
+    // Un resultado histórico se utiliza
+    // únicamente para consulta.
+    // No habilita registrar una recolección nueva.
 
     if (
       resultadoVisual?.estado_medicion ===
@@ -651,6 +674,9 @@ const ModalTotales = ({
       handleClose?.();
       return;
     }
+
+    // Mantener funcionamiento original
+    // cuando el pesaje fue real.
 
     handleShowRecoleccion?.();
   };
@@ -762,7 +788,9 @@ const ModalTotales = ({
           : handleClose
       }
       backdrop={
-        calculando ? "static" : true
+        calculando
+          ? "static"
+          : true
       }
       keyboard={!calculando}
       centered
@@ -781,7 +809,6 @@ const ModalTotales = ({
       </Modal.Header>
 
       <Modal.Body>
-
         {/* ==========================================
             ESPERANDO
         ========================================== */}
@@ -804,7 +831,6 @@ const ModalTotales = ({
 
         {calculando && (
           <div className="py-4">
-
             <Alert
               variant={varianteProceso}
               className="text-center mb-4"
@@ -820,9 +846,7 @@ const ModalTotales = ({
                     : undefined
                 }
               >
-                <span
-                  className="visually-hidden"
-                >
+                <span className="visually-hidden">
                   Procesando medición
                 </span>
               </Spinner>
@@ -851,22 +875,19 @@ const ModalTotales = ({
                   : undefined
               }
             />
-
           </div>
         )}
 
         {/* ==========================================
-            RESULTADO
+            RESULTADO ORIGINAL
         ========================================== */}
 
         {hayResultado && (
           <Form>
             <Row>
-
               {/* COLUMNA IZQUIERDA */}
 
               <Col md={6}>
-
                 <Form.Group className="mb-3">
                   <Form.Label>
                     Total en libras
@@ -894,13 +915,11 @@ const ModalTotales = ({
                     disabled
                   />
                 </Form.Group>
-
               </Col>
 
               {/* COLUMNA DERECHA */}
 
               <Col md={6}>
-
                 <Form.Group className="mb-3">
                   <Form.Label>
                     Tipo de desecho
@@ -940,13 +959,10 @@ const ModalTotales = ({
                     disabled
                   />
                 </Form.Group>
-
               </Col>
-
             </Row>
           </Form>
         )}
-
       </Modal.Body>
 
       {/* ==========================================
@@ -954,7 +970,6 @@ const ModalTotales = ({
       ========================================== */}
 
       <Modal.Footer>
-
         {/* CALCULAR PESO */}
 
         {!hayResultado && (
@@ -979,19 +994,22 @@ const ModalTotales = ({
           </Button>
         )}
 
-        {/* CONTINUAR */}
+        {/* CONTINUAR - CONSERVADO */}
 
         {hayResultado && (
           <Button
             variant="success"
             onClick={handleContinuar}
-            disabled={calculando}
+            disabled={
+              calculando ||
+              solicitudEnCursoRef.current
+            }
           >
             Continuar
           </Button>
         )}
 
-        {/* CANCELAR */}
+        {/* CANCELAR - CONSERVADO */}
 
         <Button
           variant="secondary"
@@ -1000,7 +1018,6 @@ const ModalTotales = ({
         >
           Cancelar
         </Button>
-
       </Modal.Footer>
     </Modal>
   );
