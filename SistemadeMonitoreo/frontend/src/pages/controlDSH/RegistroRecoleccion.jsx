@@ -22,7 +22,7 @@ import {
 import "../../styles/nuevo-registro.css";
 
 // ======================================================
-// ENDPOINTS
+// ENDPOINTS ORIGINALES
 // ======================================================
 
 const URL_DATOS =
@@ -64,7 +64,7 @@ const PREVIEW_INICIAL = {
 };
 
 // ======================================================
-// FORMATEAR FECHA EN GUATEMALA
+// FORMATO DE FECHA
 // ======================================================
 
 const formatearFecha = (valor) => {
@@ -87,7 +87,7 @@ const formatearFecha = (valor) => {
 };
 
 // ======================================================
-// VALIDAR CAMPOS
+// VALIDACIONES ORIGINALES
 // ======================================================
 
 const validarCampo = (name, value) => {
@@ -108,7 +108,7 @@ const validarCampo = (name, value) => {
   }
 
   // ====================================================
-  // VALIDAR IDENTIFICADORES
+  // IDENTIFICADORES
   // ====================================================
 
   if (
@@ -129,7 +129,7 @@ const validarCampo = (name, value) => {
   }
 
   // ====================================================
-  // VALIDAR RECIBO
+  // NÚMERO DE RECIBO
   // ====================================================
 
   if (
@@ -141,7 +141,7 @@ const validarCampo = (name, value) => {
   }
 
   // ====================================================
-  // VALIDAR LIBRAS PENDIENTES
+  // LIBRAS PENDIENTES
   // ====================================================
 
   if (
@@ -200,7 +200,7 @@ const RegistroRecoleccion = ({
   ] = useState([]);
 
   // ====================================================
-  // DATOS DEL FORMULARIO
+  // FORMULARIO
   // ====================================================
 
   const [
@@ -211,7 +211,7 @@ const RegistroRecoleccion = ({
   });
 
   // ====================================================
-  // PORCENTAJES CALCULADOS POR BACKEND
+  // PREVISUALIZACIÓN
   // ====================================================
 
   const [
@@ -222,7 +222,7 @@ const RegistroRecoleccion = ({
   });
 
   // ====================================================
-  // ESTADOS VISUALES
+  // ESTADOS
   // ====================================================
 
   const [
@@ -245,22 +245,6 @@ const RegistroRecoleccion = ({
     setErrors,
   ] = useState({});
 
-  // ====================================================
-  // MODO CONSULTA DE DEMOSTRACIÓN
-  // ====================================================
-  //
-  // El backend determina si existe un cálculo
-  // completado o si la pantalla es solo consulta.
-  //
-  // No se decide únicamente desde React.
-  //
-  // Si soloLectura es true:
-  // - Se muestran los campos normales.
-  // - Se cargan los catálogos.
-  // - Se consultan los porcentajes.
-  // - No se registra una nueva recolección.
-  // ====================================================
-
   const [
     soloLectura,
     setSoloLectura,
@@ -272,22 +256,19 @@ const RegistroRecoleccion = ({
   ] = useState(false);
 
   // ====================================================
-  // PROTECCIONES
+  // PROTECCIONES CONTRA DOBLE SOLICITUD
   // ====================================================
 
-  const guardarEnCursoRef =
-    useRef(false);
+  const guardarEnCursoRef = useRef(false);
 
-  const previewRequestRef =
-    useRef(0);
+  const previewRequestRef = useRef(0);
 
   // ====================================================
-  // CARGAR DATOS DE RECOLECCIÓN
+  // CARGAR DATOS DEL PROCESO
   // ====================================================
 
-  const cargarDatosProceso =
-    useCallback(async () => {
-
+  const cargarDatosProceso = useCallback(
+    async () => {
       const res = await apiClient.get(
         URL_DATOS,
         {
@@ -309,17 +290,10 @@ const RegistroRecoleccion = ({
         data.fecha_servidor
       );
 
-      // El modo se recibe explícitamente
-      // desde el backend.
-      const consultaHistorica =
-        data.solo_lectura === true;
-
       setSoloLectura(
-        consultaHistorica
+        data.solo_lectura === true
       );
 
-      // Evitar mostrar un formulario vacío
-      // como si los datos se hubieran cargado.
       if (
         !codigo ||
         !responsable ||
@@ -337,16 +311,16 @@ const RegistroRecoleccion = ({
       });
 
       setDatosCargados(true);
-
-    }, []);
+    },
+    []
+  );
 
   // ====================================================
   // CARGAR CATÁLOGOS
   // ====================================================
 
-  const cargarCatalogos =
-    useCallback(async () => {
-
+  const cargarCatalogos = useCallback(
+    async () => {
       const [
         resDistritos,
         resEmpresas,
@@ -373,18 +347,18 @@ const RegistroRecoleccion = ({
           ? resEmpresas.data
           : []
       );
-
-    }, []);
+    },
+    []
+  );
 
   // ====================================================
-  // INICIALIZAR PANTALLA
+  // INICIALIZAR
   // ====================================================
 
   useEffect(() => {
     let activo = true;
 
     const inicializar = async () => {
-
       setLoadingInicial(true);
       setDatosCargados(false);
       setSoloLectura(false);
@@ -408,18 +382,16 @@ const RegistroRecoleccion = ({
           "DATOS_PROCESO_INCOMPLETOS";
 
         await showBackendAlert({
-          status:
-            errorLocal
-              ? 502
-              : err?.response?.status || 500,
+          status: errorLocal
+            ? 502
+            : err?.response?.status || 500,
 
-          data:
-            errorLocal
-              ? {
+          data: errorLocal
+            ? {
                 message:
                   "El servidor no devolvió todos los datos del proceso de recolección.",
               }
-              : err?.response?.data || {
+            : err?.response?.data || {
                 message:
                   "No fue posible cargar la información de recolección.",
               },
@@ -436,7 +408,6 @@ const RegistroRecoleccion = ({
 
     return () => {
       activo = false;
-
       previewRequestRef.current += 1;
     };
 
@@ -450,7 +421,6 @@ const RegistroRecoleccion = ({
   // ====================================================
 
   const setField = (name, value) => {
-
     setFormData((prev) => ({
       ...prev,
       [name]: value,
@@ -468,22 +438,12 @@ const RegistroRecoleccion = ({
   // ====================================================
   // PREVISUALIZAR PORCENTAJES
   // ====================================================
-  //
-  // El frontend no calcula porcentajes.
-  // Siempre consulta el backend.
-  //
-  // El backend utiliza:
-  // - Peso real del proceso, o
-  // - Peso histórico auditado en demostración.
-  // ====================================================
 
   useEffect(() => {
-
     const valor = String(
       formData.cantidad_libras_pendientes ?? ""
     ).trim();
 
-    // Invalidar solicitudes anteriores.
     previewRequestRef.current += 1;
 
     const requestId =
@@ -498,7 +458,6 @@ const RegistroRecoleccion = ({
       });
 
       setPreviewLoading(false);
-
       return;
     }
 
@@ -513,13 +472,11 @@ const RegistroRecoleccion = ({
       });
 
       setPreviewLoading(false);
-
       return;
     }
 
     const timer = setTimeout(
       async () => {
-
         if (
           requestId !==
           previewRequestRef.current
@@ -578,7 +535,6 @@ const RegistroRecoleccion = ({
           });
 
         } catch (err) {
-
           if (
             requestId !==
             previewRequestRef.current
@@ -609,7 +565,6 @@ const RegistroRecoleccion = ({
             setPreviewLoading(false);
           }
         }
-
       },
       500
     );
@@ -628,7 +583,6 @@ const RegistroRecoleccion = ({
   // ====================================================
 
   const handleCancelar = () => {
-
     if (
       saving ||
       guardarEnCursoRef.current
@@ -647,11 +601,10 @@ const RegistroRecoleccion = ({
   };
 
   // ====================================================
-  // VALIDAR FORMULARIO
+  // VALIDAR FORMULARIO COMPLETO
   // ====================================================
 
   const validarFormulario = () => {
-
     const campos = [
       "distrito_id",
       "empresa_id",
@@ -662,11 +615,10 @@ const RegistroRecoleccion = ({
     const nuevosErrores = {};
 
     for (const campo of campos) {
-      nuevosErrores[campo] =
-        validarCampo(
-          campo,
-          formData[campo]
-        );
+      nuevosErrores[campo] = validarCampo(
+        campo,
+        formData[campo]
+      );
     }
 
     setErrors(nuevosErrores);
@@ -679,18 +631,14 @@ const RegistroRecoleccion = ({
   // ====================================================
   // GUARDAR RECOLECCIÓN
   // ====================================================
+  //
+  // Se retira el bloqueo adicional de soloLectura
+  // en el frontend.
+  //
+  // El backend conserva sus validaciones originales.
+  // ====================================================
 
   const guardarRecoleccion = async () => {
-
-    // Nunca enviar una recolección histórica
-    // al endpoint real de guardado.
-    if (
-      soloLectura ||
-      !datosCargados
-    ) {
-      return;
-    }
-
     if (
       guardarEnCursoRef.current ||
       saving
@@ -703,11 +651,9 @@ const RegistroRecoleccion = ({
     }
 
     guardarEnCursoRef.current = true;
-
     setSaving(true);
 
     try {
-
       const payload = {
         empresa_id:
           Number(formData.empresa_id),
@@ -739,7 +685,6 @@ const RegistroRecoleccion = ({
       await onFinish?.();
 
     } catch (err) {
-
       await showBackendAlert({
         status:
           err?.response?.status || 500,
@@ -753,7 +698,6 @@ const RegistroRecoleccion = ({
 
     } finally {
       guardarEnCursoRef.current = false;
-
       setSaving(false);
     }
   };
@@ -761,16 +705,13 @@ const RegistroRecoleccion = ({
   // ====================================================
   // ENVIAR FORMULARIO
   // ====================================================
+  //
+  // Se retira el bloqueo adicional de soloLectura.
+  // Se mantienen todas las validaciones.
+  // ====================================================
 
   const handleSubmit = (event) => {
     event.preventDefault();
-
-    if (
-      soloLectura ||
-      !datosCargados
-    ) {
-      return;
-    }
 
     if (
       saving ||
@@ -794,15 +735,13 @@ const RegistroRecoleccion = ({
   };
 
   // ====================================================
-  // CARGANDO INFORMACIÓN
+  // CARGANDO
   // ====================================================
 
   if (loadingInicial) {
     return (
       <div className="registro-recoleccion">
-
         <div className="system-card registro-recoleccion-loading">
-
           <span
             className="system-spinner"
             aria-hidden="true"
@@ -811,9 +750,7 @@ const RegistroRecoleccion = ({
           <p>
             Cargando información de recolección...
           </p>
-
         </div>
-
       </div>
     );
   }
@@ -824,17 +761,14 @@ const RegistroRecoleccion = ({
 
   return (
     <div className="registro-recoleccion">
-
       <div className="system-card registro-recoleccion-card">
 
         {/* ==========================================
-            CABECERA
+            CABECERA ORIGINAL
         ========================================== */}
 
         <header className="system-card-header registro-recoleccion-header">
-
           <div className="registro-recoleccion-title">
-
             <FaClipboardList />
 
             <div>
@@ -847,28 +781,22 @@ const RegistroRecoleccion = ({
                 finalizar la recolección.
               </p>
             </div>
-
           </div>
-
         </header>
 
         {/* ==========================================
-            FORMULARIO
+            FORMULARIO ORIGINAL
         ========================================== */}
 
         <form
           className="system-form"
           onSubmit={handleSubmit}
         >
-
           <div className="system-form-grid">
 
-            {/* ====================================
-                CÓDIGO DEL CONTENEDOR
-            ==================================== */}
+            {/* CÓDIGO DEL CONTENEDOR */}
 
             <div className="system-form-group">
-
               <label
                 htmlFor="recoleccion-codigo"
                 className="system-form-label"
@@ -885,15 +813,11 @@ const RegistroRecoleccion = ({
                 }
                 disabled
               />
-
             </div>
 
-            {/* ====================================
-                RESPONSABLE
-            ==================================== */}
+            {/* RESPONSABLE */}
 
             <div className="system-form-group">
-
               <label
                 htmlFor="recoleccion-responsable"
                 className="system-form-label"
@@ -910,15 +834,11 @@ const RegistroRecoleccion = ({
                 }
                 disabled
               />
-
             </div>
 
-            {/* ====================================
-                FECHA DE RECOLECCIÓN
-            ==================================== */}
+            {/* FECHA DE RECOLECCIÓN */}
 
             <div className="system-form-group">
-
               <label
                 htmlFor="recoleccion-fecha"
                 className="system-form-label"
@@ -935,15 +855,11 @@ const RegistroRecoleccion = ({
                 }
                 disabled
               />
-
             </div>
 
-            {/* ====================================
-                EMPRESA RECOLECTORA
-            ==================================== */}
+            {/* EMPRESA RECOLECTORA */}
 
             <div className="system-form-group">
-
               <label
                 htmlFor="recoleccion-empresa"
                 className="system-form-label"
@@ -953,13 +869,12 @@ const RegistroRecoleccion = ({
 
               <select
                 id="recoleccion-empresa"
-                className={`system-form-select ${errors.empresa_id
-                  ? "is-invalid"
-                  : ""
-                  }`}
-                value={
-                  formData.empresa_id
-                }
+                className={`system-form-select ${
+                  errors.empresa_id
+                    ? "is-invalid"
+                    : ""
+                }`}
+                value={formData.empresa_id}
                 disabled={saving}
                 onChange={(event) =>
                   setField(
@@ -975,9 +890,7 @@ const RegistroRecoleccion = ({
                 {empresas.map((empresa) => (
                   <option
                     key={empresa.id}
-                    value={
-                      String(empresa.id)
-                    }
+                    value={String(empresa.id)}
                   >
                     {empresa.nombre}
                   </option>
@@ -989,15 +902,11 @@ const RegistroRecoleccion = ({
                   {errors.empresa_id}
                 </small>
               )}
-
             </div>
 
-            {/* ====================================
-                DISTRITO
-            ==================================== */}
+            {/* DISTRITO */}
 
             <div className="system-form-group">
-
               <label
                 htmlFor="recoleccion-distrito"
                 className="system-form-label"
@@ -1007,16 +916,18 @@ const RegistroRecoleccion = ({
 
               <select
                 id="recoleccion-distrito"
-                className={`system-form-select ${errors.distrito_id
-                  ? "is-invalid"
-                  : ""
-                  }`}
-                value={
-                  formData.distrito_id
-                }
-                disabled={
-                  saving ||
-                  previewLoading
+                className={`system-form-select ${
+                  errors.distrito_id
+                    ? "is-invalid"
+                    : ""
+                }`}
+                value={formData.distrito_id}
+                disabled={saving}
+                onChange={(event) =>
+                  setField(
+                    "distrito_id",
+                    event.target.value
+                  )
                 }
               >
                 <option value="">
@@ -1026,9 +937,7 @@ const RegistroRecoleccion = ({
                 {distritos.map((distrito) => (
                   <option
                     key={distrito.id}
-                    value={
-                      String(distrito.id)
-                    }
+                    value={String(distrito.id)}
                   >
                     {distrito.nombre}
                   </option>
@@ -1040,15 +949,11 @@ const RegistroRecoleccion = ({
                   {errors.distrito_id}
                 </small>
               )}
-
             </div>
 
-            {/* ====================================
-                NÚMERO DE RECIBO
-            ==================================== */}
+            {/* NÚMERO DE RECIBO */}
 
             <div className="system-form-group">
-
               <label
                 htmlFor="recoleccion-recibo"
                 className="system-form-label"
@@ -1059,13 +964,12 @@ const RegistroRecoleccion = ({
               <input
                 id="recoleccion-recibo"
                 type="text"
-                className={`system-form-control ${errors.numero_recibo
-                  ? "is-invalid"
-                  : ""
-                  }`}
-                value={
-                  formData.numero_recibo
-                }
+                className={`system-form-control ${
+                  errors.numero_recibo
+                    ? "is-invalid"
+                    : ""
+                }`}
+                value={formData.numero_recibo}
                 disabled={saving}
                 onChange={(event) =>
                   setField(
@@ -1082,15 +986,11 @@ const RegistroRecoleccion = ({
                   {errors.numero_recibo}
                 </small>
               )}
-
             </div>
 
-            {/* ====================================
-                LIBRAS PENDIENTES
-            ==================================== */}
+            {/* CANTIDAD EN LIBRAS PENDIENTES */}
 
             <div className="system-form-group">
-
               <label
                 htmlFor="recoleccion-libras"
                 className="system-form-label"
@@ -1101,10 +1001,11 @@ const RegistroRecoleccion = ({
               <input
                 id="recoleccion-libras"
                 type="text"
-                className={`system-form-control ${errors.cantidad_libras_pendientes
-                  ? "is-invalid"
-                  : ""
-                  }`}
+                className={`system-form-control ${
+                  errors.cantidad_libras_pendientes
+                    ? "is-invalid"
+                    : ""
+                }`}
                 value={
                   formData.cantidad_libras_pendientes
                 }
@@ -1122,18 +1023,16 @@ const RegistroRecoleccion = ({
 
               {errors.cantidad_libras_pendientes && (
                 <small className="system-form-error">
-                  {errors.cantidad_libras_pendientes}
+                  {
+                    errors.cantidad_libras_pendientes
+                  }
                 </small>
               )}
-
             </div>
 
-            {/* ====================================
-                PORCENTAJE PENDIENTE
-            ==================================== */}
+            {/* PORCENTAJE PENDIENTE */}
 
             <div className="system-form-group">
-
               <label
                 htmlFor="recoleccion-porcentaje-pendiente"
                 className="system-form-label"
@@ -1149,20 +1048,16 @@ const RegistroRecoleccion = ({
                   previewLoading
                     ? "Calculando..."
                     : `${Number(
-                      preview.porcentaje_pendiente || 0
-                    ).toFixed(2)} %`
+                        preview.porcentaje_pendiente || 0
+                      ).toFixed(2)} %`
                 }
                 disabled
               />
-
             </div>
 
-            {/* ====================================
-                PORCENTAJE RECOLECTADO
-            ==================================== */}
+            {/* PORCENTAJE RECOLECTADO */}
 
             <div className="system-form-group">
-
               <label
                 htmlFor="recoleccion-porcentaje-recolectado"
                 className="system-form-label"
@@ -1178,20 +1073,16 @@ const RegistroRecoleccion = ({
                   previewLoading
                     ? "Calculando..."
                     : `${Number(
-                      preview.porcentaje_recolectado || 0
-                    ).toFixed(2)} %`
+                        preview.porcentaje_recolectado || 0
+                      ).toFixed(2)} %`
                 }
                 disabled
               />
-
             </div>
 
-            {/* ====================================
-                OBSERVACIONES
-            ==================================== */}
+            {/* OBSERVACIONES */}
 
             <div className="system-form-group system-form-full">
-
               <label
                 htmlFor="recoleccion-observaciones"
                 className="system-form-label"
@@ -1206,9 +1097,7 @@ const RegistroRecoleccion = ({
               <textarea
                 id="recoleccion-observaciones"
                 className="system-form-textarea"
-                value={
-                  formData.observaciones
-                }
+                value={formData.observaciones}
                 disabled={saving}
                 onChange={(event) =>
                   setField(
@@ -1218,9 +1107,7 @@ const RegistroRecoleccion = ({
                 }
                 placeholder="Ingrese una observación si es necesario"
               />
-
             </div>
-
           </div>
 
           {/* ==========================================
@@ -1251,9 +1138,7 @@ const RegistroRecoleccion = ({
               className="app-btn app-btn-primary"
               disabled={
                 saving ||
-                previewLoading ||
-                soloLectura ||
-                !datosCargados
+                previewLoading
               }
             >
               {saving ? (
@@ -1279,11 +1164,8 @@ const RegistroRecoleccion = ({
             </button>
 
           </div>
-
         </form>
-
       </div>
-
     </div>
   );
 };
