@@ -48,6 +48,28 @@ const TIMEOUT_CALCULO_MS = leerMilisegundos(
 );
 
 // ======================================================
+// MODO DE DEMOSTRACIÓN
+// ======================================================
+//
+// true:
+//   Consulta el último peso registrado.
+//   No inicia el módulo HX711.
+//   No calcula ni guarda nuevos costos.
+//
+// false:
+//   Funcionamiento normal del HX711.
+//
+// El valor se configura desde Netlify.
+// ======================================================
+
+const DEMO_PESO_HISTORICO =
+  String(
+    import.meta.env.VITE_DEMO_PESO_HISTORICO || ""
+  )
+    .trim()
+    .toLowerCase() === "true";
+
+// ======================================================
 // ENDPOINTS
 // ======================================================
 
@@ -88,7 +110,7 @@ const ESTADOS_VALIDOS = new Set(
 );
 
 // ======================================================
-// HELPERS
+// FUNCIONES AUXILIARES
 // ======================================================
 
 const obtenerNumero = (valor) => {
@@ -102,7 +124,9 @@ const obtenerNumero = (valor) => {
 
   const numero = Number(valor);
 
-  return Number.isFinite(numero) ? numero : 0;
+  return Number.isFinite(numero)
+    ? numero
+    : 0;
 };
 
 const obtenerTipoResiduo = (resultado) => {
@@ -154,18 +178,22 @@ const respuestaCalculoValida = (data) => {
   );
 };
 
-const formatearFechaHistorica = (fecha) => {
-  if (!fecha) {
-    return "Fecha no disponible";
+// Se muestra la fecha enviada por el backend.
+// Si la BD usa timestamp sin zona horaria,
+// se debe verificar su interpretación.
+
+const formatearFecha = (valor) => {
+  if (!valor) {
+    return "No disponible";
   }
 
-  const fechaObjeto = new Date(fecha);
+  const fecha = new Date(valor);
 
-  if (Number.isNaN(fechaObjeto.getTime())) {
-    return String(fecha);
+  if (Number.isNaN(fecha.getTime())) {
+    return String(valor);
   }
 
-  return fechaObjeto.toLocaleString("es-GT", {
+  return fecha.toLocaleString("es-GT", {
     dateStyle: "short",
     timeStyle: "medium",
     timeZone: "America/Guatemala",
@@ -182,13 +210,15 @@ const ModalTotales = ({
   handleShowRecoleccion,
   onCancel,
 }) => {
+
   // ====================================================
   // ESTADOS VISUALES
   // ====================================================
 
-  const [estadoUI, setEstadoUI] = useState(
-    ESTADO_UI.ESPERANDO
-  );
+  const [
+    estadoUI,
+    setEstadoUI,
+  ] = useState(ESTADO_UI.ESPERANDO);
 
   const [
     resultadoVisual,
@@ -199,11 +229,6 @@ const ModalTotales = ({
     resultadoHistorico,
     setResultadoHistorico,
   ] = useState(null);
-
-  const [
-    consultandoHistorico,
-    setConsultandoHistorico,
-  ] = useState(false);
 
   const [
     estadoMedicion,
@@ -229,14 +254,13 @@ const ModalTotales = ({
 
   const generacionCalculoRef = useRef(0);
 
-  const generacionHistoricoRef = useRef(0);
-
   // ====================================================
-  // DETENER POLLING
+  // DETENER CONSULTAS AUTOMÁTICAS
   // ====================================================
 
   const detenerPolling = () => {
     pollingActivoRef.current = false;
+
     generacionPollingRef.current += 1;
 
     if (pollingTimerRef.current !== null) {
@@ -252,9 +276,9 @@ const ModalTotales = ({
   useEffect(() => {
     return () => {
       pollingActivoRef.current = false;
+
       generacionPollingRef.current += 1;
       generacionCalculoRef.current += 1;
-      generacionHistoricoRef.current += 1;
 
       if (pollingTimerRef.current !== null) {
         clearTimeout(pollingTimerRef.current);
@@ -263,12 +287,13 @@ const ModalTotales = ({
   }, []);
 
   // ====================================================
-  // REINICIAR AL ABRIR O CERRAR
+  // REINICIAR AL ABRIR
   // ====================================================
 
   useEffect(() => {
     if (!show) {
-      generacionHistoricoRef.current += 1;
+      generacionCalculoRef.current += 1;
+      detenerPolling();
       return;
     }
 
@@ -277,15 +302,15 @@ const ModalTotales = ({
     solicitudEnCursoRef.current = false;
 
     generacionCalculoRef.current += 1;
-    generacionHistoricoRef.current += 1;
 
     setEstadoUI(ESTADO_UI.ESPERANDO);
+
     setResultadoVisual(null);
     setResultadoHistorico(null);
 
-    setConsultandoHistorico(false);
     setEstadoMedicion(null);
     setMensajeMedicion("");
+
   }, [show]);
 
   // ====================================================
@@ -299,7 +324,7 @@ const ModalTotales = ({
     estadoUI === ESTADO_UI.RESULTADO &&
     resultadoVisual !== null;
 
-  const mostrandoHistorico =
+  const hayHistorico =
     estadoUI === ESTADO_UI.HISTORICO &&
     resultadoHistorico !== null;
 
@@ -311,15 +336,15 @@ const ModalTotales = ({
     estadoMedicion ===
     ESTADO_MEDICION.ESTABILIZANDO;
 
-  const ocupado =
-    calculando || consultandoHistorico;
-
   // ====================================================
   // ACTUALIZAR ESTADO DESDE BACKEND
   // ====================================================
 
   const aplicarEstadoBackend = (data) => {
-    if (!data || typeof data !== "object") {
+    if (
+      !data ||
+      typeof data !== "object"
+    ) {
       return;
     }
 
@@ -341,7 +366,7 @@ const ModalTotales = ({
   };
 
   // ====================================================
-  // CONSULTAR ESTADO REAL DE MEDICIÓN
+  // CONSULTAR ESTADO DE MEDICIÓN FÍSICA
   // ====================================================
 
   const consultarEstadoMedicion = async (
@@ -350,7 +375,9 @@ const ModalTotales = ({
     try {
       const res = await apiClient.get(
         `${URL_CALCULO}/estado`,
-        { timeout: 5000 }
+        {
+          timeout: 5000,
+        }
       );
 
       if (
@@ -364,13 +391,12 @@ const ModalTotales = ({
       aplicarEstadoBackend(res?.data);
 
     } catch (error) {
-      // El POST /calculo maneja los errores finales.
-      // Evitamos mostrar alertas repetidas.
+      // El POST /calculo controla errores finales.
     }
   };
 
   // ====================================================
-  // INICIAR POLLING DEL PESAJE REAL
+  // INICIAR POLLING FÍSICO
   // ====================================================
 
   const iniciarPolling = () => {
@@ -413,223 +439,177 @@ const ModalTotales = ({
   // CONSULTAR ÚLTIMO PESO HISTÓRICO
   // ====================================================
   //
-  // Este procedimiento solo hace solicitudes GET.
+  // Solo se utiliza cuando:
+  // VITE_DEMO_PESO_HISTORICO=true
   //
   // No ejecuta POST /calculo.
-  // No inicia el módulo HX711.
+  // No crea una solicitud de pesaje.
   // No guarda costos.
-  // No permite finalizar una recolección.
+  // No permite continuar a recolección.
   // ====================================================
 
-  const handleConsultarHistorico = async () => {
+  const consultarPesoHistorico = async (
+    generacion
+  ) => {
+    const procesoRes = await apiClient.get(
+      URL_PROCESO_ACTIVO,
+      {
+        timeout: 10000,
+      }
+    );
+
+    const procesoData = procesoRes?.data;
+
     if (
-      solicitudEnCursoRef.current ||
-      consultandoHistorico ||
-      calculando
+      procesoData?.tiene_proceso_activo !== true ||
+      !procesoData?.proceso
+    ) {
+      throw new Error(
+        "NO_EXISTE_PROCESO_ACTIVO"
+      );
+    }
+
+    const proceso = procesoData.proceso;
+
+    const contenedorId = Number(
+      proceso.contenedor_id
+    );
+
+    if (
+      !Number.isSafeInteger(contenedorId) ||
+      contenedorId <= 0
+    ) {
+      throw new Error(
+        "CONTENEDOR_INVALIDO"
+      );
+    }
+
+    const historicoRes = await apiClient.get(
+      `${URL_BASE}/ultimo-peso/${contenedorId}`,
+      {
+        timeout: 10000,
+      }
+    );
+
+    if (
+      generacion !==
+      generacionCalculoRef.current
     ) {
       return;
     }
 
-    const generacion =
-      ++generacionHistoricoRef.current;
+    const historico = historicoRes?.data;
 
-    setConsultandoHistorico(true);
-    setResultadoHistorico(null);
-
-    try {
-      // El backend identifica el proceso activo
-      // del usuario autenticado.
-
-      const procesoRes = await apiClient.get(
-        URL_PROCESO_ACTIVO,
-        { timeout: 10000 }
-      );
-
-      const procesoData = procesoRes?.data;
-
-      if (
-        procesoData?.tiene_proceso_activo !== true
-      ) {
-        throw new Error(
-          "NO_EXISTE_PROCESO_ACTIVO"
-        );
-      }
-
-      const proceso =
-        procesoData?.proceso;
-
-      const contenedorId = Number(
-        proceso?.contenedor_id
-      );
-
-      if (
-        !Number.isSafeInteger(contenedorId) ||
-        contenedorId <= 0
-      ) {
-        throw new Error(
-          "CONTENEDOR_NO_DISPONIBLE"
-        );
-      }
-
-      // Consulta histórica en PostgreSQL.
-
-      const historicoRes = await apiClient.get(
-        `${URL_BASE}/ultimo-peso/${contenedorId}`,
-        { timeout: 10000 }
-      );
-
-      if (
-        generacion !==
-        generacionHistoricoRef.current
-      ) {
-        return;
-      }
-
-      const historico = historicoRes?.data;
-
-      if (
-        historico?.disponible !== true ||
-        historico?.origen !== "historial" ||
-        historico?.lectura_historica !== true
-      ) {
-        throw new Error(
-          "SIN_PESO_HISTORICO"
-        );
-      }
-
-      const peso = Number(
-        historico.peso_lb
-      );
-
-      if (
-        !Number.isFinite(peso) ||
-        peso < 0
-      ) {
-        throw new Error(
-          "PESO_HISTORICO_INVALIDO"
-        );
-      }
-
-      setResultadoHistorico({
-        ...historico,
-        peso_lb: peso,
-        id_tipo_residuo:
-          proceso.id_tipo_residuo,
-        contenedor_id: contenedorId,
-      });
-
-      setEstadoUI(ESTADO_UI.HISTORICO);
-
-    } catch (err) {
-      if (
-        generacion !==
-        generacionHistoricoRef.current
-      ) {
-        return;
-      }
-
-      let mensaje =
-        "No fue posible consultar el último peso registrado.";
-
-      if (
-        err?.message ===
-        "NO_EXISTE_PROCESO_ACTIVO"
-      ) {
-        mensaje =
-          "No existe un proceso activo para consultar su contenedor.";
-      }
-
-      if (
-        err?.message ===
-        "CONTENEDOR_NO_DISPONIBLE"
-      ) {
-        mensaje =
-          "No se pudo identificar el contenedor del proceso.";
-      }
-
-      if (
-        err?.message ===
+    if (
+      historico?.disponible !== true ||
+      historico?.origen !== "historial" ||
+      historico?.lectura_historica !== true
+    ) {
+      throw new Error(
         "SIN_PESO_HISTORICO"
-      ) {
-        mensaje =
-          "Este contenedor no tiene lecturas históricas de peso disponibles.";
-      }
+      );
+    }
 
-      if (
-        err?.message ===
+    const peso = Number(historico.peso_lb);
+
+    if (
+      !Number.isFinite(peso) ||
+      peso < 0
+    ) {
+      throw new Error(
         "PESO_HISTORICO_INVALIDO"
-      ) {
-        mensaje =
-          "La lectura histórica de peso no es válida.";
-      }
+      );
+    }
 
+    setResultadoHistorico({
+      ...historico,
+      peso_lb: peso,
+      id_tipo_residuo:
+        proceso.id_tipo_residuo,
+      contenedor_id: contenedorId,
+    });
+
+    setEstadoUI(ESTADO_UI.HISTORICO);
+  };
+
+  // ====================================================
+  // MOSTRAR ERRORES
+  // ====================================================
+
+  const mostrarErrorCalculo = async (error) => {
+    const erroresLocales = {
+      NO_EXISTE_PROCESO_ACTIVO:
+        "No existe un proceso activo para consultar el peso.",
+
+      CONTENEDOR_INVALIDO:
+        "No fue posible identificar el contenedor.",
+
+      SIN_PESO_HISTORICO:
+        "El contenedor no tiene lecturas históricas de peso.",
+
+      PESO_HISTORICO_INVALIDO:
+        "El peso almacenado no es válido.",
+
+      RESPUESTA_INVALIDA:
+        "El servidor devolvió una respuesta de cálculo inválida.",
+    };
+
+    if (erroresLocales[error?.message]) {
       await showBackendAlert({
-        status: err?.response?.status || 400,
-        data: err?.response?.data || {
-          message: mensaje,
+        status: 400,
+        data: {
+          message:
+            erroresLocales[error.message],
         },
       });
 
-    } finally {
-      if (
-        generacion ===
-        generacionHistoricoRef.current
-      ) {
-        setConsultandoHistorico(false);
-      }
-    }
-  };
-
-  // ====================================================
-  // REGRESAR A OPCIONES DE PESAJE
-  // ====================================================
-
-  const handleVolver = () => {
-    if (ocupado) {
       return;
     }
 
-    setResultadoHistorico(null);
-    setEstadoUI(ESTADO_UI.ESPERANDO);
-  };
+    const esTimeout =
+      error?.code === "ECONNABORTED" ||
+      error?.code === "ETIMEDOUT";
 
-  // ====================================================
-  // CANCELAR PROCESO
-  // ====================================================
+    if (esTimeout) {
+      await showBackendAlert({
+        status: 504,
+        data: {
+          message:
+            "No se recibió una respuesta del servidor dentro del tiempo esperado.",
+        },
+      });
 
-  const handleCancelar = () => {
-    if (
-      solicitudEnCursoRef.current ||
-      consultandoHistorico
-    ) {
       return;
     }
 
-    showConfirmAlert(
-      "¿Desea cancelar el proceso?",
-      "Si confirma, el proceso actual será cancelado y deberá iniciar uno nuevo.",
-      async () => {
-        await onCancel?.();
+    await showBackendAlert({
+      status: error?.response?.status || 500,
+      data: error?.response?.data || {
+        message:
+          "No fue posible obtener la medición de peso.",
       },
-      null
-    );
+    });
   };
 
   // ====================================================
-  // CALCULAR PESO REAL
+  // CALCULAR PESO
+  // ====================================================
+  //
+  // DEMO:
+  //   GET del último peso almacenado.
+  //
+  // NORMAL:
+  //   POST /calculo y espera del HX711.
   // ====================================================
 
   const handleCalcular = async () => {
-    if (
-      solicitudEnCursoRef.current ||
-      consultandoHistorico
-    ) {
+    if (solicitudEnCursoRef.current) {
       return;
     }
 
     solicitudEnCursoRef.current = true;
 
-    const generacionCalculo =
+    const generacion =
       ++generacionCalculoRef.current;
 
     setResultadoVisual(null);
@@ -640,16 +620,31 @@ const ModalTotales = ({
     );
 
     setMensajeMedicion(
-      "Preparando medición de peso..."
+      DEMO_PESO_HISTORICO
+        ? "Consultando último peso registrado..."
+        : "Preparando medición de peso..."
     );
 
     setEstadoUI(ESTADO_UI.PROCESANDO);
 
-    iniciarPolling();
-
     try {
-      // El frontend no envía peso ni costo.
-      // El backend valida y calcula todo.
+      // ================================================
+      // MODO DEMOSTRACIÓN
+      // ================================================
+
+      if (DEMO_PESO_HISTORICO) {
+        await consultarPesoHistorico(
+          generacion
+        );
+
+        return;
+      }
+
+      // ================================================
+      // MODO NORMAL - MÓDULO HX711
+      // ================================================
+
+      iniciarPolling();
 
       const res = await apiClient.post(
         URL_CALCULO,
@@ -660,7 +655,7 @@ const ModalTotales = ({
       );
 
       if (
-        generacionCalculo !==
+        generacion !==
         generacionCalculoRef.current
       ) {
         return;
@@ -677,12 +672,14 @@ const ModalTotales = ({
       }
 
       aplicarEstadoBackend(data);
+
       setResultadoVisual(data);
+
       setEstadoUI(ESTADO_UI.RESULTADO);
 
-    } catch (err) {
+    } catch (error) {
       if (
-        generacionCalculo !==
+        generacion !==
         generacionCalculoRef.current
       ) {
         return;
@@ -690,51 +687,16 @@ const ModalTotales = ({
 
       detenerPolling();
 
-      setEstadoUI(ESTADO_UI.ESPERANDO);
       setResultadoVisual(null);
+      setResultadoHistorico(null);
 
-      const esTimeoutAxios =
-        err?.code === "ECONNABORTED" ||
-        err?.code === "ETIMEDOUT";
+      setEstadoUI(ESTADO_UI.ESPERANDO);
 
-      if (
-        err?.message ===
-        "RESPUESTA_INVALIDA"
-      ) {
-        await showBackendAlert({
-          status: 502,
-          data: {
-            message:
-              "El servidor devolvió una respuesta de cálculo inválida.",
-          },
-        });
-
-        return;
-      }
-
-      if (esTimeoutAxios) {
-        await showBackendAlert({
-          status: 504,
-          data: {
-            message:
-              "No se recibió una respuesta del servidor dentro del tiempo esperado. Verifique el estado del proceso antes de intentar nuevamente.",
-          },
-        });
-
-        return;
-      }
-
-      await showBackendAlert({
-        status: err?.response?.status || 500,
-        data: err?.response?.data || {
-          message:
-            "No fue posible realizar la medición de peso.",
-        },
-      });
+      await mostrarErrorCalculo(error);
 
     } finally {
       if (
-        generacionCalculo ===
+        generacion ===
         generacionCalculoRef.current
       ) {
         detenerPolling();
@@ -748,13 +710,14 @@ const ModalTotales = ({
   // ====================================================
 
   const handleContinuar = () => {
-    // Solo se permite un cálculo real completado.
-    // Una lectura histórica nunca habilita continuar.
+    // Nunca permite continuar usando
+    // una consulta histórica.
 
     if (
       !hayResultado ||
       calculando ||
-      solicitudEnCursoRef.current
+      solicitudEnCursoRef.current ||
+      DEMO_PESO_HISTORICO
     ) {
       return;
     }
@@ -763,7 +726,41 @@ const ModalTotales = ({
   };
 
   // ====================================================
-  // DATOS DEL CÁLCULO REAL
+  // CANCELAR PROCESO
+  // ====================================================
+
+  const handleCancelar = () => {
+    if (solicitudEnCursoRef.current) {
+      return;
+    }
+
+    showConfirmAlert(
+      "¿Desea cancelar el proceso?",
+      "Si confirma, el proceso actual será cancelado y deberá iniciar uno nuevo.",
+      async () => {
+        await onCancel?.();
+      },
+      null
+    );
+  };
+
+  // ====================================================
+  // VOLVER A LA PANTALLA DE CÁLCULO
+  // ====================================================
+
+  const handleVolver = () => {
+    if (solicitudEnCursoRef.current) {
+      return;
+    }
+
+    setResultadoHistorico(null);
+    setResultadoVisual(null);
+
+    setEstadoUI(ESTADO_UI.ESPERANDO);
+  };
+
+  // ====================================================
+  // DATOS DEL RESULTADO REAL
   // ====================================================
 
   const totalLb = obtenerNumero(
@@ -786,15 +783,31 @@ const ModalTotales = ({
     resultadoVisual
   );
 
+  // ====================================================
+  // DATOS HISTÓRICOS
+  // ====================================================
+
+  const pesoHistorico = obtenerNumero(
+    resultadoHistorico?.peso_lb
+  );
+
   const tipoHistorico = obtenerTipoResiduo(
     resultadoHistorico
   );
 
+  const fechaHistorica = formatearFecha(
+    resultadoHistorico?.fecha_hora
+  );
+
   // ====================================================
-  // MENSAJES DE MEDICIÓN
+  // MENSAJES DEL MÓDULO
   // ====================================================
 
   const obtenerMensajePrincipal = () => {
+    if (DEMO_PESO_HISTORICO) {
+      return "CONSULTANDO PESO REGISTRADO";
+    }
+
     if (movimientoDetectado) {
       return "MOVIMIENTO DETECTADO";
     }
@@ -826,6 +839,10 @@ const ModalTotales = ({
   };
 
   const obtenerMensajeSecundario = () => {
+    if (DEMO_PESO_HISTORICO) {
+      return "Recuperando la última lectura almacenada.";
+    }
+
     if (
       movimientoDetectado ||
       estabilizando
@@ -843,7 +860,8 @@ const ModalTotales = ({
     obtenerMensajeSecundario();
 
   const varianteProceso =
-    movimientoDetectado
+    movimientoDetectado &&
+    !DEMO_PESO_HISTORICO
       ? "warning"
       : "info";
 
@@ -855,15 +873,22 @@ const ModalTotales = ({
     <Modal
       show={show}
       onHide={
-        ocupado ? undefined : handleClose
+        calculando
+          ? undefined
+          : handleClose
       }
       backdrop={
-        ocupado ? "static" : true
+        calculando ? "static" : true
       }
-      keyboard={!ocupado}
+      keyboard={!calculando}
       centered
       size="lg"
     >
+
+      {/* ================================================
+          ENCABEZADO
+      ================================================ */}
+
       <Modal.Header
         className="modal-costo-header"
       >
@@ -874,43 +899,59 @@ const ModalTotales = ({
 
       <Modal.Body>
 
-        {/* ==========================================
-            OPCIONES INICIALES
-        ========================================== */}
+        {/* ==============================================
+            PANTALLA INICIAL
+        ============================================== */}
 
         {estadoUI ===
           ESTADO_UI.ESPERANDO && (
           <Alert variant="info">
-            Puede realizar una nueva medición
-            utilizando el módulo de peso o
-            consultar el último peso almacenado
-            en la base de datos.
+            {DEMO_PESO_HISTORICO ? (
+              <>
+                Presione{" "}
+                <strong>
+                  Calcular peso
+                </strong>{" "}
+                para consultar el último peso
+                registrado durante la demostración.
+              </>
+            ) : (
+              <>
+                Presione{" "}
+                <strong>
+                  Calcular peso
+                </strong>{" "}
+                para iniciar la medición
+                del contenedor.
+              </>
+            )}
           </Alert>
         )}
 
-        {/* ==========================================
-            PESAJE REAL EN PROCESO
-        ========================================== */}
+        {/* ==============================================
+            PROCESANDO
+        ============================================== */}
 
         {calculando && (
           <div className="py-4">
+
             <Alert
               variant={varianteProceso}
               className="text-center mb-4"
             >
+
               <Spinner
                 animation="border"
                 role="status"
                 className="mb-3"
                 variant={
-                  movimientoDetectado
+                  movimientoDetectado &&
+                  !DEMO_PESO_HISTORICO
                     ? "warning"
                     : undefined
                 }
               >
-                <span
-                  className="visually-hidden"
-                >
+                <span className="visually-hidden">
                   Procesando medición
                 </span>
               </Spinner>
@@ -926,6 +967,7 @@ const ModalTotales = ({
                   {mensajeSecundario}
                 </p>
               )}
+
             </Alert>
 
             <ProgressBar
@@ -933,67 +975,46 @@ const ModalTotales = ({
               striped
               now={100}
               variant={
-                movimientoDetectado
+                movimientoDetectado &&
+                !DEMO_PESO_HISTORICO
                   ? "warning"
                   : undefined
               }
             />
+
           </div>
         )}
 
-        {/* ==========================================
-            CONSULTANDO HISTÓRICO
-        ========================================== */}
-
-        {consultandoHistorico && (
-          <div className="text-center py-4">
-            <Spinner
-              animation="border"
-              role="status"
-              className="mb-3"
-            />
-
-            <p className="mb-0">
-              Consultando último peso registrado...
-            </p>
-          </div>
-        )}
-
-        {/* ==========================================
+        {/* ==============================================
             RESULTADO HISTÓRICO
-        ========================================== */}
+        ============================================== */}
 
-        {mostrandoHistorico &&
-          !consultandoHistorico && (
+        {hayHistorico && (
           <>
             <Alert variant="warning">
               <strong>
-                LECTURA HISTÓRICA
+                LECTURA HISTÓRICA — DEMOSTRACIÓN
               </strong>
 
-              <div className="mt-2">
-                Este peso fue recuperado de
-                PostgreSQL. No corresponde
-                a una medición en tiempo real
+              <p className="mb-0 mt-2">
+                El peso se recuperó de PostgreSQL.
+                No es una medición en tiempo real
                 del módulo HX711.
-              </div>
+              </p>
             </Alert>
 
             <Form>
               <Row>
+
                 <Col md={6}>
                   <Form.Group className="mb-3">
                     <Form.Label>
-                      Último peso registrado
+                      Total en libras
                     </Form.Label>
 
                     <Form.Control
                       type="text"
-                      value={
-                        `${Number(
-                          resultadoHistorico.peso_lb
-                        ).toFixed(2)} lb`
-                      }
+                      value={`${pesoHistorico.toFixed(2)} lb`}
                       disabled
                     />
                   </Form.Group>
@@ -1014,32 +1035,29 @@ const ModalTotales = ({
                 <Col md={6}>
                   <Form.Group className="mb-3">
                     <Form.Label>
-                      Fecha de registro
+                      Fecha de la lectura
                     </Form.Label>
 
                     <Form.Control
                       type="text"
-                      value={
-                        formatearFechaHistorica(
-                          resultadoHistorico.fecha_hora
-                        )
-                      }
+                      value={fechaHistorica}
                       disabled
                     />
                   </Form.Group>
 
                   <Form.Group className="mb-3">
                     <Form.Label>
-                      Estado de medición
+                      Estado del peso
                     </Form.Label>
 
                     <Form.Control
                       type="text"
-                      value="Histórica / No vigente"
+                      value="Histórico / No vigente"
                       disabled
                     />
                   </Form.Group>
                 </Col>
+
               </Row>
             </Form>
 
@@ -1047,20 +1065,20 @@ const ModalTotales = ({
               variant="secondary"
               className="mb-0"
             >
-              Consulta de demostración.
-              No se han registrado costos,
-              lecturas nuevas ni recolecciones.
+              Esta consulta no guarda costos
+              ni registra una nueva recolección.
             </Alert>
           </>
         )}
 
-        {/* ==========================================
-            RESULTADO REAL DE CÁLCULO
-        ========================================== */}
+        {/* ==============================================
+            RESULTADO DEL PESAJE REAL
+        ============================================== */}
 
         {hayResultado && (
           <Form>
             <Row>
+
               <Col md={6}>
                 <Form.Group className="mb-3">
                   <Form.Label>
@@ -1081,9 +1099,7 @@ const ModalTotales = ({
 
                   <Form.Control
                     type="text"
-                    value={
-                      `${porcentajeLlenado.toFixed(2)} %`
-                    }
+                    value={`${porcentajeLlenado.toFixed(2)} %`}
                     disabled
                   />
                 </Form.Group>
@@ -1126,48 +1142,32 @@ const ModalTotales = ({
                   />
                 </Form.Group>
               </Col>
+
             </Row>
           </Form>
         )}
 
       </Modal.Body>
 
-      {/* ==========================================
+      {/* ================================================
           BOTONES
-      ========================================== */}
+      ================================================ */}
 
       <Modal.Footer>
 
+        {/* SOLO UN BOTÓN PARA CALCULAR */}
+
         {estadoUI ===
           ESTADO_UI.ESPERANDO && (
-          <>
-            <Button
-              variant="outline-primary"
-              onClick={handleConsultarHistorico}
-              disabled={ocupado}
-            >
-              Consultar último peso
-            </Button>
-
-            <Button
-              variant="success"
-              onClick={handleCalcular}
-              disabled={ocupado}
-            >
-              Calcular peso
-            </Button>
-          </>
-        )}
-
-        {mostrandoHistorico && (
           <Button
-            variant="outline-secondary"
-            onClick={handleVolver}
-            disabled={ocupado}
+            variant="success"
+            onClick={handleCalcular}
           >
-            Volver
+            Calcular peso
           </Button>
         )}
+
+        {/* PROCESANDO */}
 
         {calculando && (
           <Button
@@ -1184,40 +1184,40 @@ const ModalTotales = ({
           </Button>
         )}
 
-        {consultandoHistorico && (
-          <Button
-            variant="outline-primary"
-            disabled
-          >
-            <Spinner
-              animation="border"
-              size="sm"
-              className="me-2"
-            />
-
-            Consultando...
-          </Button>
-        )}
+        {/* RESULTADO REAL */}
 
         {hayResultado && (
           <Button
             variant="success"
             onClick={handleContinuar}
-            disabled={ocupado}
           >
             Continuar
           </Button>
         )}
 
+        {/* CONSULTA HISTÓRICA */}
+
+        {hayHistorico && (
+          <Button
+            variant="outline-secondary"
+            onClick={handleVolver}
+          >
+            Volver
+          </Button>
+        )}
+
+        {/* CANCELAR */}
+
         <Button
           variant="secondary"
           onClick={handleCancelar}
-          disabled={ocupado}
+          disabled={calculando}
         >
           Cancelar
         </Button>
 
       </Modal.Footer>
+
     </Modal>
   );
 };
