@@ -6238,6 +6238,85 @@ async function cancelarProceso({
 
 
 
+// ======================================================
+// DEMOSTRACIÓN: CONSULTAR ÚLTIMO CÁLCULO COMPLETO
+// ======================================================
+// Exclusivamente SELECT. Nunca completa una solicitud
+// de HX711 ni modifica el proceso vigente.
+// Utiliza el tipo del proceso EN_PROCESO autenticado.
+// ======================================================
+
+async function obtenerUltimoCalculoHistorico({ idUsuario }) {
+  const usuarioId = toInt(idUsuario);
+
+  if (!Number.isSafeInteger(usuarioId) || usuarioId <= 0) {
+    throw new RegistroPesajeError(401, "Usuario no autenticado");
+  }
+
+  const proceso = await requerirProcesoActivo(pool, usuarioId);
+
+  // No permitimos mostrar cálculos de otro tipo de residuo.
+  const tipoResiduoId = Number(proceso.id_tipo_residuo);
+  if (![1, 2].includes(tipoResiduoId)) {
+    throw new RegistroPesajeError(409, "Tipo de residuo inválido.");
+  }
+
+  const { rows } = await pool.query(
+    `
+      SELECT
+        h.id,
+        h.contenedor_id,
+        h.id_tipo_residuo,
+        h.total_en_libras,
+        h.porcentaje_llenado,
+        h.costo_por_libra_aplicado,
+        h.total_costo_q,
+        h.lectura_id,
+        h.calculado_en,
+        c.codigo AS codigo_contenedor
+      FROM historial_calculo_costos h
+      JOIN contenedores c
+        ON c.id_contenedor = h.contenedor_id
+      WHERE h.id_tipo_residuo = $1
+        AND h.id <> $2
+        AND h.estado_proceso = $3
+        AND h.total_en_libras > 0
+        AND h.total_costo_q IS NOT NULL
+        AND h.costo_por_libra_aplicado IS NOT NULL
+        AND h.porcentaje_llenado BETWEEN 0 AND 100
+        AND h.lectura_id IS NOT NULL
+      ORDER BY h.calculado_en DESC, h.id DESC
+      LIMIT 1
+    `,
+    [tipoResiduoId, proceso.id, ESTADO_PROCESO.FINALIZADO]
+  );
+
+  if (!rows.length) {
+    throw new RegistroPesajeError(
+      404,
+      "No hay cálculos históricos finalizados con peso válido para este residuo.",
+      { codigo: "CALCULO_HISTORICO_NO_DISPONIBLE" }
+    );
+  }
+
+  const historico = rows[0];
+  return {
+    estado_medicion: "HISTORICO",
+    origen: "historial_calculo_costos",
+    demostracion: true,
+    permite_registrar_recoleccion: false,
+    total_en_libras: Number(historico.total_en_libras),
+    porcentaje_llenado: Number(historico.porcentaje_llenado),
+    costo_por_libra_aplicado: Number(historico.costo_por_libra_aplicado),
+    total_costo_q: Number(historico.total_costo_q),
+    fecha_historica: historico.calculado_en,
+    contenedor: {
+      codigo: historico.codigo_contenedor,
+      id_tipo_residuo: Number(historico.id_tipo_residuo),
+    },
+  };
+}
+
 module.exports = {
 
 
@@ -6280,6 +6359,7 @@ consultarEstadoCalculo,
 
   // ERROR
 
+  obtenerUltimoCalculoHistorico,
   RegistroPesajeError,
 
 };

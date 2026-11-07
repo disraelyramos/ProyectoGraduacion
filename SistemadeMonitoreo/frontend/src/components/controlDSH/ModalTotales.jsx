@@ -126,6 +126,13 @@ const ESTADOS_VALIDOS =
 const URL_CALCULO =
   "/control-dsh/registro-pesaje/calculo";
 
+// TEMPORAL PARA DEFENSA. Restaurar en false después.
+// Con true el mismo botón "Calcular peso" consulta datos históricos.
+const DEMO_PESO_HISTORICO = true;
+
+const URL_CALCULO_HISTORICO =
+  "/control-dsh/registro-pesaje/calculo/historico";
+
 
 // ======================================================
 // HELPERS
@@ -259,6 +266,30 @@ const respuestaCalculoValida = (
   );
 };
 
+
+// ======================================================
+// VALIDACIÓN DE CÁLCULO HISTÓRICO (SOLO LECTURA)
+// ======================================================
+
+const respuestaHistoricaValida = (data) => {
+  if (
+    data?.estado_medicion !== "HISTORICO" ||
+    data?.origen !== "historial_calculo_costos" ||
+    data?.demostracion !== true ||
+    data?.permite_registrar_recoleccion !== false ||
+    ![1, 2].includes(Number(data?.contenedor?.id_tipo_residuo))
+  ) return false;
+
+  return [
+    data.total_en_libras,
+    data.porcentaje_llenado,
+    data.costo_por_libra_aplicado,
+    data.total_costo_q,
+  ].every((x) =>
+    x !== null && x !== undefined && x !== "" &&
+    Number.isFinite(Number(x)) && Number(x) >= 0
+  ) && Number(data.porcentaje_llenado) <= 100;
+};
 
 // ======================================================
 // COMPONENTE
@@ -722,7 +753,9 @@ const ModalTotales = ({
 
       setMensajeMedicion(
 
-        "Preparando medición de peso..."
+        DEMO_PESO_HISTORICO
+          ? "Consultando cálculo histórico..."
+          : "Preparando medición de peso..."
 
       );
 
@@ -732,10 +765,6 @@ const ModalTotales = ({
         ESTADO_UI.PROCESANDO
 
       );
-
-
-      iniciarPolling();
-
 
       try {
 
@@ -751,19 +780,17 @@ const ModalTotales = ({
          * y valida todo.
          */
 
-        const res =
-          await apiClient.post(
+        // En demostración, el botón consulta un cálculo completo
+         // almacenado. No inicia el HX711 ni escribe costos.
+         if (!DEMO_PESO_HISTORICO) {
+           iniciarPolling();
+         }
 
-            URL_CALCULO,
-
-            {},
-
-            {
-              timeout:
-                TIMEOUT_CALCULO_MS,
-            }
-
-          );
+         const res = DEMO_PESO_HISTORICO
+           ? await apiClient.get(URL_CALCULO_HISTORICO, { timeout: 10000 })
+           : await apiClient.post(URL_CALCULO, {}, {
+               timeout: TIMEOUT_CALCULO_MS,
+             });
 
 
         if (
@@ -786,9 +813,9 @@ const ModalTotales = ({
 
 
         if (
-          !respuestaCalculoValida(
-            data
-          )
+          !(DEMO_PESO_HISTORICO
+            ? respuestaHistoricaValida(data)
+            : respuestaCalculoValida(data))
         ) {
 
           throw new Error(
@@ -797,10 +824,9 @@ const ModalTotales = ({
         }
 
 
-        aplicarEstadoBackend(
-          data
-        );
-
+        if (!DEMO_PESO_HISTORICO) {
+          aplicarEstadoBackend(data);
+        }
 
         setResultadoVisual(
           data
@@ -960,7 +986,14 @@ const ModalTotales = ({
       }
 
 
-      handleShowRecoleccion?.();
+             if (resultadoVisual?.estado_medicion === "HISTORICO") {
+         // Conservar el botón "Continuar" de la foto original,
+         // sin generar una recolección de datos pasados.
+         handleClose?.();
+         return;
+       }
+
+       handleShowRecoleccion?.();
     };
 
 
@@ -1305,9 +1338,14 @@ const ModalTotales = ({
             RESULTADO
         ========================================== */}
 
-        {hayResultado && (
-
-          <Form>
+                 {hayResultado && (
+           <>
+           {resultadoVisual?.estado_medicion === "HISTORICO" && (
+             <div className="small text-muted mb-2">
+               Datos históricos de demostración. No se realizó un nuevo pesaje.
+             </div>
+           )}
+           <Form>
 
             <Row>
 
@@ -1454,8 +1492,8 @@ const ModalTotales = ({
 
             </Row>
 
-          </Form>
-
+                     </Form>
+           </>
         )}
 
 
