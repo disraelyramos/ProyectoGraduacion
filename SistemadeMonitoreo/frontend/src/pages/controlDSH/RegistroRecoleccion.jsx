@@ -631,12 +631,6 @@ const RegistroRecoleccion = ({
   // ====================================================
   // GUARDAR RECOLECCIÓN
   // ====================================================
-  //
-  // Se retira el bloqueo adicional de soloLectura
-  // en el frontend.
-  //
-  // El backend conserva sus validaciones originales.
-  // ====================================================
 
   const guardarRecoleccion = async () => {
     if (
@@ -704,10 +698,6 @@ const RegistroRecoleccion = ({
 
   // ====================================================
   // ENVIAR FORMULARIO
-  // ====================================================
-  //
-  // Se retira el bloqueo adicional de soloLectura.
-  // Se mantienen todas las validaciones.
   // ====================================================
 
   const handleSubmit = (event) => {
@@ -1136,10 +1126,7 @@ const RegistroRecoleccion = ({
             <button
               type="submit"
               className="app-btn app-btn-primary"
-              disabled={
-                saving ||
-                previewLoading
-              }
+              disabled={saving}
             >
               {saving ? (
                 <>
