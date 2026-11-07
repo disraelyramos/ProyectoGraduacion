@@ -1,11 +1,37 @@
-const pool = require(
-  "../config/db"
-);
+
+"use strict";
+
+const pool = require("../config/db");
 
 const nivelCache = require(
   "./controlDSH/mediciones/NivelActualCache.service"
 );
 
+// ======================================================
+// VALIDAR PORCENTAJE
+// ======================================================
+
+function porcentajeValido(valor) {
+  if (
+    valor === null ||
+    valor === undefined ||
+    valor === ""
+  ) {
+    return null;
+  }
+
+  const numero = Number(valor);
+
+  if (
+    !Number.isFinite(numero) ||
+    numero < 0 ||
+    numero > 100
+  ) {
+    return null;
+  }
+
+  return Number(numero.toFixed(2));
+}
 
 // ======================================================
 // LISTAR CONTENEDORES
@@ -13,181 +39,243 @@ const nivelCache = require(
 
 async function listarContenedores() {
 
-  /*
-   * Aquí obtenemos únicamente la información
-   * estructural/configurada del contenedor.
-   *
-   * IMPORTANTE:
-   *
-   * El nivel actual NO se obtiene aquí desde:
-   *
-   * - BaseDatosMediciones.service
-   * - ModuloMediciones.service
-   * - Mediciones.service
-   *
-   * El nivel actual ya debe encontrarse en el
-   * caché administrado por:
-   *
-   * NivelMonitor.service
-   *          ↓
-   * NivelActualCache.service
-   *
-   * De esta forma, consultar /contenedores
-   * NO provoca una nueva medición.
-   */
-  const { rows } =
-    await pool.query(
-      `
-        SELECT
-          c.id_contenedor,
-          c.codigo,
-          c.id_tipo_residuo,
-          c.estado_id,
-          c.capacidad_max_litros,
-          c.capacidad_max_lb,
-          c.estado_actual_lb,
+  // ====================================================
+  // CONSULTAR INFORMACIÓN E HISTORIAL
+  // ====================================================
+  // La consulta NO crea mediciones nuevas.
+  //
+  // Si Railway pierde su caché, se recupera
+  // el último nivel almacenado en PostgreSQL.
+  // ====================================================
 
-          u.id_ubicacion,
-          u.nombre AS ubicacion,
+  const { rows } = await pool.query(`
+    SELECT
+      c.id_contenedor,
+      c.codigo,
+      c.id_tipo_residuo,
+      c.estado_id,
+      c.capacidad_max_litros,
+      c.capacidad_max_lb,
+      c.estado_actual_lb,
 
-          tr.nombre AS tipo_residuo,
+      u.id_ubicacion,
+      u.nombre AS ubicacion,
 
-          TO_CHAR(
-            c.fecha_registro,
-            'YYYY-MM-DD'
-          ) AS fecha_registro,
+      tr.nombre AS tipo_residuo,
 
-          ec.nombre AS estado
+      TO_CHAR(
+        c.fecha_registro,
+        'YYYY-MM-DD'
+      ) AS fecha_registro,
 
-        FROM contenedores c
+      ec.nombre AS estado,
 
-        JOIN ubicaciones u
-          ON c.id_ubicacion =
-             u.id_ubicacion
+      historial.valor AS nivel_historico_valor,
 
-        JOIN tipos_residuo tr
-          ON c.id_tipo_residuo =
-             tr.id
+      historial.fecha_hora
+        AS nivel_historico_fecha,
 
-        JOIN estados_contenedor ec
-          ON c.estado_id =
-             ec.id
+      historial.fuente_lectura
+        AS nivel_historico_fuente
 
-        ORDER BY
-          c.id_contenedor DESC
-      `
+    FROM contenedores c
+
+    JOIN ubicaciones u
+      ON c.id_ubicacion = u.id_ubicacion
+
+    JOIN tipos_residuo tr
+      ON c.id_tipo_residuo = tr.id
+
+    JOIN estados_contenedor ec
+      ON c.estado_id = ec.id
+
+    LEFT JOIN LATERAL (
+      SELECT
+        l.valor,
+        l.fecha_hora,
+        l.fuente_lectura
+
+      FROM lecturas l
+
+      JOIN tipos_lectura tl
+        ON tl.id = l.tipo_lectura_id
+
+      JOIN unidad_medida um
+        ON um.id = l.unidad_id
+
+      WHERE
+        l.contenedor_id = c.id_contenedor
+
+        AND tl.nombre = 'nivel_porcentaje'
+
+        AND um.nombre = '%'
+
+        AND l.estado_lectura = 'normal'
+
+        AND l.valor BETWEEN 0 AND 100
+
+      ORDER BY
+        l.fecha_hora DESC,
+        l.id DESC
+
+      LIMIT 1
+    ) historial ON TRUE
+
+    ORDER BY
+      c.id_contenedor DESC
+  `);
+
+  // ====================================================
+  // CONSTRUIR RESPUESTA
+  // ====================================================
+
+  const contenedores = rows.map((contenedor) => {
+
+    const nivel = nivelCache.obtenerNivel(
+      contenedor.id_contenedor
     );
 
+    // ==================================================
+    // NIVEL PROCEDENTE DE CACHÉ
+    // ==================================================
 
-  /*
-   * El listado estructural ya viene de BD.
-   *
-   * Aquí únicamente agregamos el último
-   * nivel conocido de cada contenedor.
-   */
-  const contenedores =
-    rows.map(
-      (contenedor) => {
+    const porcentajeCache = (
+      nivel?.fechaActualizacion
+    )
+      ? porcentajeValido(nivel.porcentaje)
+      : null;
 
-        const nivel =
-          nivelCache.obtenerNivel(
-            contenedor
-              .id_contenedor
-          );
+    // ==================================================
+    // NIVEL PROCEDENTE DEL HISTORIAL
+    // ==================================================
 
-
-        /*
-         * Un valor puede existir en caché,
-         * pero estar vencido.
-         *
-         * Ejemplo:
-         *
-         * porcentaje = 52
-         * vigente = false
-         *
-         * En ese caso NO lo mostramos
-         * como si fuera una medición actual.
-         */
-        const nivelVigente =
-          nivel?.vigente ===
-          true;
-
-
-        const porcentaje =
-          nivelVigente
-            ? Number(
-                nivel
-                  .porcentaje
-              )
-            : null;
-
-
-        return {
-
-          ...contenedor,
-
-
-          // ==============================================
-          // COMPATIBILIDAD CON FRONTEND ACTUAL
-          // ==============================================
-          //
-          // NuevoRegistro.jsx actualmente utiliza:
-          //
-          // estado_actual_litros
-          //
-          // Por eso conservamos temporalmente
-          // este nombre.
-          // ==============================================
-
-          estado_actual_litros:
-            porcentaje,
-
-
-          // ==============================================
-          // NOMBRE SEMÁNTICO CORRECTO
-          // ==============================================
-
-          porcentaje_llenado:
-            porcentaje,
-
-
-          // ==============================================
-          // ESTADO DEL NIVEL
-          // ==============================================
-
-          nivel_disponible:
-            nivelVigente,
-
-
-          /*
-           * Fecha de la última actualización
-           * recibida por el caché.
-           */
-          nivel_actualizado_en:
-            nivel
-              ?.fechaActualizacion ||
-            null,
-
-
-          /*
-           * Permite conocer si actualmente
-           * la medición provino de:
-           *
-           * base_datos
-           * modulo
-           */
-          nivel_proveedor:
-            nivel
-              ?.proveedor ||
-            null,
-        };
-      }
+    const porcentajeHistorico = porcentajeValido(
+      contenedor.nivel_historico_valor
     );
 
+    // ==================================================
+    // IDENTIFICAR LECTURA VIGENTE
+    // ==================================================
+
+    const nivelVigente =
+      nivel?.vigente === true &&
+      porcentajeCache !== null &&
+      nivel?.proveedor !== "historial";
+
+    // ==================================================
+    // SELECCIONAR INFORMACIÓN
+    // ==================================================
+    // Prioridad:
+    //
+    // 1. Lectura vigente del módulo.
+    // 2. Última lectura del historial.
+    // 3. Lectura conservada en caché.
+    //
+    // Una lectura histórica NO se considera
+    // una transmisión nueva del módulo.
+    // ==================================================
+
+    let porcentaje = null;
+    let fechaActualizacion = null;
+    let proveedor = null;
+    let origenDato = null;
+
+    if (nivelVigente) {
+
+      porcentaje = porcentajeCache;
+
+      fechaActualizacion =
+        nivel.fechaActualizacion;
+
+      proveedor =
+        nivel.proveedor || null;
+
+      origenDato = "cache_vigente";
+
+    } else if (porcentajeHistorico !== null) {
+
+      porcentaje = porcentajeHistorico;
+
+      fechaActualizacion =
+        contenedor.nivel_historico_fecha;
+
+      proveedor = "historial";
+
+      origenDato = "base_datos_historica";
+
+    } else if (porcentajeCache !== null) {
+
+      porcentaje = porcentajeCache;
+
+      fechaActualizacion =
+        nivel.fechaActualizacion;
+
+      proveedor =
+        nivel.proveedor || null;
+
+      origenDato = "cache_historica";
+    }
+
+    // ==================================================
+    // DISPONIBILIDAD DEL DATO
+    // ==================================================
+
+    const nivelDisponible =
+      porcentaje !== null;
+
+    const nivelEnVivo =
+      nivelDisponible &&
+      nivelVigente &&
+      origenDato === "cache_vigente";
+
+    // ==================================================
+    // RESPUESTA AL FRONTEND
+    // ==================================================
+
+    const {
+      nivel_historico_valor,
+      nivel_historico_fecha,
+      nivel_historico_fuente,
+      ...datosContenedor
+    } = contenedor;
+
+    return {
+      ...datosContenedor,
+
+      // Compatibilidad con NuevoRegistro.
+      estado_actual_litros: porcentaje,
+
+      // Porcentaje para el dashboard.
+      porcentaje_llenado: porcentaje,
+
+      // Existe un dato que se puede mostrar.
+      nivel_disponible: nivelDisponible,
+
+      // Estado real de vigencia.
+      nivel_vigente: nivelEnVivo,
+
+      // Indica que no es lectura en vivo.
+      nivel_historico:
+        nivelDisponible && !nivelEnVivo,
+
+      // Última fecha conocida.
+      nivel_actualizado_en:
+        fechaActualizacion,
+
+      // Procedencia del dato mostrado.
+      nivel_proveedor: proveedor,
+
+      // Información para diagnóstico.
+      nivel_origen_dato: origenDato,
+
+      // Fuente declarada en la lectura histórica.
+      nivel_fuente_historica:
+        nivel_historico_fuente || null,
+    };
+  });
 
   return contenedores;
 }
-
 
 // ======================================================
 // EXPORTACIONES
