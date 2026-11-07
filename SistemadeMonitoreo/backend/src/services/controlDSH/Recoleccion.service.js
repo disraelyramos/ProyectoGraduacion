@@ -141,11 +141,6 @@ async function obtenerProcesoActivo(
         h.calculado_en,
         h.estado_proceso,
         h.observaciones,
-        EXISTS (
-          SELECT 1 FROM registro_origen_calculo roc
-          WHERE roc.proceso_id = h.id
-            AND roc.origen = 'simulacion_ml'
-        ) AS es_simulacion,
         c.codigo AS codigo_contenedor,
         c.estado_id AS contenedor_estado_id
 
@@ -532,7 +527,8 @@ async function obtenerDatosRecoleccion({
     solo_lectura:
       !calculoDisponible,
 
-    demostracion: proceso.es_simulacion === true,
+    demostracion: String(proceso.observaciones || "")
+      .includes("[PRUEBA_SIMULACION_ML]"),
 
     calculo_completado:
       calculoDisponible,
@@ -880,8 +876,12 @@ async function guardarRecoleccion({
 
     validarProcesoFoto4(proceso);
 
-    // Observaciones únicamente del usuario; procedencia en registro_origen_calculo.
-    const observacionesRegistro = datos.observaciones;
+    // Conservar procedencia de prueba incluso si el operador edita observaciones.
+    const esSimulacion = String(proceso.observaciones || "")
+      .includes("[PRUEBA_SIMULACION_ML]");
+    const observacionesRegistro = esSimulacion
+      ? ["[PRUEBA_SIMULACION_ML]", datos.observaciones].filter(Boolean).join(" ")
+      : datos.observaciones;
 
     if (
       proceso.recoleccion_id !== null &&
