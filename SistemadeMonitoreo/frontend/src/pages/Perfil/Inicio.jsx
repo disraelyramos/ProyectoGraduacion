@@ -533,7 +533,9 @@ const Dashboard = ({
               value: "No disponible",
               subtitle: errorPredicciones
                 ? "Error al consultar predicción"
-                : "Datos insuficientes",
+                : predicciones.some((item) => item?.estado === "OK")
+                  ? "Resumen pendiente del servidor"
+                  : "Datos insuficientes",
             };
           }
 
@@ -766,31 +768,23 @@ const Dashboard = ({
             );
           }
 
-          const prediccionesValidas = data.predicciones
-            .filter(
-              (prediccion) =>
-                prediccion.estado === "OK" &&
-                typeof prediccion.dias_para_alto === "number" &&
-                Number.isFinite(prediccion.dias_para_alto) &&
-                prediccion.dias_para_alto >= 0
-            )
-            .sort((a, b) => a.dias_para_alto - b.dias_para_alto);
+          // El backend es la única fuente de cálculos y selección
+          // de la predicción prioritaria. React solo presenta datos.
+          // IMPORTANTE: actualizar también el modal y la gráfica.
+          setPredicciones(data.predicciones);
 
-          if (prediccionesValidas.length > 0) {
-            const proxima = prediccionesValidas[0];
-
-            const nombre =
-              Number(proxima.contenedor_id) === 1
-                ? "Bioinfeccioso"
-                : Number(proxima.contenedor_id) === 2
-                  ? "Punzocortante"
-                  : `Contenedor ${proxima.contenedor_id}`;
-
+          if (
+            data.kpi.disponible === true &&
+            typeof data.kpi.value === "string" &&
+            data.kpi.value.trim() !== "" &&
+            typeof data.kpi.subtitle === "string"
+          ) {
             setKpiPrediccion({
-              value: `${proxima.dias_para_alto.toFixed(2)} días`,
-              subtitle: `${nombre} alcanzaría el ${proxima.umbral_alto}%`,
+              value: data.kpi.value,
+              subtitle: data.kpi.subtitle,
             });
           } else {
+            // No inventar un resumen cuando el backend no lo ofrece.
             setKpiPrediccion(null);
           }
         } catch (
