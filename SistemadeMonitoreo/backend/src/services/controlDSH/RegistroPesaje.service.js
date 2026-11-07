@@ -4601,9 +4601,11 @@ async function guardarCalculo({
 
 
       const { rows: origenRows } = await client.query(
-        `SELECT 1 FROM registro_origen_calculo
-         WHERE proceso_id = $1 AND origen = 'simulacion_ml' LIMIT 1`,
-        [proceso.id]
+        `SELECT 1 FROM public.ml_simulacion_lecturas
+         WHERE contenedor_id = $1
+           AND lectura_peso_id = $2
+         LIMIT 1`,
+        [proceso.contenedor_id, proceso.lectura_id]
       );
 
       return construirRespuestaCalculo({
@@ -5407,7 +5409,7 @@ async function guardarCalculo({
             total_en_libras = $1,
             total_costo_q = $2,
             lectura_id = $3,
-            porcentaje_llenado = COALESCE($8, porcentaje_llenado),
+            porcentaje_llenado = COALESCE($7::numeric, porcentaje_llenado),
             observaciones = observaciones
           WHERE id = $4
 
@@ -5491,7 +5493,6 @@ async function guardarCalculo({
 
             .EN_PROCESO,
 
-          DEMO_GUARDAR_RECOLECCION,
           parejaDemo ? Number(parejaDemo.nivel_nuevo) : null,
         ]
 
@@ -5530,19 +5531,6 @@ async function guardarCalculo({
 
 
 
-
-    // Registrar procedencia técnica, sin mostrarla en observaciones.
-    if (parejaDemo) {
-      await client.query(
-        `INSERT INTO registro_origen_calculo
-           (proceso_id, lectura_id, origen)
-         VALUES ($1, $2, 'simulacion_ml')
-         ON CONFLICT (proceso_id)
-         DO UPDATE SET lectura_id = EXCLUDED.lectura_id,
-                       origen = EXCLUDED.origen`,
-        [procesoId, lecturaId]
-      );
-    }
 
     const procesoActualizado =
 
